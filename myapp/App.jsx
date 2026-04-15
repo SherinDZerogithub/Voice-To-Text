@@ -16,10 +16,13 @@ import {launchCamera} from 'react-native-image-picker';
 
 // RN 0.71+ expects native event modules to expose listener stubs.
 if (NativeModules.Voice) {
-  NativeModules.Voice.addListener =
-    NativeModules.Voice.addListener || (() => {});
-  NativeModules.Voice.removeListeners =
-    NativeModules.Voice.removeListeners || (() => {});
+  // Fix for React Native 0.71+ where addListener/removeListeners might be missing
+  if (!NativeModules.Voice.addListener) {
+    NativeModules.Voice.addListener = () => {};
+  }
+  if (!NativeModules.Voice.removeListeners) {
+    NativeModules.Voice.removeListeners = () => {};
+  }
 }
 
 const Voice = require('@react-native-voice/voice').default;
@@ -31,6 +34,13 @@ const App = () => {
   const [isVoiceAvailable, setIsVoiceAvailable] = useState(true);
   const [images, setImages] = useState([]);
   const [isCapturingImage, setIsCapturingImage] = useState(false);
+  const [moodData, setMoodData] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Configuration for Backend
+  // Note: 10.0.2.2 is the localhost for Android emulator. 
+  // Change to your machine's IP if testing on a real device.
+  const BACKEND_URL = Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
 
   const onSpeechStart = useCallback(() => {
     setIsListening(true);
@@ -206,6 +216,8 @@ const App = () => {
       const recognizing = await Voice.isRecognizing();
       if (recognizing) {
         await Voice.cancel();
+        // Give the native side a moment to fully release the session
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
 
       await Voice.start('en-US', {
@@ -227,10 +239,51 @@ const App = () => {
         await Voice.stop();
       }
       setIsListening(false);
+      
+      // We don't call analyzeMood(text) here because 'text' might be stale.
+      // Instead, we wait for onSpeechResults to provide the final transcript
+      // or we use the latest partial result if onSpeechResults is slow.
+      // For immediate feedback after 'STOP', we'll use the current text state.
+      // But we add a small check to ensure we don't analyze empty text.
+      
+      setTimeout(() => {
+        if (!isAnalyzing && text.trim()) {
+          analyzeMood(text);
+        }
+      }, 500); // Wait for the final transcript to settle
     } catch (e) {
       console.error(e);
+      setIsListening(false);
     }
   }
+
+  const analyzeMood = async (transcript) => {
+    if (!transcript.trim()) return;
+
+    setIsAnalyzing(true);
+    setErrorMessage('');
+    try {
+      const response = await fetch(`${BACKEND_URL}/analyze-mood`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: transcript }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Server unreachable or error in analysis');
+      }
+
+      const data = await response.json();
+      setMoodData(data);
+    } catch (error) {
+      console.error('Analysis error:', error);
+      setErrorMessage('Could not connect to mood server. Make sure it is running.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const handleCaptureImage = useCallback(async () => {
     if (isCapturingImage) {
@@ -398,6 +451,38 @@ const App = () => {
       color: '#444',
       fontWeight: '500',
     },
+    moodCard: {
+      width: '100%',
+      padding: 20,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: '#ddd',
+      backgroundColor: '#fff',
+      marginTop: 10,
+    },
+    moodHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    moodEmoji: {
+      fontSize: 40,
+      marginRight: 15,
+    },
+    moodLabel: {
+      fontSize: 18,
+      fontWeight: 'bold',
+    },
+    moodConfidence: {
+      fontSize: 12,
+      color: '#666',
+    },
+    moodFeedback: {
+      fontSize: 16,
+      color: '#333',
+      fontStyle: 'italic',
+      lineHeight: 22,
+    },
   });
 
   return (
@@ -433,6 +518,34 @@ const App = () => {
           : 'Speech recognition unavailable'}
       </Text>
       {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+
+      <Text style={styles.sectionTitle}>Mood Analysis (BERT)</Text>
+      {isAnalyzing && <Text style={styles.statusText}>Analyzing your vibe...</Text>}
+      
+      {!isAnalyzing && moodData && (
+        <View style={[styles.moodCard, { backgroundColor: moodData.color + '20' }]}>
+          <View style={styles.moodHeader}>
+            <Text style={styles.moodEmoji}>{moodData.emoji}</Text>
+            <View>
+              <Text style={[styles.moodLabel, { color: moodData.color }]}>
+                Current Mood: {moodData.mood.toUpperCase()}
+              </Text>
+              <Text style={styles.moodConfidence}>
+                Confidence: {moodData.confidence}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.moodFeedback}>{moodData.feedback}</Text>
+        </View>
+      )}
+
+      {!isAnalyzing && !moodData && !isListening && text.length === 0 && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>
+            Speak into the microphone to detect your mood using BERT NLP.
+          </Text>
+        </View>
+      )}
 
       <Text style={styles.sectionTitle}>Camera Upload</Text>
       <TouchableOpacity
