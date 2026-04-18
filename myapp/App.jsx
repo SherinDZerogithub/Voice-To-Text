@@ -1,31 +1,58 @@
-import React, {useEffect, useState, useCallback} from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Alert,
-  Image,
   Platform,
   ScrollView,
   View,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
   PermissionsAndroid,
   Text,
   NativeModules,
 } from 'react-native';
-import {launchCamera} from 'react-native-image-picker';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+
+// Import Custom Components
+import VoiceInput from './components/VoiceInput';
+import MoodResult from './components/MoodResult';
+import ImageGallery from './components/ImageGallery';
+
 
 // RN 0.71+ expects native event modules to expose listener stubs.
 if (NativeModules.Voice) {
   // Fix for React Native 0.71+ where addListener/removeListeners might be missing
   if (!NativeModules.Voice.addListener) {
-    NativeModules.Voice.addListener = () => {};
+    NativeModules.Voice.addListener = () => { };
   }
   if (!NativeModules.Voice.removeListeners) {
-    NativeModules.Voice.removeListeners = () => {};
+    NativeModules.Voice.removeListeners = () => { };
   }
 }
 
-const Voice = require('@react-native-voice/voice').default;
+import Voice from '@react-native-voice/voice';
+
+const SAMPLE_IMAGES = [
+  {
+    id: 's1',
+    uri: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&q=80',
+    fileName: 'serene_lake.jpg',
+    type: 'image/jpeg',
+    label: 'Serene Nature',
+  },
+  {
+    id: 's2',
+    uri: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&q=80',
+    fileName: 'chaotic_city.jpg',
+    type: 'image/jpeg',
+    label: 'Vibrant City',
+  },
+  {
+    id: 's3',
+    uri: 'https://images.unsplash.com/photo-1514516311115-38010f488e23?w=800&q=80',
+    fileName: 'vintage_cafe.jpg',
+    type: 'image/jpeg',
+    label: 'Vintage Cafe',
+  },
+];
 
 const App = () => {
   const [isListening, setIsListening] = useState(false);
@@ -35,6 +62,7 @@ const App = () => {
   const [images, setImages] = useState([]);
   const [isCapturingImage, setIsCapturingImage] = useState(false);
   const [moodData, setMoodData] = useState(null);
+  const [isSelectingImage, setIsSelectingImage] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Configuration for Backend
@@ -189,6 +217,43 @@ const App = () => {
     }
   }, []);
 
+  const requestStoragePermission = useCallback(async () => {
+    if (Platform.OS !== 'android') {
+      return true;
+    }
+
+    try {
+      let permission;
+      // For Android 13 (API 33) and above, READ_MEDIA_IMAGES is used.
+      // For Android 12 (API 32) and below, READ_EXTERNAL_STORAGE is used.
+      if (Platform.Version >= 33) {
+        permission = PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES;
+      } else {
+        permission = PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+      }
+
+      const alreadyGranted = await PermissionsAndroid.check(permission);
+
+      if (alreadyGranted) {
+        return true;
+      }
+
+      const granted = await PermissionsAndroid.request(
+        permission,
+        {
+          title: 'Storage Permission',
+          message: 'This app needs access to your photo gallery to select images.',
+          buttonPositive: 'OK',
+        },
+      );
+
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch (err) {
+      console.warn(err);
+      return false;
+    }
+  }, []);
+
   async function startListening() {
     if (isListening) {
       return;
@@ -239,13 +304,13 @@ const App = () => {
         await Voice.stop();
       }
       setIsListening(false);
-      
+
       // We don't call analyzeMood(text) here because 'text' might be stale.
       // Instead, we wait for onSpeechResults to provide the final transcript
       // or we use the latest partial result if onSpeechResults is slow.
       // For immediate feedback after 'STOP', we'll use the current text state.
       // But we add a small check to ensure we don't analyze empty text.
-      
+
       setTimeout(() => {
         if (!isAnalyzing && text.trim()) {
           analyzeMood(text);
@@ -285,6 +350,42 @@ const App = () => {
     }
   };
 
+  const analyzeImageDescription = async (asset) => {
+    if (!asset || !asset.uri) {
+      console.warn('No asset or URI provided to analyzeImageDescription');
+      return;
+    }
+    setIsAnalyzing(true);
+    setErrorMessage('');
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: Platform.OS === 'android' ? asset.uri : asset.uri.replace('file://', ''),
+        name: asset.fileName || 'photo.jpg',
+        type: asset.type || 'image/jpeg',
+      });
+
+      const response = await fetch(`${BACKEND_URL}/analyze-image`, {
+        method: 'POST',
+        body: formData,
+        // Don't set Content-Type header manually for FormData, 
+        // fetch will set it with the correct boundary automatically.
+      });
+
+      if (!response.ok) throw new Error('Image analysis failed');
+
+      const data = await response.json();
+      setText(data.description);
+      // Automatically trigger the detailed breakdown for the generated text
+      analyzeMood(data.description);
+    } catch (error) {
+      console.error('Image analysis error:', error);
+      setErrorMessage('Could not describe the image. Is the server running?');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleCaptureImage = useCallback(async () => {
     if (isCapturingImage) {
       return;
@@ -303,7 +404,9 @@ const App = () => {
       const result = await launchCamera({
         mediaType: 'photo',
         cameraType: 'back',
-        quality: 0.8,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        quality: 0.7,
         saveToPhotos: false,
       });
 
@@ -322,9 +425,12 @@ const App = () => {
           {
             id: `${Date.now()}`,
             uri: asset.uri,
+            fileName: asset.fileName || `photo_${Date.now()}.jpg`,
+            type: asset.type || 'image/jpeg',
           },
           ...currentImages,
         ]);
+        analyzeImageVibe(asset);
       }
     } catch (error) {
       console.error(error);
@@ -332,7 +438,59 @@ const App = () => {
     } finally {
       setIsCapturingImage(false);
     }
-  }, [isCapturingImage, requestCameraPermission]);
+  }, [isCapturingImage, requestCameraPermission, analyzeImageDescription]);
+
+  const handleSelectImage = useCallback(async () => {
+    if (isSelectingImage) {
+      return;
+    }
+
+    try {
+      setErrorMessage('');
+      setIsSelectingImage(true);
+
+      const hasPermission = await requestStoragePermission();
+      if (!hasPermission) {
+        Alert.alert('Permission needed', 'Storage permission was denied.');
+        return;
+      }
+
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        maxWidth: 1024,
+        maxHeight: 1024,
+        quality: 0.7,
+      });
+
+      if (result.didCancel) {
+        return;
+      }
+
+      if (result.errorCode) {
+        Alert.alert('Image selection error', result.errorMessage || 'Unable to select image.');
+        return;
+      }
+
+      const asset = result.assets && result.assets[0];
+      if (asset && asset.uri) {
+        setImages(currentImages => [
+          {
+            id: `${Date.now()}`,
+            uri: asset.uri,
+            fileName: asset.fileName || `gallery_${Date.now()}.jpg`,
+            type: asset.type || 'image/jpeg',
+          },
+          ...currentImages,
+        ]);
+        analyzeImageVibe(asset);
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Image selection error', 'Something went wrong while selecting an image.');
+    } finally {
+      setIsSelectingImage(false);
+    }
+  }, [isSelectingImage, requestStoragePermission, analyzeImageDescription]);
 
   const styles = StyleSheet.create({
     container: {
@@ -350,138 +508,16 @@ const App = () => {
       marginBottom: 30,
       color: '#333',
     },
-    textInput: {
-      width: '100%',
-      minHeight: 100,
-      backgroundColor: 'white',
-      borderColor: '#ddd',
-      borderWidth: 1,
-      borderRadius: 10,
-      padding: 15,
-      marginBottom: 30,
-      textAlignVertical: 'top',
-      fontSize: 18,
-      color: '#000',
-    },
-    button: {
-      backgroundColor: isListening ? '#ff4d4d' : '#007bff',
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      justifyContent: 'center',
-      alignItems: 'center',
-      elevation: 5,
-      shadowColor: '#000',
-      shadowOffset: {width: 0, height: 2},
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-    },
-    secondaryButton: {
-      width: '100%',
-      backgroundColor: '#1f7a4c',
-      paddingVertical: 14,
-      paddingHorizontal: 18,
-      borderRadius: 12,
-      marginTop: 24,
-      alignItems: 'center',
-    },
-    buttonText: {
-      color: 'white',
-      fontSize: 14,
+    statusText: {
+      marginTop: 10,
+      color: isListening ? '#ff4d4d' : '#666',
       fontWeight: 'bold',
-      textAlign: 'center',
-    },
-    secondaryButtonText: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: '600',
     },
     error: {
       marginTop: 20,
       color: '#d9534f',
       textAlign: 'center',
       fontWeight: '500',
-    },
-    statusText: {
-      marginTop: 10,
-      color: isListening ? '#ff4d4d' : '#666',
-      fontWeight: 'bold',
-    },
-    sectionTitle: {
-      width: '100%',
-      fontSize: 20,
-      fontWeight: '700',
-      color: '#333',
-      marginTop: 36,
-      marginBottom: 14,
-    },
-    emptyState: {
-      width: '100%',
-      backgroundColor: '#fff',
-      borderWidth: 1,
-      borderColor: '#ddd',
-      borderStyle: 'dashed',
-      borderRadius: 12,
-      padding: 18,
-      alignItems: 'center',
-    },
-    emptyStateText: {
-      color: '#666',
-      textAlign: 'center',
-    },
-    imageGrid: {
-      width: '100%',
-      gap: 12,
-    },
-    imageCard: {
-      width: '100%',
-      backgroundColor: '#fff',
-      borderRadius: 14,
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: '#e4e4e4',
-    },
-    previewImage: {
-      width: '100%',
-      height: 220,
-      backgroundColor: '#ddd',
-    },
-    imageLabel: {
-      padding: 12,
-      color: '#444',
-      fontWeight: '500',
-    },
-    moodCard: {
-      width: '100%',
-      padding: 20,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: '#ddd',
-      backgroundColor: '#fff',
-      marginTop: 10,
-    },
-    moodHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 12,
-    },
-    moodEmoji: {
-      fontSize: 40,
-      marginRight: 15,
-    },
-    moodLabel: {
-      fontSize: 18,
-      fontWeight: 'bold',
-    },
-    moodConfidence: {
-      fontSize: 12,
-      color: '#666',
-    },
-    moodFeedback: {
-      fontSize: 16,
-      color: '#333',
-      fontStyle: 'italic',
-      lineHeight: 22,
     },
   });
 
@@ -491,90 +527,44 @@ const App = () => {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.title}>Voice to Text</Text>
-      <TextInput
-        style={styles.textInput}
-        placeholder={isListening ? 'Listening...' : 'Text will appear here'}
-        value={text}
-        multiline
-        editable={false}
+      <Text style={styles.title}>Scene Vibe Checker</Text>
+
+      <VoiceInput
+        text={text}
+        onChangeText={setText}
+        isListening={isListening}
+        onStartListening={startListening}
+        onStopListening={stopListening}
+        onAnalyze={() => analyzeMood(text)}
+        isAnalyzing={isAnalyzing}
       />
-      <TouchableOpacity
-        style={styles.button}
-        onPress={isListening ? stopListening : startListening}
-        activeOpacity={0.7}
-      >
-        <View>
-          <Text style={styles.buttonText}>
-            {isListening ? 'STOP' : 'START'}
-          </Text>
-        </View>
-      </TouchableOpacity>
+
       <Text style={styles.statusText}>
         {isListening
           ? 'Recording active...'
           : isVoiceAvailable
-          ? 'Tap button to start'
-          : 'Speech recognition unavailable'}
+            ? 'Tap button to start'
+            : 'Speech recognition unavailable'}
       </Text>
       {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
 
-      <Text style={styles.sectionTitle}>Mood Analysis (BERT)</Text>
-      {isAnalyzing && <Text style={styles.statusText}>Analyzing your vibe...</Text>}
-      
-      {!isAnalyzing && moodData && (
-        <View style={[styles.moodCard, { backgroundColor: moodData.color + '20' }]}>
-          <View style={styles.moodHeader}>
-            <Text style={styles.moodEmoji}>{moodData.emoji}</Text>
-            <View>
-              <Text style={[styles.moodLabel, { color: moodData.color }]}>
-                Current Mood: {moodData.mood.toUpperCase()}
-              </Text>
-              <Text style={styles.moodConfidence}>
-                Confidence: {moodData.confidence}
-              </Text>
-            </View>
-          </View>
-          <Text style={styles.moodFeedback}>{moodData.feedback}</Text>
-        </View>
-      )}
+      <MoodResult
+        moodData={moodData}
+        isAnalyzing={isAnalyzing}
+        isListening={isListening}
+        hasText={text.length > 0}
+      />
 
-      {!isAnalyzing && !moodData && !isListening && text.length === 0 && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>
-            Speak into the microphone to detect your mood using BERT NLP.
-          </Text>
-        </View>
-      )}
-
-      <Text style={styles.sectionTitle}>Camera Upload</Text>
-      <TouchableOpacity
-        style={styles.secondaryButton}
-        onPress={handleCaptureImage}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.secondaryButtonText}>
-          {isCapturingImage ? 'Opening Camera...' : 'Take Photo'}
-        </Text>
-      </TouchableOpacity>
-
-      <Text style={styles.sectionTitle}>Saved Images</Text>
-      {images.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>
-            Capture a photo with the camera and it will appear here.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.imageGrid}>
-          {images.map((image, index) => (
-            <View key={image.id} style={styles.imageCard}>
-              <Image source={{uri: image.uri}} style={styles.previewImage} />
-              <Text style={styles.imageLabel}>Image {images.length - index}</Text>
-            </View>
-          ))}
-        </View>
-      )}
+      <ImageGallery
+        images={images}
+        sampleImages={SAMPLE_IMAGES}
+        onCapture={handleCaptureImage}
+        onSelect={handleSelectImage}
+        onAnalyzeImage={analyzeImageDescription}
+        isCapturingImage={isCapturingImage}
+        isSelectingImage={isSelectingImage}
+        isAnalyzing={isAnalyzing}
+      />
     </ScrollView>
   );
 };

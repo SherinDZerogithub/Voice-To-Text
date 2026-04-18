@@ -39,6 +39,8 @@
 	<string></string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app uses the microphone to convert your speech into text.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs access to your photo library to select images.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app uses the camera so you can capture and preview images.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
