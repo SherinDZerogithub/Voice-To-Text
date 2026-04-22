@@ -54,6 +54,17 @@ const SAMPLE_IMAGES = [
   },
 ];
 
+const getContrastColor = (hexcolor) => {
+  if (!hexcolor || hexcolor === 'transparent') return '#000000';
+  const hex = hexcolor.replace('#', '');
+  if (hex.length !== 6) return '#000000';
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 128 ? '#1a1a1a' : '#ffffff';
+};
+
 const App = () => {
   const [isListening, setIsListening] = useState(false);
   const [text, setText] = useState('');
@@ -64,6 +75,8 @@ const App = () => {
   const [moodData, setMoodData] = useState(null);
   const [isSelectingImage, setIsSelectingImage] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [appBgColor, setAppBgColor] = useState('#f5f5f5');
+
 
   // Configuration for Backend
   // Note: 10.0.2.2 is the localhost for Android emulator. 
@@ -108,7 +121,7 @@ const App = () => {
       setErrorMessage('Speech recognition is busy. Please wait a moment and try again.');
     } else if (code === '5') {
       setErrorMessage(
-        'Speech recognition is unavailable on this device right now. Check Google voice services and try again.',
+        'Speech recognition is unavailable on this device right now. Check Google voice services and try again.'
       );
     } else {
       setErrorMessage(`Error (${code}): ${message}`);
@@ -125,32 +138,32 @@ const App = () => {
     Voice.onSpeechError = onSpeechError;
     Voice.onSpeechPartialResults = onSpeechPartialResults;
 
-    async function initializeVoice() {
-      try {
-        const available = await Voice.isAvailable();
+    Voice.isAvailable()
+      .then((available) => {
         setIsVoiceAvailable(Boolean(available));
 
         if (!available) {
           setErrorMessage('Speech recognition is not available on this device.');
-          return;
+          return Promise.resolve();
         }
 
         if (Platform.OS === 'android') {
-          const services = await Voice.getSpeechRecognitionServices();
-          if (!services || services.length === 0) {
-            setErrorMessage(
-              'No speech recognition service was found. Install or enable Google voice typing.',
-            );
-          }
+          return Voice.getSpeechRecognitionServices().then((services) => {
+            if (!services || services.length === 0) {
+              setErrorMessage(
+                'No speech recognition service was found. Install or enable Google voice typing.'
+              );
+            }
+          });
         }
-      } catch (err) {
+
+        return Promise.resolve();
+      })
+      .catch((err) => {
         console.warn(err);
         setIsVoiceAvailable(false);
         setErrorMessage('Unable to initialize speech recognition.');
-      }
-    }
-
-    initializeVoice();
+      });
 
     return () => {
       Voice.destroy().then(Voice.removeAllListeners);
@@ -176,8 +189,8 @@ const App = () => {
         {
           title: 'Microphone Permission',
           message: 'This app needs access to your microphone to recognize speech.',
-          buttonPositive: 'OK',
-        },
+          buttonPositive: 'OK'
+        }
       );
 
       return granted === PermissionsAndroid.RESULTS.GRANTED;
@@ -206,8 +219,8 @@ const App = () => {
         {
           title: 'Camera Permission',
           message: 'This app needs access to your camera to capture images.',
-          buttonPositive: 'OK',
-        },
+          buttonPositive: 'OK'
+        }
       );
 
       return granted === PermissionsAndroid.RESULTS.GRANTED;
@@ -243,8 +256,8 @@ const App = () => {
         {
           title: 'Storage Permission',
           message: 'This app needs access to your photo gallery to select images.',
-          buttonPositive: 'OK',
-        },
+          buttonPositive: 'OK'
+        }
       );
 
       return granted === PermissionsAndroid.RESULTS.GRANTED;
@@ -341,7 +354,7 @@ const App = () => {
       }
 
       const data = await response.json();
-      setMoodData(data);
+      setMoodData(prev => ({ ...prev, ...data }));
     } catch (error) {
       console.error('Analysis error:', error);
       setErrorMessage('Could not connect to mood server. Make sure it is running.');
@@ -358,26 +371,38 @@ const App = () => {
     setIsAnalyzing(true);
     setErrorMessage('');
     try {
+      const isRemoteUrl = asset.uri.startsWith('http://') || asset.uri.startsWith('https://');
       const formData = new FormData();
-      formData.append('file', {
-        uri: Platform.OS === 'android' ? asset.uri : asset.uri.replace('file://', ''),
-        name: asset.fileName || 'photo.jpg',
-        type: asset.type || 'image/jpeg',
-      });
+
+      if (asset.base64) {
+        formData.append('base64', asset.base64);
+        formData.append('fileName', asset.fileName || 'photo.jpg');
+        formData.append('type', asset.type || 'image/jpeg');
+      } else if (isRemoteUrl) {
+        formData.append('imageUrl', asset.uri);
+        formData.append('fileName', asset.fileName || 'photo.jpg');
+        formData.append('type', asset.type || 'image/jpeg');
+      } else {
+        formData.append('file', {
+          uri: Platform.OS === 'android' ? asset.uri : asset.uri.replace('file://', ''),
+          name: asset.fileName || 'photo.jpg',
+          type: asset.type || 'image/jpeg',
+        });
+      }
 
       const response = await fetch(`${BACKEND_URL}/analyze-image`, {
         method: 'POST',
         body: formData,
-        // Don't set Content-Type header manually for FormData, 
-        // fetch will set it with the correct boundary automatically.
       });
 
-      if (!response.ok) throw new Error('Image analysis failed');
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Image analysis failed: ${response.status} ${text}`);
+      }
 
       const data = await response.json();
-      setText(data.description);
-      // Automatically trigger the detailed breakdown for the generated text
-      analyzeMood(data.description);
+      setText(data.short_description);
+      setMoodData(data); // Set the full Gemini results directly
     } catch (error) {
       console.error('Image analysis error:', error);
       setErrorMessage('Could not describe the image. Is the server running?');
@@ -408,6 +433,7 @@ const App = () => {
         maxHeight: 1024,
         quality: 0.7,
         saveToPhotos: false,
+        includeBase64: true,
       });
 
       if (result.didCancel) {
@@ -430,7 +456,7 @@ const App = () => {
           },
           ...currentImages,
         ]);
-        analyzeImageVibe(asset);
+        analyzeImageDescription(asset);
       }
     } catch (error) {
       console.error(error);
@@ -460,6 +486,7 @@ const App = () => {
         maxWidth: 1024,
         maxHeight: 1024,
         quality: 0.7,
+        includeBase64: true,
       });
 
       if (result.didCancel) {
@@ -482,7 +509,7 @@ const App = () => {
           },
           ...currentImages,
         ]);
-        analyzeImageVibe(asset);
+        analyzeImageDescription(asset);
       }
     } catch (error) {
       console.error(error);
@@ -496,7 +523,8 @@ const App = () => {
     container: {
       flex: 1,
       padding: 20,
-      backgroundColor: '#f5f5f5',
+      backgroundColor: appBgColor,
+
     },
     content: {
       paddingVertical: 30,
@@ -506,11 +534,11 @@ const App = () => {
       fontSize: 24,
       fontWeight: 'bold',
       marginBottom: 30,
-      color: '#333',
+      color: getContrastColor(appBgColor),
     },
     statusText: {
       marginTop: 10,
-      color: isListening ? '#ff4d4d' : '#666',
+      color: isListening ? '#ff4d4d' : (getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.7)' : '#666'),
       fontWeight: 'bold',
     },
     error: {
@@ -537,7 +565,11 @@ const App = () => {
         onStopListening={stopListening}
         onAnalyze={() => analyzeMood(text)}
         isAnalyzing={isAnalyzing}
+        appBgColor={appBgColor}
+        shortDescription={moodData?.short_description}
+        longDescription={moodData?.description}
       />
+
 
       <Text style={styles.statusText}>
         {isListening
@@ -553,7 +585,11 @@ const App = () => {
         isAnalyzing={isAnalyzing}
         isListening={isListening}
         hasText={text.length > 0}
+        setAppBgColor={setAppBgColor}
+        appBgColor={appBgColor}
       />
+
+
 
       <ImageGallery
         images={images}

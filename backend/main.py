@@ -1,201 +1,570 @@
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, UploadFile, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer, util
+from transformers import BlipProcessor, BlipForConditionalGeneration
+
 import uvicorn
 import torch
 from PIL import Image
 import io
 import os
+import base64
+import json
+from typing import Optional
 import google.generativeai as genai
 from dotenv import load_dotenv
+import requests
 
-# Load environment variables from .env file
 load_dotenv()
 
 app = FastAPI(title="Emotion Mood Analytics Server")
 
-# Add CORS middleware to allow requests from mobile app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permits all origins
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Permits all methods
-    allow_headers=["*"],  # Permits all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Load the Sentence Transformer model
 print("Loading Sentence Embedding model...")
-vibe_model = SentenceTransformer('all-MiniLM-L6-v2')
+vibe_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 print("Loading CLIP model for image analysis...")
-vision_model = SentenceTransformer('clip-ViT-B-32')
+vision_model = SentenceTransformer("clip-ViT-B-32")
 
-# Configure Gemini
+print("Loading BLIP for factual image captioning...")
+caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+caption_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+
+
 GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+    gemini_model = genai.GenerativeModel("gemini-3-flash-preview")
     print("Gemini model initialized.")
 else:
     print("WARNING: GOOGLE_API_KEY not found. Gemini features will be disabled.")
     gemini_model = None
 
-# Define our new emotion labels
-# Define our new expanded emotion and vibe labels (20 total)
 VIBE_LABELS = [
-    # Zen Family
-    "calm", "peaceful", "serene", "minimalist",
-    # Radiant Family
-    "happy", "energetic", "playful", "vibrant",
-    # Melancholy Family
-    "sad", "lonely", "pensive", "gloomy",
-    # Edge Family
-    "anxious", "chaotic", "intense", "gritty",
-    # Soul Family
-    "nostalgic", "romantic", "mystical", "vintage"
+    "calm",
+    "peaceful",
+    "serene",
+    "minimalist",
+    "happy",
+    "energetic",
+    "playful",
+    "vibrant",
+    "sad",
+    "lonely",
+    "pensive",
+    "gloomy",
+    "anxious",
+    "chaotic",
+    "intense",
+    "gritty",
+    "nostalgic",
+    "romantic",
+    "mystical",
+    "vintage",
+    "cozy",
+    "ethereal",
+    "melancholic",
+    "industrial",
+    "natural",
+    "futuristic",
+    "bold",
+    "solitary",
+    "tense",
+    "hopeful",
 ]
 
 print("Pre-computing label embeddings...")
 LABEL_EMBEDDINGS = vibe_model.encode(VIBE_LABELS, convert_to_tensor=True)
 VISION_LABEL_EMBEDDINGS = vision_model.encode(VIBE_LABELS, convert_to_tensor=True)
-
 print("Model loaded successfully!")
+
+
+VIBE_META = {
+    "calm": {
+        "color": "#A8E6CF",
+        "emoji": "😌",
+        "feedback": "Take a deep breath. You are centered.",
+    },
+    "peaceful": {
+        "color": "#B2E2F2",
+        "emoji": "🕊️",
+        "feedback": "Harmony surrounds you right now.",
+    },
+    "serene": {
+        "color": "#D4F1F4",
+        "emoji": "🧘",
+        "feedback": "Find strength in this quiet moment.",
+    },
+    "minimalist": {
+        "color": "#F5F5F5",
+        "emoji": "⚪",
+        "feedback": "Simplicity is the ultimate sophistication.",
+    },
+    "happy": {
+        "color": "#FFDE7D",
+        "emoji": "😊",
+        "feedback": "Your light is shining bright today!",
+    },
+    "energetic": {
+        "color": "#FFD93D",
+        "emoji": "⚡",
+        "feedback": "Channel this power into something great.",
+    },
+    "playful": {
+        "color": "#FF8B94",
+        "emoji": "🎈",
+        "feedback": "Don't forget to keep that inner spark.",
+    },
+    "vibrant": {
+        "color": "#6BCB77",
+        "emoji": "🌈",
+        "feedback": "The world is a canvas of possibilities.",
+    },
+    "sad": {
+        "color": "#A2D2FF",
+        "emoji": "😢",
+        "feedback": "It's okay to let the rain fall sometimes.",
+    },
+    "lonely": {
+        "color": "#6C757D",
+        "emoji": "👤",
+        "feedback": "I'm here with you in this space.",
+    },
+    "pensive": {
+        "color": "#4A4E69",
+        "emoji": "🤔",
+        "feedback": "Depth of thought leads to growth.",
+    },
+    "gloomy": {
+        "color": "#9A8C98",
+        "emoji": "☁️",
+        "feedback": "Even clouds eventually move on.",
+    },
+    "anxious": {
+        "color": "#D4A5A5",
+        "emoji": "😰",
+        "feedback": "Ground yourself. Focus on one thing.",
+    },
+    "chaotic": {
+        "color": "#E94560",
+        "emoji": "🌀",
+        "feedback": "Find the still point in the storm.",
+    },
+    "intense": {
+        "color": "#FF4D4D",
+        "emoji": "🔥",
+        "feedback": "This intensity shows how much you care.",
+    },
+    "gritty": {
+        "color": "#2B2B2B",
+        "emoji": "⛓️",
+        "feedback": "Strength is often forged in the rough.",
+    },
+    "nostalgic": {
+        "color": "#FFAAA5",
+        "emoji": "📺",
+        "feedback": "A beautiful echo of where you've been.",
+    },
+    "romantic": {
+        "color": "#FFB7B2",
+        "emoji": "❤️",
+        "feedback": "Love is the thread that binds us.",
+    },
+    "mystical": {
+        "color": "#9D4EDD",
+        "emoji": "✨",
+        "feedback": "There is magic in the unknown.",
+    },
+    "vintage": {
+        "color": "#B08968",
+        "emoji": "🎞️",
+        "feedback": "Timeless vibes for a timeless soul.",
+    },
+    "cozy": {
+        "color": "#E6A15C",
+        "emoji": "🕯️",
+        "feedback": "Warmth and comfort wrap around you.",
+    },
+    "ethereal": {
+        "color": "#B8C0FF",
+        "emoji": "🌫️",
+        "feedback": "A dreamlike state where reality blurs.",
+    },
+    "melancholic": {
+        "color": "#4E6E81",
+        "emoji": "🥀",
+        "feedback": "There is a beautiful weight in this sadness.",
+    },
+    "industrial": {
+        "color": "#545B64",
+        "emoji": "⚙️",
+        "feedback": "Raw, structural energy and cold metal.",
+    },
+    "natural": {
+        "color": "#4A7C59",
+        "emoji": "🌲",
+        "feedback": "Connected to the rhythm of the earth.",
+    },
+    "futuristic": {
+        "color": "#00F5D4",
+        "emoji": "🤖",
+        "feedback": "A glimpse into what lies ahead.",
+    },
+    "bold": {
+        "color": "#F15BB5",
+        "emoji": "🏎️",
+        "feedback": "Fearless, high-contrast presence.",
+    },
+    "solitary": {
+        "color": "#8D99AE",
+        "emoji": "🏔️",
+        "feedback": "Finding peace in your own company.",
+    },
+    "tense": {
+        "color": "#D90429",
+        "emoji": "⚠️",
+        "feedback": "The air is thick with anticipation.",
+    },
+    "hopeful": {
+        "color": "#FEE440",
+        "emoji": "🌅",
+        "feedback": "A new dawn is just beginning.",
+    },
+}
+
 
 class MoodRequest(BaseModel):
     text: str
+
+
+def pil_to_gemini_part(image: Image.Image) -> dict:
+    buf = io.BytesIO()
+    image.convert("RGB").save(buf, format="JPEG", quality=85)
+    return {
+        "mime_type": "image/jpeg",
+        "data": base64.b64encode(buf.getvalue()).decode("utf-8"),
+    }
+
+
+def generate_local_caption(image: Image.Image) -> str:
+    """Generates a factual description of the image using a local BLIP model."""
+    try:
+        inputs = caption_processor(image, return_tensors="pt")
+        out = caption_model.generate(**inputs)
+        caption = caption_processor.decode(out[0], skip_special_tokens=True)
+        return caption.capitalize()
+    except Exception as e:
+        print(f"Local captioning failed: {e}")
+        return "A scene with visual details."
+
+
+
+def build_enriched_scores_from_bert(text: str):
+    """Run BERT over text and return all sorted vibe scores."""
+    embedding = vibe_model.encode(text, convert_to_tensor=True)
+    cosine_scores = util.cos_sim(embedding, LABEL_EMBEDDINGS)[0]
+    sorted_indices = torch.argsort(cosine_scores, descending=True)
+
+    labels = [VIBE_LABELS[idx] for idx in sorted_indices]
+    scores = [cosine_scores[idx].item() for idx in sorted_indices]
+
+    return labels, scores
+
 
 @app.post("/analyze-mood")
 async def analyze_mood(request: MoodRequest):
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
-    
+
     try:
-        # Generate embedding for the input text
-        text_embedding = vibe_model.encode(request.text, convert_to_tensor=True)
-        
-        # Calculate cosine similarity between text and all labels
-        cosine_scores = util.cos_sim(text_embedding, LABEL_EMBEDDINGS)[0]
-        
-        # Sort labels by similarity score
-        sorted_indices = torch.argsort(cosine_scores, descending=True)
-        labels = [VIBE_LABELS[idx] for idx in sorted_indices]
-        scores = [cosine_scores[idx].item() for idx in sorted_indices]
-        
-        # Mapping to aesthetic metadata
-        vibe_meta = {
-            # Zen Family
-            "calm": {"color": "#A8E6CF", "emoji": "😌", "feedback": "Take a deep breath. You are centered."},
-            "peaceful": {"color": "#B2E2F2", "emoji": "🕊️", "feedback": "Harmony surrounds you right now."},
-            "serene": {"color": "#D4F1F4", "emoji": "🧘", "feedback": "Find strength in this quiet moment."},
-            "minimalist": {"color": "#F5F5F5", "emoji": "⚪", "feedback": "Simplicity is the ultimate sophistication."},
-            
-            # Radiant Family
-            "happy": {"color": "#FFDE7D", "emoji": "😊", "feedback": "Your light is shining bright today!"},
-            "energetic": {"color": "#FFD93D", "emoji": "⚡", "feedback": "Channel this power into something great."},
-            "playful": {"color": "#FF8B94", "emoji": "🎈", "feedback": "Don't forget to keep that inner spark."},
-            "vibrant": {"color": "#6BCB77", "emoji": "🌈", "feedback": "The world is a canvas of possibilities."},
-            
-            # Melancholy Family
-            "sad": {"color": "#A2D2FF", "emoji": "😢", "feedback": "It's okay to let the rain fall sometimes."},
-            "lonely": {"color": "#6C757D", "emoji": "👤", "feedback": "I'm here with you in this space."},
-            "pensive": {"color": "#4A4E69", "emoji": "🤔", "feedback": "Depth of thought leads to growth."},
-            "gloomy": {"color": "#9A8C98", "emoji": "☁️", "feedback": "Even clouds eventually move on."},
-            
-            # Edge Family
-            "anxious": {"color": "#D4A5A5", "emoji": "😰", "feedback": "Ground yourself. Focus on one thing."},
-            "chaotic": {"color": "#E94560", "emoji": "🌀", "feedback": "Find the still point in the storm."},
-            "intense": {"color": "#FF4D4D", "emoji": "🔥", "feedback": "This intensity shows how much you care."},
-            "gritty": {"color": "#2B2B2B", "emoji": "⛓️", "feedback": "Strength is often forged in the rough."},
-            
-            # Soul Family
-            "nostalgic": {"color": "#FFAAA5", "emoji": "📺", "feedback": "A beautiful echo of where you've been."},
-            "romantic": {"color": "#FFB7B2", "emoji": "❤️", "feedback": "Love is the thread that binds us."},
-            "mystical": {"color": "#9D4EDD", "emoji": "✨", "feedback": "There is magic in the unknown."},
-            "vintage": {"color": "#B08968", "emoji": "🎞️", "feedback": "Timeless vibes for a timeless soul."}
-        }
-        
+        labels, scores = build_enriched_scores_from_bert(request.text)
+
         dominant_label = labels[0]
         dominant_score = scores[0]
-        dominant_meta = vibe_meta.get(dominant_label, {"color": "#808080", "emoji": "🌈", "feedback": "Unique vibe!"})
-        
-        # Enhance all scores with metadata
-        enriched_scores = []
-        for label, score in zip(labels, scores):
-            m = vibe_meta.get(label, {"color": "#808080", "emoji": "🌈"})
-            enriched_scores.append({
+        dominant_meta = VIBE_META.get(
+            dominant_label,
+            {"color": "#808080", "emoji": "🌈", "feedback": "Unique vibe!"},
+        )
+
+        enriched_scores = [
+            {
                 "label": label,
                 "score": score,
                 "percentage": f"{round(score * 100, 1)}%",
-                "color": m["color"],
-                "emoji": m["emoji"]
-            })
+                "color": VIBE_META.get(label, {}).get("color", "#808080"),
+                "emoji": VIBE_META.get(label, {}).get("emoji", "🌈"),
+            }
+            for label, score in zip(labels, scores)
+        ]
 
         return {
-            "mood": dominant_label, # Keeping 'mood' key for frontend compatibility
+            "mood": dominant_label,
+            "description": request.text,
             "confidence": f"{round(dominant_score * 100, 2)}%",
             "emoji": dominant_meta["emoji"],
             "color": dominant_meta["color"],
             "feedback": dominant_meta.get("feedback"),
-            "all_scores": enriched_scores
+            "all_scores": enriched_scores,
         }
     except Exception as e:
         print(f"Error during analysis: {e}")
         raise HTTPException(status_code=500, detail="Error analyzing mood")
 
+
+# ─────────────────────────────────────────────────────────
+# ADVANCED Multi-Stage Gemini Image Analysis
+# ─────────────────────────────────────────────────────────
+
+STAGE1_PROMPT = """You are an expert visual analyst and cinematic storyteller. Look at this image and write a rich, multi-paragraph narrative (2–3 paragraphs) that captures both the physical reality and the emotional soul of the scene.
+
+Focus on these pillars:
+1. THE SUBJECT & MOOD: Who or what is the focus? Describe their expression, posture, or state of being in detail. If it's a person, what does their gaze or body language say about their inner world?
+2. THE ENVIRONMENT: Describe the setting in depth. Is it indoor, outdoor, urban, or natural? Mention the architecture, weather, and specific textures (e.g., "weathered brick", "sleek glass", "soft moss"). 
+3. LIGHT & COLOR: How does the light hit the scene? Describe the time of day, shadows, and the emotional impact of the color palette (e.g., "warm golden hues", "stark clinical whites", "deep moody shadows").
+4. THE ATMOSPHERE & NARRATIVE: What is the overall "feeling" of this world? What happened just before this moment, or what is about to happen? Sound like a novelist describing a pivotal frame in a story.
+
+Rules:
+- Write exactly 2-3 paragraphs.
+- Write in present tense.
+- Be specific: describe actual details visible.
+- Never say "the image shows" or "I see".
+- Be evocative, literary, and cinematic."""
+
+STAGE2_PROMPT_TEMPLATE = """You are a mood and environment intelligence engine. Based on this image description:
+
+"{description}"
+
+And these valid mood labels: {labels}
+
+Return ONLY a valid JSON object in this exact format:
+{{
+  "dominant_mood": "<single label from the list>",
+  "confidence": <float 0.0 to 1.0>,
+  "environment_type": "<2-3 words describing the setting, e.g., 'Cozy Library', 'Industrial Wasteland', 'Morning Forest'>",
+  "secondary_moods": [
+    {{"label": "<label>", "score": <float>}},
+    {{"label": "<label>", "score": <float>}},
+    {{"label": "<label>", "score": <float>}}
+  ],
+  "color_palette": ["<hex1>", "<hex2>", "<hex3>"],
+  "poetic_summary": "<one sentence written in second person: the visceral feeling of being in this scene>",
+  "short_caption": "<one sentence describing the literal scene, e.g., 'A person standing in front of a colorful wall'>",
+  "scene_tags": ["<tag1>", "<tag2>", "<tag3>"]
+}}"""
+
+
+async def run_advanced_gemini_analysis(image: Image.Image):
+    """
+    Two-stage Gemini pipeline:
+    Stage 1: Get a rich, evocative scene description.
+    Stage 2: Extract structured mood JSON from that description.
+    Returns (description, structured_result_dict) or raises on failure.
+    """
+    image_part = pil_to_gemini_part(image)
+
+    # ── Stage 1: Scene Description ──
+    stage1_response = gemini_model.generate_content([STAGE1_PROMPT, image_part])
+    description = stage1_response.text.strip()
+    print(f"[Stage 1 Description] {description}")
+
+    # ── Stage 2: Structured Mood Extraction ──
+    stage2_prompt = STAGE2_PROMPT_TEMPLATE.format(
+        description=description,
+        labels=", ".join(VIBE_LABELS),
+    )
+    stage2_response = gemini_model.generate_content(stage2_prompt)
+    raw_json = stage2_response.text.strip()
+
+    # Strip any accidental markdown fences
+    if raw_json.startswith("```"):
+        raw_json = raw_json.split("```")[1]
+        if raw_json.startswith("json"):
+            raw_json = raw_json[4:]
+    raw_json = raw_json.strip()
+
+    structured = json.loads(raw_json)
+    print(f"[Stage 2 Structured] {structured}")
+    return description, structured
+
+
+def build_full_response(vibe: str, description: str, structured: Optional[dict] = None):
+    """
+    Merges Gemini structured output + BERT scores into a unified response
+    that the existing MoodResult component can render.
+    """
+    # Run BERT on the description for the full 20-label breakdown
+    bert_labels, bert_scores = build_enriched_scores_from_bert(description)
+
+    # Use Gemini's dominant mood if valid, else fall back to BERT top result
+    dominant_label = vibe if vibe in VIBE_LABELS else bert_labels[0]
+    dominant_meta = VIBE_META.get(
+        dominant_label, {"color": "#808080", "emoji": "🌈", "feedback": "Unique vibe!"}
+    )
+
+    # Build the all_scores list from BERT (full 20 labels)
+    bert_enriched = [
+        {
+            "label": label,
+            "score": score,
+            "percentage": f"{round(score * 100, 1)}%",
+            "color": VIBE_META.get(label, {}).get("color", "#808080"),
+            "emoji": VIBE_META.get(label, {}).get("emoji", "🌈"),
+        }
+        for label, score in zip(bert_labels, bert_scores)
+    ]
+
+    # Determine a short version for the input field
+    short_desc = ""
+    if structured and structured.get("short_caption"):
+        short_desc = structured.get("short_caption")
+    elif structured and structured.get("poetic_summary"):
+        short_desc = structured.get("poetic_summary")
+    else:
+        # Fallback: take first sentence or first 100 chars
+        sentences = description.split(". ")
+        if sentences:
+            short_desc = sentences[0] + "." if not sentences[0].endswith(".") else sentences[0]
+            # Safety cap for short description
+            if len(short_desc) > 150:
+                short_desc = short_desc[:147] + "..."
+        else:
+            short_desc = description[:100] + "..."
+
+    response = {
+        "vibe": dominant_label,
+        "description": description,
+        "short_description": short_desc,
+        "mood": dominant_label,
+        "confidence": f"{round(bert_scores[bert_labels.index(dominant_label)] * 100, 2)}%",
+        "emoji": dominant_meta["emoji"],
+        "color": dominant_meta["color"],
+        "feedback": dominant_meta["feedback"],
+        "all_scores": bert_enriched,
+    }
+
+    # Attach Gemini extras if available
+    if structured:
+        response["gemini_confidence"] = structured.get("confidence")
+        response["poetic_summary"] = structured.get("poetic_summary", "")
+        response["short_caption"] = structured.get("short_caption", "")
+        response["color_palette"] = structured.get("color_palette", [])
+        response["scene_tags"] = structured.get("scene_tags", [])
+        response["secondary_moods"] = structured.get("secondary_moods", [])
+        response["environment_type"] = structured.get("environment_type", "Unknown Setting")
+
+    return response
+
+
 @app.post("/analyze-image")
-async def analyze_image(file: UploadFile = File(...)):
-    if not file.content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="File provided is not an image")
-    
+async def analyze_image(
+    file: Optional[UploadFile] = File(None),
+    base64_data: Optional[str] = Form(None, alias="base64"),
+    imageUrl: Optional[str] = Form(None),
+    fileName: Optional[str] = Form("photo.jpg"),
+    image_type: Optional[str] = Form("image/jpeg", alias="type"),
+):
+    image = None
+
     try:
-        # Read and open image
-        image_data = await file.read()
-        image = Image.open(io.BytesIO(image_data))
-        
-        description = ""
-        vibe = "unknown"
-        
+        # ── 1. Receive the image ──
+        if file is not None and file.filename:
+            if not file.content_type.startswith("image/"):
+                raise HTTPException(
+                    status_code=400, detail="File provided is not an image"
+                )
+            image = Image.open(io.BytesIO(await file.read()))
+
+        elif base64_data:
+            try:
+                image = Image.open(io.BytesIO(base64.b64decode(base64_data)))
+            except Exception:
+                raise HTTPException(
+                    status_code=400, detail="Invalid base64 image payload"
+                )
+
+        elif imageUrl:
+            try:
+                resp = requests.get(imageUrl, timeout=30)
+                resp.raise_for_status()
+                image = Image.open(io.BytesIO(resp.content))
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400, detail=f"Failed to fetch image from URL: {str(e)}"
+                )
+
+        else:
+            raise HTTPException(status_code=400, detail="No image provided")
+
+        # ── 2. Advanced Gemini pipeline ──
         if gemini_model:
             try:
-                # Use Gemini for detailed description
-                prompt = "Describe this image in a short, evocative sentence (maximum 20 words). Focus on the atmosphere and key elements."
-                response = gemini_model.generate_content([prompt, image])
-                description = response.text.strip()
-                
-                # Still calculate a vibe label for UI consistency
-                # We can use the description we just generated to find the best vibe label
-                desc_embedding = vibe_model.encode(description, convert_to_tensor=True)
-                cos_scores = util.cos_sim(desc_embedding, LABEL_EMBEDDINGS)[0]
-                best_idx = torch.argmax(cos_scores).item()
-                vibe = VIBE_LABELS[best_idx]
+                description, structured = await run_advanced_gemini_analysis(image)
+                dominant = structured.get("dominant_mood", "")
+                vibe = (
+                    dominant
+                    if dominant in VIBE_LABELS
+                    else VIBE_LABELS[
+                        torch.argmax(
+                            util.cos_sim(
+                                vibe_model.encode(description, convert_to_tensor=True),
+                                LABEL_EMBEDDINGS,
+                            )[0]
+                        ).item()
+                    ]
+                )
+                return build_full_response(vibe, description, structured)
+
+            except json.JSONDecodeError as je:
+                # Stage 2 JSON parse failed — fall back to BERT on Stage 1 description
+                print(f"[Stage 2 JSON Error] {je} — falling back to BERT")
+                bert_labels, _ = build_enriched_scores_from_bert(description)
+                return build_full_response(bert_labels[0], description, None)
+
             except Exception as ge:
-                print(f"Gemini API error: {ge}")
-                # Fallback to CLIP if Gemini fails
-                image_embedding = vision_model.encode(image, convert_to_tensor=True)
-                cos_scores = util.cos_sim(image_embedding, VISION_LABEL_EMBEDDINGS)[0]
-                best_idx = torch.argmax(cos_scores).item()
-                vibe = VIBE_LABELS[best_idx]
-                description = f"The image captures a very {vibe} environment."
+                print(f"[Gemini ERROR] {type(ge).__name__}: {ge}")
+                print("[Fallback] Using Local BLIP for factual description...")
+                
+                # 1. Get Factual Caption
+                description = generate_local_caption(image)
+                
+                # 2. Extract Vibe from that caption (using BERT)
+                bert_labels, _ = build_enriched_scores_from_bert(description)
+                vibe = bert_labels[0]
+                
+                return build_full_response(vibe, description, None)
+
+
         else:
-            # Fallback to CLIP if no API key
-            image_embedding = vision_model.encode(image, convert_to_tensor=True)
-            cos_scores = util.cos_sim(image_embedding, VISION_LABEL_EMBEDDINGS)[0]
-            best_idx = torch.argmax(cos_scores).item()
-            vibe = VIBE_LABELS[best_idx]
-            description = f"The image captures a very {vibe} environment."
-        
-        return {
-            "vibe": vibe,
-            "description": description
-        }
+            # No Gemini key — Use Local BLIP for factual description
+            print("[No Gemini] Using Local BLIP for factual description...")
+            description = generate_local_caption(image)
+            bert_labels, _ = build_enriched_scores_from_bert(description)
+            vibe = bert_labels[0]
+            return build_full_response(vibe, description, None)
+
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Image analysis error: {e}")
+        print(f"[Image analysis error] {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail="Error processing image")
+
 
 @app.get("/")
 async def health_check():
-    return {"status": "online", "message": "Scene Vibe Server is running"}
+    return {
+        "status": "online",
+        "message": "Scene Vibe Server is running",
+        "gemini": "enabled" if gemini_model else "disabled (no API key)",
+    }
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
