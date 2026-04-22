@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import Tts from 'react-native-tts';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
+const DESIGN_TEXT_LINE_HEIGHT = 26;
 
 const getContrastColor = (hexcolor) => {
   if (!hexcolor || hexcolor === 'transparent') return '#000000';
@@ -14,66 +16,246 @@ const getContrastColor = (hexcolor) => {
   return yiq >= 128 ? '#1a1a1a' : '#ffffff';
 };
 
+const isWhitespace = (value) => /\s/.test(value);
+
+const findLineRange = (sourceText, startIndex, renderedLineText) => {
+  if (!renderedLineText) {
+    return { start: startIndex, end: startIndex };
+  }
+
+  let sourceIndex = startIndex;
+  let targetIndex = 0;
+  let matchedStart = startIndex;
+  let started = false;
+
+  while (sourceIndex < sourceText.length && targetIndex < renderedLineText.length) {
+    const sourceChar = sourceText[sourceIndex];
+    const targetChar = renderedLineText[targetIndex];
+    const sourceIsWhitespace = isWhitespace(sourceChar);
+    const targetIsWhitespace = isWhitespace(targetChar);
+
+    if (!started) {
+      matchedStart = sourceIndex;
+      started = true;
+    }
+
+    if (sourceIsWhitespace && targetIsWhitespace) {
+      while (sourceIndex < sourceText.length && isWhitespace(sourceText[sourceIndex])) {
+        sourceIndex += 1;
+      }
+      while (targetIndex < renderedLineText.length && isWhitespace(renderedLineText[targetIndex])) {
+        targetIndex += 1;
+      }
+      continue;
+    }
+
+    if (sourceChar === targetChar) {
+      sourceIndex += 1;
+      targetIndex += 1;
+      continue;
+    }
+
+    if (sourceIsWhitespace) {
+      sourceIndex += 1;
+      continue;
+    }
+
+    if (targetIsWhitespace) {
+      targetIndex += 1;
+      continue;
+    }
+
+    return null;
+  }
+
+  if (targetIndex < renderedLineText.length) {
+    return null;
+  }
+
+  return {
+    start: matchedStart,
+    end: sourceIndex,
+  };
+};
+
+const buildLineMetadata = (description, lines) => {
+  if (!description || !Array.isArray(lines) || lines.length === 0) {
+    return [];
+  }
+
+  let searchStart = 0;
+
+  return lines.map((line, index) => {
+    const renderedText = line.text || '';
+    let range = findLineRange(description, searchStart, renderedText);
+
+    if (!range) {
+      const fallbackStart = Math.max(0, searchStart - 2);
+      range = findLineRange(description, fallbackStart, renderedText);
+    }
+
+    if (!range) {
+      range = {
+        start: searchStart,
+        end: Math.min(description.length, searchStart + renderedText.length),
+      };
+    }
+
+    searchStart = Math.max(range.end, searchStart);
+
+    return {
+      index,
+      start: range.start,
+      end: range.end,
+      y: typeof line.y === 'number' ? line.y : index * DESIGN_TEXT_LINE_HEIGHT,
+      height: typeof line.height === 'number' ? line.height : DESIGN_TEXT_LINE_HEIGHT,
+      width: typeof line.width === 'number' ? line.width : 0,
+      text: renderedText,
+    };
+  });
+};
+
 const MoodResult = ({ moodData, isAnalyzing, isListening, hasText, setAppBgColor, appBgColor }) => {
   const [isSpeaking, setIsSpeaking] = React.useState(false);
   const [containerWidth, setContainerWidth] = React.useState(0);
-  const shimmerAnim = React.useRef(new Animated.Value(0)).current;
+  const [lineMetadata, setLineMetadata] = React.useState([]);
+  const [activeLineIndex, setActiveLineIndex] = React.useState(-1);
+  const highlightTranslateY = React.useRef(new Animated.Value(0)).current;
+  const highlightTranslateX = React.useRef(new Animated.Value(0)).current;
+  const highlightOpacity = React.useRef(new Animated.Value(0)).current;
+  const lineMetadataRef = React.useRef([]);
+  const activeLineIndexRef = React.useRef(-1);
   const contrastColor = getContrastColor(appBgColor);
   const isDarkBg = contrastColor === '#ffffff';
 
+  const resetHighlight = React.useCallback(() => {
+    setActiveLineIndex(-1);
+    highlightOpacity.stopAnimation();
+    highlightTranslateY.stopAnimation();
+    highlightTranslateX.stopAnimation();
+    highlightOpacity.setValue(0);
+    highlightTranslateY.setValue(0);
+    highlightTranslateX.setValue(0);
+  }, [highlightOpacity, highlightTranslateY, highlightTranslateX]);
+
   React.useEffect(() => {
-    let animation;
-    if (isSpeaking) {
-      shimmerAnim.setValue(0);
-      animation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(shimmerAnim, {
-            toValue: 1,
-            duration: 4000,
-            easing: Easing.bezier(0.4, 0, 0.2, 1),
-            useNativeDriver: true,
-          }),
-          Animated.timing(shimmerAnim, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      animation.start();
-    } else {
-      shimmerAnim.stopAnimation();
-    }
-    return () => {
-      if (animation) animation.stop();
+    lineMetadataRef.current = lineMetadata;
+  }, [lineMetadata]);
+
+  React.useEffect(() => {
+    activeLineIndexRef.current = activeLineIndex;
+  }, [activeLineIndex]);
+
+  React.useEffect(() => {
+    setLineMetadata([]);
+    resetHighlight();
+  }, [moodData?.description, resetHighlight]);
+
+  React.useEffect(() => {
+    const startListener = Tts.addEventListener('tts-start', () => {
+      setIsSpeaking(true);
+      if (lineMetadataRef.current.length > 0) {
+        setActiveLineIndex(0);
+        highlightTranslateY.setValue(lineMetadataRef.current[0].y);
+        highlightTranslateX.setValue(0);
+        Animated.timing(highlightOpacity, {
+          toValue: 1,
+          duration: 160,
+          useNativeDriver: true,
+        }).start();
+      }
+    });
+
+    const finishSpeaking = () => {
+      setIsSpeaking(false);
+      resetHighlight();
     };
-  }, [isSpeaking, shimmerAnim]);
 
-  React.useEffect(() => {
-    Tts.addEventListener('tts-start', () => setIsSpeaking(true));
-    Tts.addEventListener('tts-finish', () => setIsSpeaking(false));
-    Tts.addEventListener('tts-cancel', () => setIsSpeaking(false));
+    const finishListener = Tts.addEventListener('tts-finish', finishSpeaking);
+    const cancelListener = Tts.addEventListener('tts-cancel', finishSpeaking);
+
+    const progressListener = Tts.addEventListener('tts-progress', (event) => {
+      const currentLineMetadata = lineMetadataRef.current;
+
+      if (!moodData?.description || currentLineMetadata.length === 0) {
+        return;
+      }
+
+      const currentPos =
+        typeof event?.start === 'number'
+          ? event.start
+          : typeof event?.location === 'number'
+            ? event.location
+            : 0;
+
+      const nextLineIndex = currentLineMetadata.findIndex((line, index) => {
+        const isLastLine = index === currentLineMetadata.length - 1;
+        return currentPos >= line.start && (currentPos < line.end || isLastLine);
+      });
+
+      const currentActiveLineIndex = activeLineIndexRef.current;
+      const safeLineIndex = nextLineIndex >= 0 ? nextLineIndex : currentActiveLineIndex;
+
+      if (safeLineIndex >= 0) {
+        const line = currentLineMetadata[safeLineIndex];
+        const lineRange = line.end - line.start;
+        const lineProgress = lineRange > 0 ? (currentPos - line.start) / lineRange : 0;
+        const targetX = Math.max(0, Math.min(line.width, lineProgress * line.width));
+
+        if (safeLineIndex !== currentActiveLineIndex) {
+          setActiveLineIndex(safeLineIndex);
+          Animated.parallel([
+            Animated.timing(highlightTranslateY, {
+              toValue: line.y,
+              duration: 180,
+              useNativeDriver: true,
+            }),
+            Animated.timing(highlightTranslateX, {
+              toValue: targetX,
+              duration: 100,
+              useNativeDriver: true,
+            }),
+            Animated.timing(highlightOpacity, {
+              toValue: 1,
+              duration: 120,
+              useNativeDriver: true,
+            }),
+          ]).start();
+        } else {
+          // Just update X position within the same line
+          Animated.timing(highlightTranslateX, {
+            toValue: targetX,
+            duration: 100,
+            useNativeDriver: true,
+          }).start();
+        }
+      }
+    });
 
     return () => {
+      startListener.remove();
+      finishListener.remove();
+      cancelListener.remove();
+      progressListener.remove();
       Tts.stop();
     };
-  }, []);
+  }, [highlightOpacity, highlightTranslateY, highlightTranslateX, moodData?.description, resetHighlight]);
 
   const handleSpeak = () => {
     if (isSpeaking) {
       Tts.stop();
-      setIsSpeaking(false);
-    } else {
-      if (moodData?.description) {
-        Tts.stop();
-        Tts.speak(moodData.description, {
-          androidParams: {
-            KEY_PARAM_PAN: -1,
-            KEY_PARAM_VOLUME: 1,
-            KEY_PARAM_STREAM: 'STREAM_MUSIC',
-          },
-        });
-      }
+      return;
+    }
+
+    if (moodData?.description) {
+      Tts.stop();
+      Tts.speak(moodData.description, {
+        androidParams: {
+          KEY_PARAM_PAN: -1,
+          KEY_PARAM_VOLUME: 1,
+          KEY_PARAM_STREAM: 'STREAM_MUSIC',
+        },
+      });
     }
   };
 
@@ -90,21 +272,22 @@ const MoodResult = ({ moodData, isAnalyzing, isListening, hasText, setAppBgColor
     color: isDarkBg ? 'rgba(255,255,255,0.7)' : '#666',
   };
 
+  const activeLine = activeLineIndex >= 0 ? lineMetadata[activeLineIndex] : null;
+  const highlightWidth = Math.max(0, containerWidth - 4);
+
   return (
     <>
       <Text style={[styles.sectionTitle, textStyle]}>Mood Analysis (BERT)</Text>
 
       {isAnalyzing && (
         <View style={styles.loadingState}>
-          <Text style={[styles.loadingDot, secondaryTextStyle]}>● ● ●</Text>
+          <Text style={[styles.loadingDot, secondaryTextStyle]}>...</Text>
           <Text style={[styles.statusText, secondaryTextStyle]}>Analyzing your vibe...</Text>
         </View>
       )}
 
       {!isAnalyzing && moodData && (
         <View style={styles.resultsContainer}>
-
-          {/* ── Dominant Mood Card ── */}
           <View style={[styles.moodCard, cardStyle, { borderLeftColor: moodData.color }]}>
             <View style={styles.moodHeader}>
               <Text style={styles.moodEmoji}>{moodData.emoji}</Text>
@@ -115,50 +298,63 @@ const MoodResult = ({ moodData, isAnalyzing, isListening, hasText, setAppBgColor
                 <Text style={[styles.moodConfidence, secondaryTextStyle]}>
                   Confidence: {moodData.confidence}
                   {moodData.gemini_confidence != null
-                    ? `  ·  Gemini: ${Math.round(moodData.gemini_confidence * 100)}%`
+                    ? `  |  Gemini: ${Math.round(moodData.gemini_confidence * 100)}%`
                     : ''}
                 </Text>
               </View>
             </View>
 
-            {/* Poetic Summary (Gemini Stage 2) */}
             {moodData.poetic_summary ? (
-              <Text style={[styles.poeticSummary, textStyle, { borderLeftColor: isDarkBg ? 'rgba(255,255,255,0.3)' : '#ccc' }]}>
+              <Text
+                style={[
+                  styles.poeticSummary,
+                  textStyle,
+                  { borderLeftColor: isDarkBg ? 'rgba(255,255,255,0.3)' : '#ccc' },
+                ]}
+              >
                 "{moodData.poetic_summary}"
               </Text>
             ) : (
               <Text style={[styles.moodFeedback, textStyle]}>{moodData.feedback}</Text>
             )}
 
-            {/* BERT Feedback always shown below poetic summary if present */}
             {moodData.poetic_summary && (
               <Text style={[styles.moodFeedback, textStyle]}>{moodData.feedback}</Text>
             )}
           </View>
 
-          {/* ── Environment Type (Gemini) ── */}
           {moodData.environment_type && (
-            <View style={[styles.environmentCard, cardStyle, { borderLeftColor: moodData.color || '#3498db' }]}>
-              <Text style={[styles.cardLabel, secondaryTextStyle]}>📍 Environment Type</Text>
+            <View
+              style={[
+                styles.environmentCard,
+                cardStyle,
+                { borderLeftColor: moodData.color || '#3498db' },
+              ]}
+            >
+              <Text style={[styles.cardLabel, secondaryTextStyle]}>Environment Type</Text>
               <Text style={[styles.environmentText, textStyle]}>{moodData.environment_type}</Text>
             </View>
           )}
 
-          {/* ── Scene Description Design Card (Cinematic Narrative) ── */}
           {moodData.description && (
             <View style={[styles.designCard, cardStyle]}>
-              <View style={[styles.designCardDecor, { backgroundColor: moodData.color || '#3498db' }]} />
+              <View
+                style={[styles.designCardDecor, { backgroundColor: moodData.color || '#3498db' }]}
+              />
               <View style={styles.designCardContent}>
                 <View style={styles.designCardHeader}>
                   <View style={styles.designCardHeaderMain}>
-                    <Text style={styles.designCardIcon}>✨</Text>
+                    <Text style={styles.designCardIcon}>*</Text>
                     <Text style={[styles.designCardTitle, textStyle]}>Cinematic Narrative</Text>
                   </View>
                   <TouchableOpacity
                     style={[
                       styles.speakerButton,
                       isSpeaking && styles.speakerButtonActive,
-                      isDarkBg && { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.2)' }
+                      isDarkBg && {
+                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        borderColor: 'rgba(255,255,255,0.2)',
+                      },
                     ]}
                     onPress={handleSpeak}
                     activeOpacity={0.6}
@@ -166,57 +362,85 @@ const MoodResult = ({ moodData, isAnalyzing, isListening, hasText, setAppBgColor
                     <Icon
                       name={isSpeaking ? 'stop-circle' : 'volume-high'}
                       size={24}
-                      color={isSpeaking ? '#ff4757' : (moodData.color || '#3498db')}
+                      color={isSpeaking ? '#ff4757' : moodData.color || '#3498db'}
                     />
                   </TouchableOpacity>
                 </View>
-                <View 
+                <View
                   style={styles.textContainer}
-                  onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+                  onLayout={(event) => {
+                    setContainerWidth(event.nativeEvent.layout.width);
+                  }}
                 >
-                  <Text selectable={true} style={[styles.designCardText, textStyle]}>{moodData.description}</Text>
-                  <Animated.View
-                    style={[
-                      styles.shimmerBeam,
-                      {
-                        opacity: isSpeaking ? 1 : 0,
-                        backgroundColor: moodData.color || '#3498db',
-                        shadowColor: moodData.color || '#3498db',
-                        shadowRadius: 10,
-                        shadowOpacity: 0.8,
-                        shadowOffset: { width: 0, height: 0 },
-                        transform: [
-                          {
-                            translateX: shimmerAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [-20, containerWidth + 20],
-                            }),
-                          },
-                        ],
-                      },
-                    ]}
-                  />
+                  {activeLine && (
+                    <Animated.View
+                      pointerEvents="none"
+                      style={[
+                        styles.lineHighlighter,
+                        {
+                          opacity: highlightOpacity,
+                          width: 4,
+                          height: activeLine.height - 4,
+                          backgroundColor: moodData.color || '#3498db',
+                          shadowColor: moodData.color || '#3498db',
+                          shadowRadius: 8,
+                          shadowOpacity: 0.8,
+                          transform: [
+                            { translateY: highlightTranslateY },
+                            { translateX: highlightTranslateX }
+                          ],
+                        },
+                      ]}
+                    />
+                  )}
+                  <Text
+                    selectable={true}
+                    style={[styles.designCardText, textStyle]}
+                    onTextLayout={(event) => {
+                      const nextMetadata = buildLineMetadata(
+                        moodData.description,
+                        event.nativeEvent.lines || [],
+                      );
+                      setLineMetadata(nextMetadata);
+                    }}
+                  >
+                    {moodData.description}
+                  </Text>
                 </View>
-                <View style={[styles.designCardFooter, { borderTopColor: isDarkBg ? 'rgba(255,255,255,0.1)' : '#f0f0f0' }]}>
-                  <Text style={[styles.designCardFooterText, secondaryTextStyle]}>AI Visual Analysis • Gemini 1.5</Text>
+                <View
+                  style={[
+                    styles.designCardFooter,
+                    { borderTopColor: isDarkBg ? 'rgba(255,255,255,0.1)' : '#f0f0f0' },
+                  ]}
+                >
+                  <Text style={[styles.designCardFooterText, secondaryTextStyle]}>
+                    AI Visual Analysis | Gemini 1.5
+                  </Text>
                 </View>
               </View>
             </View>
           )}
 
-          {/* ── Color Palette (Gemini) ── */}
           {moodData.color_palette && moodData.color_palette.length > 0 && (
             <View style={[styles.paletteCard, cardStyle]}>
-              <Text style={[styles.cardLabel, secondaryTextStyle]}>🎨 Scene Color Palette</Text>
+              <Text style={[styles.cardLabel, secondaryTextStyle]}>Scene Color Palette</Text>
               <View style={styles.paletteRow}>
-                {moodData.color_palette.map((hex, i) => (
+                {moodData.color_palette.map((hex, index) => (
                   <TouchableOpacity
-                    key={i}
+                    key={index}
                     style={styles.swatchWrapper}
                     onPress={() => setAppBgColor(hex)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.swatch, { backgroundColor: hex, borderColor: isDarkBg ? 'rgba(255,255,255,0.3)' : '#ddd' }]} />
+                    <View
+                      style={[
+                        styles.swatch,
+                        {
+                          backgroundColor: hex,
+                          borderColor: isDarkBg ? 'rgba(255,255,255,0.3)' : '#ddd',
+                        },
+                      ]}
+                    />
                     <Text style={[styles.swatchHex, secondaryTextStyle]}>{hex}</Text>
                   </TouchableOpacity>
                 ))}
@@ -224,59 +448,68 @@ const MoodResult = ({ moodData, isAnalyzing, isListening, hasText, setAppBgColor
             </View>
           )}
 
-          {/* ── Scene Tags (Gemini) ── */}
           {moodData.scene_tags && moodData.scene_tags.length > 0 && (
             <View style={[styles.tagsCard, cardStyle]}>
-              <Text style={[styles.cardLabel, secondaryTextStyle]}>🏷️ Scene Tags</Text>
+              <Text style={[styles.cardLabel, secondaryTextStyle]}>Scene Tags</Text>
               <View style={styles.tagsRow}>
-                {moodData.scene_tags.map((tag, i) => (
-                  <View key={i} style={[styles.tag, { backgroundColor: moodData.color + '40' }]}>
-                    <Text style={[styles.tagText, { color: isDarkBg ? '#fff' : moodData.color }]}>{tag}</Text>
+                {moodData.scene_tags.map((tag, index) => (
+                  <View key={index} style={[styles.tag, { backgroundColor: `${moodData.color}40` }]}>
+                    <Text style={[styles.tagText, { color: isDarkBg ? '#fff' : moodData.color }]}>
+                      {tag}
+                    </Text>
                   </View>
                 ))}
               </View>
             </View>
           )}
 
-          {/* ── Secondary Moods (Gemini) ── */}
           {moodData.secondary_moods && moodData.secondary_moods.length > 0 && (
             <View style={[styles.breakdownCard, cardStyle]}>
-              <Text style={[styles.breakdownTitle, textStyle]}>🎭 Secondary Moods (Gemini)</Text>
-              {moodData.secondary_moods.map((item) => {
-                return (
-                  <View key={item.label} style={styles.emotionRow}>
-                    <View style={styles.emotionInfo}>
-                      <Text style={[styles.emotionLabel, secondaryTextStyle]}>{item.label}</Text>
-                      <Text style={[styles.emotionPercentage, secondaryTextStyle]}>
-                        {Math.round((item.score || 0) * 100)}%
-                      </Text>
-                    </View>
-                    <View style={[styles.progressBarContainer, { backgroundColor: isDarkBg ? 'rgba(255,255,255,0.1)' : '#f0f0f0' }]}>
-                      <View
-                        style={[
-                          styles.progressBarFill,
-                          { width: `${(item.score || 0) * 100}%`, backgroundColor: '#9b59b6' },
-                        ]}
-                      />
-                    </View>
+              <Text style={[styles.breakdownTitle, textStyle]}>Secondary Moods (Gemini)</Text>
+              {moodData.secondary_moods.map((item) => (
+                <View key={item.label} style={styles.emotionRow}>
+                  <View style={styles.emotionInfo}>
+                    <Text style={[styles.emotionLabel, secondaryTextStyle]}>{item.label}</Text>
+                    <Text style={[styles.emotionPercentage, secondaryTextStyle]}>
+                      {Math.round((item.score || 0) * 100)}%
+                    </Text>
                   </View>
-                );
-              })}
+                  <View
+                    style={[
+                      styles.progressBarContainer,
+                      { backgroundColor: isDarkBg ? 'rgba(255,255,255,0.1)' : '#f0f0f0' },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        { width: `${(item.score || 0) * 100}%`, backgroundColor: '#9b59b6' },
+                      ]}
+                    />
+                  </View>
+                </View>
+              ))}
             </View>
           )}
 
-          {/* ── Full BERT Breakdown ── */}
           {moodData.all_scores && moodData.all_scores.length > 0 && (
             <View style={[styles.breakdownCard, cardStyle]}>
-              <Text style={[styles.breakdownTitle, textStyle]}>📊 Vibe Breakdown — Top 5 (BERT)</Text>
+              <Text style={[styles.breakdownTitle, textStyle]}>Vibe Breakdown - Top 5 (BERT)</Text>
               {moodData.all_scores.slice(0, 5).map((item) => (
                 <View key={item.label} style={styles.emotionRow}>
                   <View style={styles.emotionInfo}>
                     <Text style={styles.emotionEmoji}>{item.emoji}</Text>
                     <Text style={[styles.emotionLabel, secondaryTextStyle]}>{item.label}</Text>
-                    <Text style={[styles.emotionPercentage, secondaryTextStyle]}>{item.percentage}</Text>
+                    <Text style={[styles.emotionPercentage, secondaryTextStyle]}>
+                      {item.percentage}
+                    </Text>
                   </View>
-                  <View style={[styles.progressBarContainer, { backgroundColor: isDarkBg ? 'rgba(255,255,255,0.1)' : '#f0f0f0' }]}>
+                  <View
+                    style={[
+                      styles.progressBarContainer,
+                      { backgroundColor: isDarkBg ? 'rgba(255,255,255,0.1)' : '#f0f0f0' },
+                    ]}
+                  >
                     <View
                       style={[
                         styles.progressBarFill,
@@ -319,7 +552,7 @@ const styles = StyleSheet.create({
   loadingDot: {
     fontSize: 20,
     color: '#aaa',
-    letterSpacing: 6,
+    letterSpacing: 2,
   },
   statusText: {
     marginTop: 4,
@@ -437,7 +670,7 @@ const styles = StyleSheet.create({
   designCardText: {
     fontSize: 16,
     color: '#2d3436',
-    lineHeight: 26,
+    lineHeight: DESIGN_TEXT_LINE_HEIGHT,
     fontStyle: 'italic',
     fontWeight: '400',
   },
@@ -458,12 +691,12 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     borderRadius: 8,
+    paddingHorizontal: 2,
   },
-  shimmerBeam: {
+  lineHighlighter: {
     position: 'absolute',
-    top: -10,
-    bottom: -10,
-    width: 3,
+    left: 0,
+    top: 2,
     borderRadius: 2,
     zIndex: 10,
     elevation: 10,
