@@ -285,43 +285,59 @@ async def analyze_mood(request: MoodRequest):
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
     try:
-        labels, scores = build_enriched_scores_from_bert(request.text)
+        if gemini_model:
+            try:
+                description, structured = await run_advanced_text_analysis(request.text)
+                dominant = structured.get("dominant_mood", "")
+                vibe = (
+                    dominant
+                    if dominant in VIBE_LABELS
+                    else VIBE_LABELS[
+                        torch.argmax(
+                            util.cos_sim(
+                                vibe_model.encode(description, convert_to_tensor=True),
+                                LABEL_EMBEDDINGS,
+                            )[0]
+                        ).item()
+                    ]
+                )
+                return build_full_response(vibe, description, structured)
 
-        dominant_label = labels[0]
-        dominant_score = scores[0]
-        dominant_meta = VIBE_META.get(
-            dominant_label,
-            {"color": "#808080", "emoji": "🌈", "feedback": "Unique vibe!"},
-        )
+            except Exception as ge:
+                print(f"[Gemini Text Analysis ERROR] {type(ge).__name__}: {ge}")
+                # Fallback to BERT
+                labels, scores = build_enriched_scores_from_bert(request.text)
+                return build_full_response(labels[0], request.text, None)
+        else:
+            # Fallback to BERT if Gemini is disabled
+            labels, scores = build_enriched_scores_from_bert(request.text)
+            return build_full_response(labels[0], request.text, None)
 
-        enriched_scores = [
-            {
-                "label": label,
-                "score": score,
-                "percentage": f"{round(score * 100, 1)}%",
-                "color": VIBE_META.get(label, {}).get("color", "#808080"),
-                "emoji": VIBE_META.get(label, {}).get("emoji", "🌈"),
-            }
-            for label, score in zip(labels, scores)
-        ]
-
-        return {
-            "mood": dominant_label,
-            "description": request.text,
-            "confidence": f"{round(dominant_score * 100, 2)}%",
-            "emoji": dominant_meta["emoji"],
-            "color": dominant_meta["color"],
-            "feedback": dominant_meta.get("feedback"),
-            "all_scores": enriched_scores,
-        }
     except Exception as e:
         print(f"Error during analysis: {e}")
         raise HTTPException(status_code=500, detail="Error analyzing mood")
 
 
 # ─────────────────────────────────────────────────────────
-# ADVANCED Multi-Stage Gemini Image Analysis
+# ADVANCED Multi-Stage Gemini Narrative Expansion
 # ─────────────────────────────────────────────────────────
+
+TEXT_STAGE1_PROMPT = """You are an expert cinematic storyteller and emotional architect. Take the following brief input text and expand it into a rich, multi-paragraph narrative (2–3 paragraphs) that captures the deep emotional landscape, the surrounding environment, and the visceral atmosphere of this moment.
+
+The input text is: "{text}"
+
+Focus on these pillars:
+1. THE INNER WORLD: Expand on the emotions mentioned or implied. Describe the internal state of the person in the scene—their thoughts, their breath, their unspoken feelings.
+2. THE PHYSICAL SETTING: Based on the input, imagine a detailed environment. Describe the architecture, the textures (e.g., "cold damp pavement", "velvet curtains"), and the time of day. 
+3. LIGHT & ATMOSPHERE: Describe how light plays in this imagined space. Is it flickering neon, a dying sunset, or harsh overhead fluorescent? What is the "temperature" of the scene?
+4. THE NARRATIVE ARC: What led to this moment? What is the lingering tension? Sound like a novelist describing a pivotal frame in a story.
+
+Rules:
+- Write exactly 2-3 paragraphs.
+- Write in present tense.
+- Use the input text as the core seed, but bloom it into a full scene.
+- Never say "the text says" or "I think".
+- Be evocative, literary, and cinematic."""
 
 STAGE1_PROMPT = """You are an expert visual analyst and cinematic storyteller. Look at this image and write a rich, multi-paragraph narrative (2–3 paragraphs) that captures both the physical reality and the emotional soul of the scene.
 
@@ -392,6 +408,38 @@ async def run_advanced_gemini_analysis(image: Image.Image):
 
     structured = json.loads(raw_json)
     print(f"[Stage 2 Structured] {structured}")
+    return description, structured
+
+
+async def run_advanced_text_analysis(text: str):
+    """
+    Two-stage Gemini pipeline for text:
+    Stage 1: Expand brief text into a rich narrative.
+    Stage 2: Extract structured mood JSON from that narrative.
+    """
+    # ── Stage 1: Narrative Expansion ──
+    stage1_prompt = TEXT_STAGE1_PROMPT.format(text=text)
+    stage1_response = gemini_model.generate_content(stage1_prompt)
+    description = stage1_response.text.strip()
+    print(f"[Text Stage 1 Narrative] {description}")
+
+    # ── Stage 2: Structured Mood Extraction ──
+    stage2_prompt = STAGE2_PROMPT_TEMPLATE.format(
+        description=description,
+        labels=", ".join(VIBE_LABELS),
+    )
+    stage2_response = gemini_model.generate_content(stage2_prompt)
+    raw_json = stage2_response.text.strip()
+
+    # Strip any accidental markdown fences
+    if raw_json.startswith("```"):
+        raw_json = raw_json.split("```")[1]
+        if raw_json.startswith("json"):
+            raw_json = raw_json[4:]
+    raw_json = raw_json.strip()
+
+    structured = json.loads(raw_json)
+    print(f"[Text Stage 2 Structured] {structured}")
     return description, structured
 
 
