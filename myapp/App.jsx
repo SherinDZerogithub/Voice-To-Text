@@ -8,6 +8,7 @@ import {
   PermissionsAndroid,
   Text,
   NativeModules,
+  TouchableOpacity,
 } from 'react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
@@ -15,6 +16,7 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import VoiceInput from './components/VoiceInput';
 import MoodResult from './components/MoodResult';
 import ImageGallery from './components/ImageGallery';
+import AuthScreen from './components/AuthScreen';
 
 
 // RN 0.71+ expects native event modules to expose listener stubs.
@@ -66,6 +68,13 @@ const getContrastColor = (hexcolor) => {
 };
 
 const App = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [token, setToken] = useState(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [userName, setUserName] = useState('');
+  const [isLoginFlow, setIsLoginFlow] = useState(true);
+
   const [isListening, setIsListening] = useState(false);
   const [text, setText] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -345,6 +354,7 @@ const App = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ text: transcript }),
       });
@@ -392,6 +402,9 @@ const App = () => {
 
       const response = await fetch(`${BACKEND_URL}/analyze-image`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: formData,
       });
 
@@ -530,11 +543,45 @@ const App = () => {
       paddingVertical: 30,
       alignItems: 'center',
     },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      width: '100%',
+      marginBottom: 20,
+      paddingBottom: 15,
+      borderBottomWidth: 1,
+      borderBottomColor: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+    },
+    titleContainer: {
+      flex: 1,
+    },
     title: {
-      fontSize: 24,
+      fontSize: 28,
       fontWeight: 'bold',
-      marginBottom: 30,
+      letterSpacing: -0.5,
       color: getContrastColor(appBgColor),
+    },
+    logoutButton: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      borderRadius: 15,
+      backgroundColor: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.05)',
+      borderWidth: 1,
+      borderColor: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)',
+    },
+    logoutText: {
+      fontSize: 12,
+      fontWeight: 'bold',
+      color: getContrastColor(appBgColor),
+    },
+    greeting: {
+      fontSize: 14,
+      fontWeight: '500',
+      marginTop: 4,
+      textTransform: 'uppercase',
+      letterSpacing: 1,
+      color: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
     },
     statusText: {
       marginTop: 10,
@@ -549,13 +596,75 @@ const App = () => {
     },
   });
 
+  const handleAuth = async (isLogin, email, password, name) => {
+    setIsAuthLoading(true);
+    setAuthError('');
+    setIsLoginFlow(isLogin);
+    try {
+      const endpoint = isLogin ? '/login' : '/signup';
+      const body = isLogin ? { email, password } : { email, password, name };
+      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Authentication failed');
+      }
+
+      setToken(data.access_token);
+      setUserName(data.user_name || '');
+      setIsAuthenticated(true);
+    } catch (error) {
+      console.error('Auth error:', error);
+      setAuthError(error.message || 'Could not connect to server.');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setToken(null);
+    setUserName('');
+    setMoodData(null);
+    setText('');
+    setImages([]);
+    setAppBgColor('#f5f5f5');
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <AuthScreen
+        onAuth={handleAuth}
+        isLoading={isAuthLoading}
+        errorMessage={authError}
+      />
+    );
+  }
+
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.title}>Scene Vibe Checker</Text>
+      <View style={styles.header}>
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>Scene Vibe</Text>
+          <Text style={styles.greeting}>
+            {isLoginFlow ? `Welcome back, ${userName || 'User'}` : `Hello, ${userName || 'User'}`}
+          </Text>
+        </View>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+      </View>
 
       <VoiceInput
         text={text}

@@ -1,6 +1,12 @@
-from fastapi import FastAPI, HTTPException, File, UploadFile, Body, Form
+from fastapi import FastAPI, HTTPException, File, UploadFile, Body, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from fastapi.security import OAuth2PasswordRequestForm
+import database
+import models
+import schemas
+import auth
 from sentence_transformers import SentenceTransformer, util
 from transformers import BlipProcessor, BlipForConditionalGeneration
 
@@ -20,6 +26,8 @@ load_dotenv()
 
 app = FastAPI(title="Emotion Mood Analytics Server")
 
+models.Base.metadata.create_all(bind=database.engine)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,15 +36,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-print("Loading Sentence Embedding model...")
-vibe_model = SentenceTransformer("all-MiniLM-L6-v2")
+# Lazy-load models to avoid multiprocessing conflicts with --reload
+vibe_model = None
+vision_model = None
+caption_processor = None
+caption_model = None
 
-print("Loading CLIP model for image analysis...")
-vision_model = SentenceTransformer("clip-ViT-B-32")
 
-print("Loading BLIP for factual image captioning...")
-caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-caption_model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+def get_vibe_model():
+    global vibe_model
+    if vibe_model is None:
+        print("Loading Sentence Embedding model...")
+        vibe_model = SentenceTransformer("all-MiniLM-L6-v2")
+    return vibe_model
+
+
+def get_vision_model():
+    global vision_model
+    if vision_model is None:
+        print("Loading CLIP model for image analysis...")
+        vision_model = SentenceTransformer("clip-ViT-B-32")
+    return vision_model
+
+
+def get_caption_models():
+    global caption_processor, caption_model
+    if caption_processor is None:
+        print("Loading BLIP for factual image captioning...")
+        caption_processor = BlipProcessor.from_pretrained(
+            "Salesforce/blip-image-captioning-base"
+        )
+        caption_model = BlipForConditionalGeneration.from_pretrained(
+            "Salesforce/blip-image-captioning-base"
+        )
+    return caption_processor, caption_model
 
 
 GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -81,10 +114,21 @@ VIBE_LABELS = [
     "hopeful",
 ]
 
-print("Pre-computing label embeddings...")
-LABEL_EMBEDDINGS = vibe_model.encode(VIBE_LABELS, convert_to_tensor=True)
-VISION_LABEL_EMBEDDINGS = vision_model.encode(VIBE_LABELS, convert_to_tensor=True)
-print("Model loaded successfully!")
+# Lazy-load models and pre-compute embeddings on first request
+LABEL_EMBEDDINGS = None
+VISION_LABEL_EMBEDDINGS = None
+
+
+def get_label_embeddings():
+    global LABEL_EMBEDDINGS, VISION_LABEL_EMBEDDINGS
+    if LABEL_EMBEDDINGS is None:
+        print("Pre-computing label embeddings...")
+        LABEL_EMBEDDINGS = get_vibe_model().encode(VIBE_LABELS, convert_to_tensor=True)
+        VISION_LABEL_EMBEDDINGS = get_vision_model().encode(
+            VIBE_LABELS, convert_to_tensor=True
+        )
+        print("Model loaded successfully!")
+    return LABEL_EMBEDDINGS, VISION_LABEL_EMBEDDINGS
 
 
 VIBE_META = {
@@ -257,6 +301,7 @@ def pil_to_gemini_part(image: Image.Image) -> dict:
 def generate_local_caption(image: Image.Image) -> str:
     """Generates a factual description of the image using a local BLIP model."""
     try:
+        caption_processor, caption_model = get_caption_models()
         inputs = caption_processor(image, return_tensors="pt")
         out = caption_model.generate(**inputs)
         caption = caption_processor.decode(out[0], skip_special_tokens=True)
@@ -266,11 +311,10 @@ def generate_local_caption(image: Image.Image) -> str:
         return "A scene with visual details."
 
 
-
 def build_enriched_scores_from_bert(text: str):
     """Run BERT over text and return all sorted vibe scores."""
-    embedding = vibe_model.encode(text, convert_to_tensor=True)
-    cosine_scores = util.cos_sim(embedding, LABEL_EMBEDDINGS)[0]
+    embedding = get_vibe_model().encode(text, convert_to_tensor=True)
+    cosine_scores = util.cos_sim(embedding, get_label_embeddings()[0])[0]
     sorted_indices = torch.argsort(cosine_scores, descending=True)
 
     labels = [VIBE_LABELS[idx] for idx in sorted_indices]
@@ -280,7 +324,9 @@ def build_enriched_scores_from_bert(text: str):
 
 
 @app.post("/analyze-mood")
-async def analyze_mood(request: MoodRequest):
+async def analyze_mood(
+    request: MoodRequest, current_user: str = Depends(auth.get_current_user)
+):
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 
@@ -295,8 +341,10 @@ async def analyze_mood(request: MoodRequest):
                     else VIBE_LABELS[
                         torch.argmax(
                             util.cos_sim(
-                                vibe_model.encode(description, convert_to_tensor=True),
-                                LABEL_EMBEDDINGS,
+                                get_vibe_model().encode(
+                                    description, convert_to_tensor=True
+                                ),
+                                get_label_embeddings()[0],
                             )[0]
                         ).item()
                     ]
@@ -479,7 +527,9 @@ def build_full_response(vibe: str, description: str, structured: Optional[dict] 
         # Fallback: take first sentence or first 100 chars
         sentences = description.split(". ")
         if sentences:
-            short_desc = sentences[0] + "." if not sentences[0].endswith(".") else sentences[0]
+            short_desc = (
+                sentences[0] + "." if not sentences[0].endswith(".") else sentences[0]
+            )
             # Safety cap for short description
             if len(short_desc) > 150:
                 short_desc = short_desc[:147] + "..."
@@ -506,7 +556,9 @@ def build_full_response(vibe: str, description: str, structured: Optional[dict] 
         response["color_palette"] = structured.get("color_palette", [])
         response["scene_tags"] = structured.get("scene_tags", [])
         response["secondary_moods"] = structured.get("secondary_moods", [])
-        response["environment_type"] = structured.get("environment_type", "Unknown Setting")
+        response["environment_type"] = structured.get(
+            "environment_type", "Unknown Setting"
+        )
 
     return response
 
@@ -518,6 +570,7 @@ async def analyze_image(
     imageUrl: Optional[str] = Form(None),
     fileName: Optional[str] = Form("photo.jpg"),
     image_type: Optional[str] = Form("image/jpeg", alias="type"),
+    current_user: str = Depends(auth.get_current_user),
 ):
     image = None
 
@@ -562,8 +615,10 @@ async def analyze_image(
                     else VIBE_LABELS[
                         torch.argmax(
                             util.cos_sim(
-                                vibe_model.encode(description, convert_to_tensor=True),
-                                LABEL_EMBEDDINGS,
+                                get_vibe_model().encode(
+                                    description, convert_to_tensor=True
+                                ),
+                                get_label_embeddings()[0],
                             )[0]
                         ).item()
                     ]
@@ -579,16 +634,15 @@ async def analyze_image(
             except Exception as ge:
                 print(f"[Gemini ERROR] {type(ge).__name__}: {ge}")
                 print("[Fallback] Using Local BLIP for factual description...")
-                
+
                 # 1. Get Factual Caption
                 description = generate_local_caption(image)
-                
+
                 # 2. Extract Vibe from that caption (using BERT)
                 bert_labels, _ = build_enriched_scores_from_bert(description)
                 vibe = bert_labels[0]
-                
-                return build_full_response(vibe, description, None)
 
+                return build_full_response(vibe, description, None)
 
         else:
             # No Gemini key — Use Local BLIP for factual description
@@ -603,6 +657,32 @@ async def analyze_image(
     except Exception as e:
         print(f"[Image analysis error] {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail="Error processing image")
+
+
+@app.post("/signup", response_model=schemas.Token)
+def signup(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
+    db_user = db.query(models.User).filter(models.User.email == user.email).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    hashed_password = auth.get_password_hash(user.password)
+    new_user = models.User(email=user.email, name=user.name, hashed_password=hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    access_token = auth.create_access_token(data={"sub": new_user.email})
+    return {"access_token": access_token, "token_type": "bearer", "user_name": new_user.name}
+
+
+@app.post("/login", response_model=schemas.Token)
+def login(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
+    db_user = db.query(models.User).filter(models.User.email == user.email).first()
+    if not db_user or not auth.verify_password(user.password, db_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    access_token = auth.create_access_token(data={"sub": db_user.email})
+    return {"access_token": access_token, "token_type": "bearer", "user_name": db_user.name}
 
 
 @app.get("/")
