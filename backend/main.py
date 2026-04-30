@@ -666,13 +666,13 @@ def signup(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
 
     hashed_password = auth.get_password_hash(user.password)
-    new_user = models.User(email=user.email, name=user.name, hashed_password=hashed_password)
+    new_user = models.User(email=user.email, name=user.name, hashed_password=hashed_password, avatar_config=user.avatar_config)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
     access_token = auth.create_access_token(data={"sub": new_user.email})
-    return {"access_token": access_token, "token_type": "bearer", "user_name": new_user.name}
+    return {"access_token": access_token, "token_type": "bearer", "user_name": new_user.name, "avatar_config": new_user.avatar_config}
 
 
 @app.post("/login", response_model=schemas.Token)
@@ -682,7 +682,22 @@ def login(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     access_token = auth.create_access_token(data={"sub": db_user.email})
-    return {"access_token": access_token, "token_type": "bearer", "user_name": db_user.name}
+    return {"access_token": access_token, "token_type": "bearer", "user_name": db_user.name, "avatar_config": db_user.avatar_config}
+
+
+@app.put("/update-avatar")
+async def update_avatar(
+    avatar_config: dict = Body(...),
+    db: Session = Depends(database.get_db),
+    current_user: str = Depends(auth.get_current_user)
+):
+    db_user = db.query(models.User).filter(models.User.email == current_user).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    db_user.avatar_config = json.dumps(avatar_config)
+    db.commit()
+    return {"message": "Avatar updated successfully"}
 
 
 @app.get("/")

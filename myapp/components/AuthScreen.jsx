@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import AvatarBuilder, { AvatarDisplay } from './AvatarBuilder';
+
+const DEFAULT_AVATAR_CONFIG = {
+  gender: 'girl',
+  skinTone: '#FDDBB4',
+  hairStyle: 'long_straight',
+  hairColor: '#4B3621',
+  eyeStyle: 'normal',
+  eyeColor: '#2c3e50',
+  mouthStyle: 'smile',
+  glasses: 'none',
+  accessories: 'none',
+  bgColor: '#f5e6ff',
+};
 
 const AuthScreen = ({ onAuth, isLoading, errorMessage }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -7,6 +21,9 @@ const AuthScreen = ({ onAuth, isLoading, errorMessage }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [localError, setLocalError] = useState('');
+
+  const [avatarConfig, setAvatarConfig] = useState(DEFAULT_AVATAR_CONFIG);
+  const [avatarBuilderVisible, setAvatarBuilderVisible] = useState(false);
 
   const validateEmail = (text) => {
     // Simple email regex validation
@@ -37,7 +54,7 @@ const AuthScreen = ({ onAuth, isLoading, errorMessage }) => {
       return;
     }
 
-    onAuth(isLogin, email, password, name);
+    onAuth(isLogin, email, password, name, isLogin ? null : avatarConfig);
   };
 
   return (
@@ -46,20 +63,31 @@ const AuthScreen = ({ onAuth, isLoading, errorMessage }) => {
       <Text style={styles.subtitle}>{isLogin ? 'Welcome back!' : 'Create an account'}</Text>
 
       {!isLogin && (
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Your Name"
-            placeholderTextColor="#999"
-            value={name}
-            onChangeText={(text) => {
-              setName(text);
-              setLocalError('');
-            }}
-            autoCapitalize="words"
-          />
-        </View>
+        <>
+          <View style={styles.avatarSection}>
+            <Text style={styles.label}>Your Avatar</Text>
+            <View style={styles.avatarRow}>
+              <AvatarDisplay config={avatarConfig} size={80} onPress={() => setAvatarBuilderVisible(true)} />
+              <TouchableOpacity style={styles.editAvatarBtn} onPress={() => setAvatarBuilderVisible(true)}>
+                <Text style={styles.editAvatarBtnText}>Customize Avatar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Name</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Your Name"
+              placeholderTextColor="#999"
+              value={name}
+              onChangeText={(text) => {
+                setName(text);
+                setLocalError('');
+              }}
+              autoCapitalize="words"
+            />
+          </View>
+        </>
       )}
 
       <View style={styles.inputContainer}>
@@ -123,6 +151,17 @@ const AuthScreen = ({ onAuth, isLoading, errorMessage }) => {
           <Text style={styles.switchLink}>{isLogin ? 'Sign Up' : 'Log In'}</Text>
         </TouchableOpacity>
       </View>
+
+      {!isLogin && (
+        <AvatarBuilder
+          visible={avatarBuilderVisible}
+          onClose={() => setAvatarBuilderVisible(false)}
+          onSave={(newConfig) => {
+            setAvatarConfig(newConfig);
+            setAvatarBuilderVisible(false);
+          }}
+        />
+      )}
     </View>
   );
 };
@@ -146,6 +185,30 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginBottom: 30,
+  },
+  avatarSection: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  editAvatarBtn: {
+    marginLeft: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    borderRadius: 8,
+  },
+  editAvatarBtnText: {
+    color: '#007AFF',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   inputContainer: {
     marginBottom: 20,
@@ -202,3 +265,4 @@ const styles = StyleSheet.create({
 });
 
 export default AuthScreen;
+

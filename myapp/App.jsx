@@ -17,6 +17,7 @@ import VoiceInput from './components/VoiceInput';
 import MoodResult from './components/MoodResult';
 import ImageGallery from './components/ImageGallery';
 import AuthScreen from './components/AuthScreen';
+import AvatarBuilder, { AvatarDisplay } from './components/AvatarBuilder';
 
 
 // RN 0.71+ expects native event modules to expose listener stubs.
@@ -74,6 +75,8 @@ const App = () => {
   const [authError, setAuthError] = useState('');
   const [userName, setUserName] = useState('');
   const [isLoginFlow, setIsLoginFlow] = useState(true);
+  const [avatarVisible, setAvatarVisible] = useState(false);
+  const [avatarConfig, setAvatarConfig] = useState(null);
 
   const [isListening, setIsListening] = useState(false);
   const [text, setText] = useState('');
@@ -583,6 +586,80 @@ const App = () => {
       letterSpacing: 1,
       color: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
     },
+    dashboardHero: {
+      width: '100%',
+      backgroundColor: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.03)',
+      borderRadius: 24,
+      padding: 20,
+      marginBottom: 25,
+      borderWidth: 1,
+      borderColor: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)',
+      position: 'relative',
+      overflow: 'hidden',
+    },
+    heroContent: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    heroTextContainer: {
+      flex: 1,
+      paddingRight: 15,
+    },
+    heroTitle: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: getContrastColor(appBgColor),
+      opacity: 0.6,
+      textTransform: 'uppercase',
+      letterSpacing: 2,
+      marginBottom: 8,
+    },
+    heroGreeting: {
+      fontSize: 20,
+      fontWeight: '400',
+      color: getContrastColor(appBgColor),
+    },
+    heroUserName: {
+      fontSize: 32,
+      fontWeight: '900',
+      color: getContrastColor(appBgColor),
+      letterSpacing: -1,
+    },
+    heroAvatarContainer: {
+      position: 'relative',
+      padding: 5,
+    },
+    editAvatarBadge: {
+      position: 'absolute',
+      bottom: 0,
+      right: 0,
+      backgroundColor: '#6c5ce7',
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 3,
+      borderColor: appBgColor,
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 3,
+    },
+    editBadgeText: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: 'bold',
+    },
+    heroLogoutBtn: {
+      position: 'absolute',
+      top: 15,
+      right: 15,
+      padding: 8,
+      opacity: 0.5,
+    },
     statusText: {
       marginTop: 10,
       color: isListening ? '#ff4d4d' : (getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.7)' : '#666'),
@@ -596,13 +673,13 @@ const App = () => {
     },
   });
 
-  const handleAuth = async (isLogin, email, password, name) => {
+  const handleAuth = async (isLogin, email, password, name, avatarConfigParam) => {
     setIsAuthLoading(true);
     setAuthError('');
     setIsLoginFlow(isLogin);
     try {
       const endpoint = isLogin ? '/login' : '/signup';
-      const body = isLogin ? { email, password } : { email, password, name };
+      const body = isLogin ? { email, password } : { email, password, name, avatar_config: avatarConfigParam ? JSON.stringify(avatarConfigParam) : null };
       const response = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: {
@@ -619,6 +696,13 @@ const App = () => {
 
       setToken(data.access_token);
       setUserName(data.user_name || '');
+      if (data.avatar_config) {
+        try {
+          setAvatarConfig(JSON.parse(data.avatar_config));
+        } catch(e) {
+          console.warn("Failed to parse avatar config from server", e);
+        }
+      }
       setIsAuthenticated(true);
     } catch (error) {
       console.error('Auth error:', error);
@@ -654,16 +738,35 @@ const App = () => {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>Scene Vibe</Text>
-          <Text style={styles.greeting}>
-            {isLoginFlow ? `Welcome back, ${userName || 'User'}` : `Hello, ${userName || 'User'}`}
-          </Text>
-        </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+      {/* Dashboard Hero Section */}
+      <View style={styles.dashboardHero}>
+        <TouchableOpacity style={styles.heroLogoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
+
+        <View style={styles.heroContent}>
+          <View style={styles.heroTextContainer}>
+            <Text style={styles.heroTitle}>Scene Vibe</Text>
+            <Text style={styles.heroGreeting}>
+              {isLoginFlow ? 'Welcome back,' : 'Hello,'}
+            </Text>
+            <Text style={styles.heroUserName}>{userName || 'Explorer'}</Text>
+          </View>
+
+          <View style={styles.heroAvatarContainer}>
+            <AvatarDisplay
+              config={avatarConfig}
+              size={100}
+              onPress={() => setAvatarVisible(true)}
+            />
+            <TouchableOpacity
+              style={styles.editAvatarBadge}
+              onPress={() => setAvatarVisible(true)}
+            >
+              <Text style={styles.editBadgeText}>✎</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <VoiceInput
@@ -709,6 +812,26 @@ const App = () => {
         isCapturingImage={isCapturingImage}
         isSelectingImage={isSelectingImage}
         isAnalyzing={isAnalyzing}
+      />
+      <AvatarBuilder
+        visible={avatarVisible}
+        onClose={() => setAvatarVisible(false)}
+        onSave={async (config, svgString) => {
+          setAvatarConfig(config);
+          setAvatarVisible(false);
+          try {
+            await fetch(`${BACKEND_URL}/update-avatar`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify(config)
+            });
+          } catch (error) {
+            console.error('Failed to update avatar:', error);
+          }
+        }}
       />
     </ScrollView>
   );
