@@ -1,4 +1,8 @@
-from fastapi import FastAPI, HTTPException, File, UploadFile, Body, Form, Depends
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
+
+import asyncio
+from fastapi import FastAPI, HTTPException, File, UploadFile, Body, Form, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -285,8 +289,176 @@ VIBE_META = {
 }
 
 
+VIBE_YOUTUBE_QUERIES = {
+    "calm":        ["calm piano music playlist", "ambient relaxing music"],
+    "peaceful":    ["peaceful nature sounds music", "zen meditation music"],
+    "serene":      ["serene acoustic guitar playlist", "peaceful instrumental"],
+    "happy":       ["happy upbeat playlist 2024", "feel good pop music"],
+    "energetic":   ["high energy workout music", "pump up EDM playlist"],
+    "playful":     ["fun indie pop playlist", "playful quirky music"],
+    "vibrant":     ["vibrant latin music playlist", "upbeat world music"],
+    "sad":         ["sad indie playlist", "emotional piano music"],
+    "lonely":      ["lonely night music playlist", "solitary ambient music"],
+    "pensive":     ["pensive jazz playlist", "thoughtful instrumental music"],
+    "gloomy":      ["gloomy post-rock playlist", "dark ambient music"],
+    "anxious":     ["anxiety relief music", "calming music for anxiety"],
+    "chaotic":     ["chaotic drum and bass", "intense electronic music"],
+    "intense":     ["intense cinematic music", "powerful orchestral playlist"],
+    "gritty":      ["gritty blues rock playlist", "raw garage rock"],
+    "nostalgic":   ["nostalgic 80s playlist", "retro synthwave music"],
+    "romantic":    ["romantic jazz playlist", "love songs acoustic"],
+    "mystical":    ["mystical ethereal music", "magical fantasy soundtrack"],
+    "vintage":     ["vintage jazz cafe playlist", "classic 60s soul music"],
+    "cozy":        ["cozy coffee shop music", "cozy lo-fi playlist"],
+    "ethereal":    ["ethereal dream pop playlist", "floating ambient music"],
+    "melancholic": ["melancholic classical music", "bittersweet indie folk"],
+    "industrial":  ["industrial techno playlist", "dark industrial music"],
+    "natural":     ["nature sounds forest music", "earthy folk music playlist"],
+    "futuristic":  ["futuristic synthwave playlist", "cyberpunk electronic music"],
+    "bold":        ["bold hip hop playlist", "powerful trap music"],
+    "solitary":    ["solitary acoustic music", "lone wolf playlist"],
+    "tense":       ["tense thriller soundtrack", "suspense music playlist"],
+    "hopeful":     ["hopeful uplifting music", "morning motivation playlist"],
+    "minimalist":  ["minimalist piano playlist", "sparse ambient music"],
+}
+
+YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
+
+
 class MoodRequest(BaseModel):
     text: str
+    avatar_config: Optional[dict] = None
+
+
+def get_current_db_user(
+    db: Session = Depends(database.get_db),
+    current_user: str = Depends(auth.get_current_user),
+):
+    db_user = db.query(models.User).filter(models.User.email == current_user).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
+
+def serialize_mood_log(log: models.MoodLog):
+    try:
+        scene_tags = json.loads(log.scene_tags or "[]")
+    except json.JSONDecodeError:
+        scene_tags = []
+
+    try:
+        color_palette = json.loads(log.color_palette or "[]")
+    except json.JSONDecodeError:
+        color_palette = []
+
+    try:
+        secondary_moods = json.loads(log.secondary_moods or "[]")
+    except json.JSONDecodeError:
+        secondary_moods = []
+
+    try:
+        all_scores = json.loads(log.all_scores or "[]")
+    except json.JSONDecodeError:
+        all_scores = []
+
+    return {
+        "id": log.id,
+        "user_id": log.user_id,
+        "vibe": log.vibe,
+        "emoji": log.emoji,
+        "timestamp": log.timestamp.replace(tzinfo=timezone.utc).isoformat() if log.timestamp.tzinfo is None else log.timestamp.isoformat(),
+        "short_caption": log.short_caption,
+        "color": log.color,
+        "scene_tags": scene_tags if isinstance(scene_tags, list) else [],
+        "description": log.description,
+        "feedback": log.feedback,
+        "poetic_summary": log.poetic_summary,
+        "confidence": log.confidence,
+        "gemini_confidence": log.gemini_confidence,
+        "environment_type": log.environment_type,
+        "color_palette": color_palette,
+        "secondary_moods": secondary_moods,
+        "all_scores": all_scores,
+    }
+
+
+COLOR_NAMES = {
+    "#FDDBB4": "warm fair skin",
+    "#F1A97A": "golden tan skin",
+    "#C68642": "deep bronze skin",
+    "#8D5524": "rich brown skin",
+    "#4A2912": "deep dark brown skin",
+    "#1a0a00": "black hair",
+    "#4B3621": "dark brown hair",
+    "#8B5E3C": "chestnut brown hair",
+    "#D4A04A": "golden blond hair",
+    "#F5C5A3": "soft peach-pink hair",
+    "#C0392B": "red hair",
+    "#8E44AD": "violet hair",
+    "#2980B9": "blue hair",
+    "#2c3e50": "dark slate eyes",
+    "#1a6b3c": "green eyes",
+    "#6B4226": "brown eyes",
+    "#1e90ff": "bright blue eyes",
+    "#808080": "gray eyes",
+}
+
+STYLE_NAMES = {
+    "long_straight": "long straight hair",
+    "long_wavy": "long wavy hair",
+    "bun": "hair gathered in a bun",
+    "ponytail": "hair tied in a ponytail",
+    "short_bob": "a short bob haircut",
+    "short_side": "short side-parted hair",
+    "short_curly": "short curly hair",
+    "buzz": "a close buzz cut",
+    "messy": "messy tousled hair",
+    "slick": "slicked-back hair",
+    "normal": "steady, observant eyes",
+    "happy": "warm, smiling eyes",
+    "wink": "a playful wink",
+    "sleepy": "heavy, sleepy eyes",
+    "surprised": "wide, surprised eyes",
+    "smile": "a soft smile",
+    "big_smile": "a bright open smile",
+    "neutral": "a calm neutral mouth",
+    "smirk": "a small knowing smirk",
+    "open": "a slightly open, expressive mouth",
+    "round": "round glasses",
+    "square": "square glasses",
+    "cat_eye": "cat-eye glasses",
+    "sunglasses": "dark sunglasses",
+    "earrings": "small gold earrings",
+    "necklace": "a delicate necklace",
+    "bow": "a bow in their hair",
+    "headband": "a headband",
+    "cap": "a blue cap",
+}
+
+
+def describe_avatar(avatar_config: Optional[dict]) -> str:
+    """Convert the avatar builder config into prose the story prompt can use."""
+    if not avatar_config:
+        return "an unspecified person"
+
+    gender = avatar_config.get("gender", "person")
+    person = "young woman" if gender == "girl" else "young man" if gender == "boy" else "person"
+    skin = COLOR_NAMES.get(avatar_config.get("skinTone"), "")
+    hair_color = COLOR_NAMES.get(avatar_config.get("hairColor"), "")
+    hair_style = STYLE_NAMES.get(avatar_config.get("hairStyle"), "")
+    eyes = COLOR_NAMES.get(avatar_config.get("eyeColor"), "expressive eyes")
+    eye_style = STYLE_NAMES.get(avatar_config.get("eyeStyle"), "")
+    mouth = STYLE_NAMES.get(avatar_config.get("mouthStyle"), "")
+    glasses = STYLE_NAMES.get(avatar_config.get("glasses"), "")
+    accessory = STYLE_NAMES.get(avatar_config.get("accessories"), "")
+
+    traits = [skin, hair_color, hair_style, eyes, eye_style, mouth, glasses, accessory]
+    traits = [trait for trait in traits if trait]
+
+    if not traits:
+        return f"a {person}"
+
+    return f"a {person} with " + ", ".join(traits)
 
 
 def pil_to_gemini_part(image: Image.Image) -> dict:
@@ -333,7 +505,10 @@ async def analyze_mood(
     try:
         if gemini_model:
             try:
-                description, structured = await run_advanced_text_analysis(request.text)
+                description, structured = await run_advanced_text_analysis(
+                    request.text,
+                    request.avatar_config,
+                )
                 dominant = structured.get("dominant_mood", "")
                 vibe = (
                     dominant
@@ -370,20 +545,24 @@ async def analyze_mood(
 # ADVANCED Multi-Stage Gemini Narrative Expansion
 # ─────────────────────────────────────────────────────────
 
-TEXT_STAGE1_PROMPT = """You are an expert cinematic storyteller and emotional architect. Take the following brief input text and expand it into a rich, multi-paragraph narrative (2–3 paragraphs) that captures the deep emotional landscape, the surrounding environment, and the visceral atmosphere of this moment.
+TEXT_STAGE1_PROMPT = """You are an expert cinematic storyteller and emotional architect. Take the following brief input text and expand it into a rich, multi-paragraph narrative (2-3 paragraphs) that captures the deep emotional landscape, the surrounding environment, and the visceral atmosphere of this moment.
 
 The input text is: "{text}"
 
+The main character in this scene is: {avatar_description}
+
 Focus on these pillars:
-1. THE INNER WORLD: Expand on the emotions mentioned or implied. Describe the internal state of the person in the scene—their thoughts, their breath, their unspoken feelings.
-2. THE PHYSICAL SETTING: Based on the input, imagine a detailed environment. Describe the architecture, the textures (e.g., "cold damp pavement", "velvet curtains"), and the time of day. 
-3. LIGHT & ATMOSPHERE: Describe how light plays in this imagined space. Is it flickering neon, a dying sunset, or harsh overhead fluorescent? What is the "temperature" of the scene?
-4. THE NARRATIVE ARC: What led to this moment? What is the lingering tension? Sound like a novelist describing a pivotal frame in a story.
+1. THE CHARACTER: Describe how this specific person moves and looks within the environment. Integrate their physical traits naturally into the prose without listing them.
+2. THE INNER WORLD: Expand on the emotions mentioned or implied. Describe the internal state of the person in the scene, their thoughts, their breath, their unspoken feelings.
+3. THE PHYSICAL SETTING: Based on the input, imagine a detailed environment. Describe the architecture, the textures (e.g., "cold damp pavement", "velvet curtains"), and the time of day.
+4. LIGHT & ATMOSPHERE: Describe how light plays in this imagined space. Is it flickering neon, a dying sunset, or harsh overhead fluorescent? What is the "temperature" of the scene?
+5. THE NARRATIVE ARC: What led to this moment? What is the lingering tension? Sound like a novelist describing a pivotal frame in a story.
 
 Rules:
 - Write exactly 2-3 paragraphs.
 - Write in present tense.
 - Use the input text as the core seed, but bloom it into a full scene.
+- Make the main character match the avatar description when one is provided.
 - Never say "the text says" or "I think".
 - Be evocative, literary, and cinematic."""
 
@@ -435,7 +614,10 @@ async def run_advanced_gemini_analysis(image: Image.Image):
     image_part = pil_to_gemini_part(image)
 
     # ── Stage 1: Scene Description ──
-    stage1_response = gemini_model.generate_content([STAGE1_PROMPT, image_part])
+    stage1_response = await asyncio.to_thread(
+        gemini_model.generate_content,
+        [STAGE1_PROMPT, image_part],
+    )
     description = stage1_response.text.strip()
     print(f"[Stage 1 Description] {description}")
 
@@ -444,7 +626,10 @@ async def run_advanced_gemini_analysis(image: Image.Image):
         description=description,
         labels=", ".join(VIBE_LABELS),
     )
-    stage2_response = gemini_model.generate_content(stage2_prompt)
+    stage2_response = await asyncio.to_thread(
+        gemini_model.generate_content,
+        stage2_prompt,
+    )
     raw_json = stage2_response.text.strip()
 
     # Strip any accidental markdown fences
@@ -459,15 +644,22 @@ async def run_advanced_gemini_analysis(image: Image.Image):
     return description, structured
 
 
-async def run_advanced_text_analysis(text: str):
+async def run_advanced_text_analysis(text: str, avatar_config: Optional[dict] = None):
     """
     Two-stage Gemini pipeline for text:
     Stage 1: Expand brief text into a rich narrative.
     Stage 2: Extract structured mood JSON from that narrative.
     """
     # ── Stage 1: Narrative Expansion ──
-    stage1_prompt = TEXT_STAGE1_PROMPT.format(text=text)
-    stage1_response = gemini_model.generate_content(stage1_prompt)
+    avatar_description = describe_avatar(avatar_config)
+    stage1_prompt = TEXT_STAGE1_PROMPT.format(
+        text=text,
+        avatar_description=avatar_description,
+    )
+    stage1_response = await asyncio.to_thread(
+        gemini_model.generate_content,
+        stage1_prompt,
+    )
     description = stage1_response.text.strip()
     print(f"[Text Stage 1 Narrative] {description}")
 
@@ -476,7 +668,10 @@ async def run_advanced_text_analysis(text: str):
         description=description,
         labels=", ".join(VIBE_LABELS),
     )
-    stage2_response = gemini_model.generate_content(stage2_prompt)
+    stage2_response = await asyncio.to_thread(
+        gemini_model.generate_content,
+        stage2_prompt,
+    )
     raw_json = stage2_response.text.strip()
 
     # Strip any accidental markdown fences
@@ -698,6 +893,169 @@ async def update_avatar(
     db_user.avatar_config = json.dumps(avatar_config)
     db.commit()
     return {"message": "Avatar updated successfully"}
+
+
+@app.post("/mood-log", response_model=schemas.MoodLog)
+def create_mood_log(
+    mood_log: schemas.MoodLogCreate,
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    vibe = mood_log.vibe.strip()
+    short_caption = mood_log.short_caption.strip()
+    color = mood_log.color.strip()
+
+    if not vibe:
+        raise HTTPException(status_code=400, detail="Vibe cannot be empty")
+    if not short_caption:
+        raise HTTPException(status_code=400, detail="Short caption cannot be empty")
+    if not color:
+        raise HTTPException(status_code=400, detail="Color cannot be empty")
+
+    scene_tags = [
+        str(tag).strip()
+        for tag in mood_log.scene_tags
+        if str(tag).strip()
+    ]
+
+    new_log = models.MoodLog(
+        user_id=db_user.id,
+        vibe=vibe,
+        emoji=mood_log.emoji,
+        timestamp=mood_log.timestamp or datetime.now(timezone.utc),
+        short_caption=short_caption,
+        color=color,
+        scene_tags=json.dumps(scene_tags),
+        description=mood_log.description,
+        feedback=mood_log.feedback,
+        poetic_summary=mood_log.poetic_summary,
+        confidence=mood_log.confidence,
+        gemini_confidence=mood_log.gemini_confidence,
+        environment_type=mood_log.environment_type,
+        color_palette=json.dumps(mood_log.color_palette),
+        secondary_moods=json.dumps(mood_log.secondary_moods),
+        all_scores=json.dumps(mood_log.all_scores),
+    )
+    db.add(new_log)
+    db.commit()
+    db.refresh(new_log)
+
+    return serialize_mood_log(new_log)
+
+
+@app.get("/mood-history", response_model=schemas.MoodHistoryResponse)
+def get_mood_history(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    query = db.query(models.MoodLog).filter(models.MoodLog.user_id == db_user.id)
+    total = query.count()
+    offset = (page - 1) * page_size
+    logs = (
+        query.order_by(models.MoodLog.timestamp.desc(), models.MoodLog.id.desc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+
+    return {
+        "items": [serialize_mood_log(log) for log in logs],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "has_more": offset + len(logs) < total,
+    }
+
+
+@app.get("/analytics/me")
+def get_analytics(
+    days: int = Query(7, ge=1, le=365),
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    user_id = db_user.id
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    entries = (
+        db.query(models.MoodLog)
+        .filter(
+            models.MoodLog.user_id == user_id,
+            models.MoodLog.timestamp >= since,
+        )
+        .order_by(models.MoodLog.timestamp.asc(), models.MoodLog.id.asc())
+        .all()
+    )
+
+    mood_counts = Counter(entry.vibe for entry in entries)
+    daily_counts = defaultdict(Counter)
+
+    for entry in entries:
+        day = entry.timestamp.date().isoformat()
+        daily_counts[day][entry.vibe] += 1
+
+    daily_breakdown = [
+        {
+            "date": day,
+            "total_entries": sum(counts.values()),
+            "mood_frequency": dict(counts),
+            "most_common": counts.most_common(1)[0][0] if counts else None,
+        }
+        for day, counts in sorted(daily_counts.items())
+    ]
+
+    return {
+        "total_entries": len(entries),
+        "date_range_days": days,
+        "mood_frequency": dict(mood_counts),
+        "most_common": mood_counts.most_common(1)[0][0] if mood_counts else None,
+        "daily_breakdown": daily_breakdown,
+    }
+
+
+@app.get("/playlist-suggestions/{vibe}")
+async def get_playlist_suggestions(
+    vibe: str,
+    current_user: str = Depends(auth.get_current_user)
+):
+    if not YOUTUBE_API_KEY:
+        raise HTTPException(status_code=503, detail="YouTube API not configured")
+    
+    if vibe not in VIBE_YOUTUBE_QUERIES:
+        raise HTTPException(status_code=400, detail="Unknown vibe label")
+
+    queries = VIBE_YOUTUBE_QUERIES[vibe][:2]  # Use top 2 queries
+    results = []
+
+    for query in queries:
+        url = "https://www.googleapis.com/youtube/v3/search"
+        params = {
+            "part": "snippet",
+            "q": query,
+            "type": "playlist",
+            "maxResults": 2,
+            "key": YOUTUBE_API_KEY,
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        if resp.status_code != 200:
+            continue
+        
+        data = resp.json()
+        for item in data.get("items", []):
+            playlist_id = item["id"].get("playlistId")
+            if not playlist_id:
+                continue
+            snippet = item["snippet"]
+            results.append({
+                "id": playlist_id,
+                "title": snippet.get("title", ""),
+                "channel": snippet.get("channelTitle", ""),
+                "thumbnail": snippet["thumbnails"].get("medium", {}).get("url", ""),
+                "url": f"https://www.youtube.com/playlist?list={playlist_id}",
+            })
+
+    return {"vibe": vibe, "playlists": results[:4]}  # Return max 4
 
 
 @app.get("/")

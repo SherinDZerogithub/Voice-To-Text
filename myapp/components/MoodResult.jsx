@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import Tts from 'react-native-tts';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import PlaylistSuggestions from './PlaylistSuggestions';
 
 const DESIGN_TEXT_LINE_HEIGHT = 26;
 
@@ -115,7 +116,16 @@ const buildLineMetadata = (description, lines) => {
   });
 };
 
-const MoodResult = ({ moodData, isAnalyzing, isListening, hasText, setAppBgColor, appBgColor }) => {
+const MoodResult = ({
+  moodData,
+  token,
+  backendUrl,
+  isAnalyzing,
+  isListening,
+  hasText,
+  setAppBgColor,
+  appBgColor,
+}) => {
   const [isSpeaking, setIsSpeaking] = React.useState(false);
   const [containerWidth, setContainerWidth] = React.useState(0);
   const [lineMetadata, setLineMetadata] = React.useState([]);
@@ -521,6 +531,13 @@ const MoodResult = ({ moodData, isAnalyzing, isListening, hasText, setAppBgColor
               ))}
             </View>
           )}
+
+          <PlaylistSuggestions
+            vibe={moodData?.vibe || moodData?.mood}
+            token={token}
+            backendUrl={backendUrl}
+            accentColor={moodData?.color}
+          />
         </View>
       )}
 

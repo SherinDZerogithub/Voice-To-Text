@@ -1,4 +1,4 @@
-﻿import React, { useState, useCallback } from 'react';
+﻿import React, {useState, useCallback} from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,13 @@ import {
   ScrollView,
   StyleSheet,
   Modal,
+  SafeAreaView,
+  StatusBar,
+  Platform,
 } from 'react-native';
-import { SvgXml } from 'react-native-svg';
+import {SvgXml} from 'react-native-svg';
 
-// â”€â”€â”€ Avatar Config Options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Avatar config options
 
 const AVATAR_OPTIONS = {
   gender: ['girl', 'boy'],
@@ -22,7 +25,14 @@ const AVATAR_OPTIONS = {
   },
 
   hairColor: [
-    '#1a0a00', '#4B3621', '#8B5E3C', '#D4A04A', '#F5C5A3', '#C0392B', '#8E44AD', '#2980B9'
+    '#1a0a00',
+    '#4B3621',
+    '#8B5E3C',
+    '#D4A04A',
+    '#F5C5A3',
+    '#C0392B',
+    '#8E44AD',
+    '#2980B9',
   ],
 
   eyeStyle: ['normal', 'happy', 'wink', 'sleepy', 'surprised'],
@@ -36,7 +46,14 @@ const AVATAR_OPTIONS = {
   accessories: ['none', 'earrings', 'necklace', 'bow', 'headband', 'cap'],
 
   bgColor: [
-    '#f5e6ff', '#e6f5ff', '#fff5e6', '#e6ffe6', '#ffe6e6', '#e6e6ff', '#fff0e6', '#f0f0f0'
+    '#f5e6ff',
+    '#e6f5ff',
+    '#fff5e6',
+    '#e6ffe6',
+    '#ffe6e6',
+    '#e6e6ff',
+    '#fff0e6',
+    '#f0f0f0',
   ],
 };
 
@@ -96,9 +113,7 @@ const getHairPath = (style, gender) => {
       <path d="M40,60 Q50,30 80,26 Q60,30 55,50 Z" fill="HAIR_DARK"/>
     `,
   };
-  return (hairPaths[style] || hairPaths['short_side'])
-    .replace(/HAIR_LIGHT/g, '{HAIR_LIGHT}')
-    .replace(/HAIR_DARK/g, '{HAIR_DARK}');
+  return hairPaths[style] || hairPaths.short_side;
 };
 
 const getEyesSVG = (style, color) => {
@@ -139,23 +154,26 @@ const getEyesSVG = (style, color) => {
       <circle cx="127" cy="107" r="2" fill="white"/>
     `,
   };
-  return eyes[style] || eyes['normal'];
+  return eyes[style] || eyes.normal;
 };
 
-const getMouthSVG = (style) => {
+const getMouthSVG = style => {
   const mouths = {
-    smile:     `<path d="M82,138 Q100,152 118,138" stroke="#c0605a" stroke-width="2.5" fill="none" stroke-linecap="round"/>`,
+    smile:
+      '<path d="M82,138 Q100,152 118,138" stroke="#c0605a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
     big_smile: `<path d="M78,136 Q100,158 122,136" stroke="#c0605a" stroke-width="2.5" fill="#e8a09d" stroke-linecap="round"/>
                 <path d="M83,136 Q100,148 117,136" fill="#c0605a"/>`,
-    neutral:   `<line x1="86" y1="142" x2="114" y2="142" stroke="#c0605a" stroke-width="2.5" stroke-linecap="round"/>`,
-    smirk:     `<path d="M86,142 Q104,138 114,134" stroke="#c0605a" stroke-width="2.5" fill="none" stroke-linecap="round"/>`,
-    open:      `<ellipse cx="100" cy="142" rx="14" ry="9" fill="#c0605a"/>
+    neutral:
+      '<line x1="86" y1="142" x2="114" y2="142" stroke="#c0605a" stroke-width="2.5" stroke-linecap="round"/>',
+    smirk:
+      '<path d="M86,142 Q104,138 114,134" stroke="#c0605a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+    open: `<ellipse cx="100" cy="142" rx="14" ry="9" fill="#c0605a"/>
                 <ellipse cx="100" cy="144" rx="10" ry="6" fill="#8b3a3a"/>`,
   };
-  return mouths[style] || mouths['smile'];
+  return mouths[style] || mouths.smile;
 };
 
-const getGlassesSVG = (style) => {
+const getGlassesSVG = style => {
   const glasses = {
     none: '',
     round: `
@@ -220,23 +238,26 @@ const getAccessorySVG = (style, gender) => {
 
 // â”€â”€â”€ Main SVG Builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const buildAvatarSVG = (config) => {
+const buildAvatarSVG = config => {
   const {
-    gender, skinTone, hairStyle, hairColor,
-    eyeStyle, eyeColor, mouthStyle,
-    glasses, accessories, bgColor,
+    gender,
+    skinTone,
+    hairStyle,
+    hairColor,
+    eyeStyle,
+    eyeColor,
+    mouthStyle,
+    glasses,
+    accessories,
+    bgColor,
   } = config;
 
   const hairDark = darkenHex(hairColor, 30);
 
   const hairSVG = getHairPath(hairStyle, gender)
-    .replace(/HAIR"/g, `${hairColor}"`)
-    .replace(/HAIR_LIGHT"/g, `${lightenHex(hairColor, 40)}"`)
-    .replace(/HAIR_DARK"/g, `${hairDark}"`)
-    // fallback replace for unquoted
-    .replace(/fill="HAIR"/g, `fill="${hairColor}"`)
     .replace(/fill="HAIR_LIGHT"/g, `fill="${lightenHex(hairColor, 40)}"`)
-    .replace(/fill="HAIR_DARK"/g, `fill="${hairDark}"`);
+    .replace(/fill="HAIR_DARK"/g, `fill="${hairDark}"`)
+    .replace(/fill="HAIR"/g, `fill="${hairColor}"`);
 
   return `
 <svg viewBox="0 0 200 280" xmlns="http://www.w3.org/2000/svg">
@@ -247,9 +268,10 @@ const buildAvatarSVG = (config) => {
   <rect x="88" y="168" width="24" height="30" rx="8" fill="${skinTone}"/>
 
   <!-- Shoulders / Body -->
-  ${gender === 'girl'
-    ? `<path d="M30,250 Q50,195 100,188 Q150,195 170,250 Q145,260 100,262 Q55,260 30,250 Z" fill="#E91E8C"/>`
-    : `<path d="M28,250 Q48,192 100,186 Q152,192 172,250 Q148,262 100,264 Q52,262 28,250 Z" fill="#3498DB"/>`
+  ${
+    gender === 'girl'
+      ? '<path d="M30,250 Q50,195 100,188 Q150,195 170,250 Q145,260 100,262 Q55,260 30,250 Z" fill="#E91E8C"/>'
+      : '<path d="M28,250 Q48,192 100,186 Q152,192 172,250 Q148,262 100,264 Q52,262 28,250 Z" fill="#3498DB"/>'
   }
 
   <!-- Head -->
@@ -272,7 +294,10 @@ const buildAvatarSVG = (config) => {
   ${getEyesSVG(eyeStyle, eyeColor)}
 
   <!-- Nose -->
-  <path d="M97,118 Q95,130 100,134 Q105,130 103,118" stroke="${darkenHex(skinTone, 25)}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <path d="M97,118 Q95,130 100,134 Q105,130 103,118" stroke="${darkenHex(
+    skinTone,
+    25,
+  )}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
 
   <!-- Cheek blush -->
   <ellipse cx="62" cy="128" rx="11" ry="7" fill="rgba(255,150,150,0.3)"/>
@@ -302,37 +327,48 @@ function hexToRgb(hex) {
 }
 
 function rgbToHex(r, g, b) {
-  return '#' + [r, g, b].map(v => Math.min(255, Math.max(0, v)).toString(16).padStart(2, '0')).join('');
+  return (
+    '#' +
+    [r, g, b]
+      .map(v => Math.min(255, Math.max(0, v)).toString(16).padStart(2, '0'))
+      .join('')
+  );
 }
 
 function lightenHex(hex, amount = 30) {
-  const { r, g, b } = hexToRgb(hex);
+  const {r, g, b} = hexToRgb(hex);
   return rgbToHex(r + amount, g + amount, b + amount);
 }
 
 function darkenHex(hex, amount = 30) {
-  const { r, g, b } = hexToRgb(hex);
+  const {r, g, b} = hexToRgb(hex);
   return rgbToHex(r - amount, g - amount, b - amount);
 }
 
 // â”€â”€â”€ Option Renderer Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const ColorSwatch = ({ color, selected, onPress }) => (
+const ColorSwatch = ({color, selected, onPress}) => (
   <TouchableOpacity
-    style={[styles.swatch, { backgroundColor: color }, selected && styles.swatchSelected]}
+    style={[
+      styles.swatch,
+      {backgroundColor: color},
+      selected && styles.swatchSelected,
+    ]}
     onPress={() => onPress(color)}
     activeOpacity={0.8}
   />
 );
 
-const OptionChip = ({ label, selected, onPress }) => (
+const formatOptionLabel = value =>
+  value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+
+const OptionChip = ({label, selected, onPress}) => (
   <TouchableOpacity
     style={[styles.chip, selected && styles.chipSelected]}
     onPress={onPress}
-    activeOpacity={0.8}
-  >
+    activeOpacity={0.8}>
     <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-      {label.replace(/_/g, ' ')}
+      {formatOptionLabel(label)}
     </Text>
   </TouchableOpacity>
 );
@@ -353,24 +389,24 @@ const DEFAULT_CONFIG = {
 };
 
 const SECTIONS = [
-  { key: 'gender',      label: 'âš§  Gender',      type: 'chip' },
-  { key: 'skinTone',    label: 'ðŸŽ¨ Skin Tone',   type: 'color' },
-  { key: 'hairStyle',   label: 'ðŸ’‡ Hair Style',  type: 'chip_dynamic' },
-  { key: 'hairColor',   label: 'ðŸŽ¨ Hair Color',  type: 'color' },
-  { key: 'eyeStyle',    label: 'ðŸ‘  Eyes',        type: 'chip' },
-  { key: 'eyeColor',    label: 'ðŸŽ¨ Eye Color',   type: 'color' },
-  { key: 'mouthStyle',  label: 'ðŸ‘„ Mouth',       type: 'chip' },
-  { key: 'glasses',     label: 'ðŸ•¶  Glasses',     type: 'chip' },
-  { key: 'accessories', label: 'âœ¨ Accessories', type: 'chip' },
-  { key: 'bgColor',     label: 'ðŸ–¼  Background',  type: 'color' },
+  {key: 'gender', label: 'Gender', type: 'chip'},
+  {key: 'skinTone', label: 'Skin Tone', type: 'color'},
+  {key: 'hairStyle', label: 'Hair Style', type: 'chip_dynamic'},
+  {key: 'hairColor', label: 'Hair Color', type: 'color'},
+  {key: 'eyeStyle', label: 'Eyes', type: 'chip'},
+  {key: 'eyeColor', label: 'Eye Color', type: 'color'},
+  {key: 'mouthStyle', label: 'Mouth', type: 'chip'},
+  {key: 'glasses', label: 'Glasses', type: 'chip'},
+  {key: 'accessories', label: 'Accessories', type: 'chip'},
+  {key: 'bgColor', label: 'Background', type: 'color'},
 ];
 
-const AvatarBuilder = ({ visible, onClose, onSave }) => {
-  const [config, setConfig] = useState({ ...DEFAULT_CONFIG });
+const AvatarBuilder = ({visible, onClose, onSave}) => {
+  const [config, setConfig] = useState({...DEFAULT_CONFIG});
 
   const update = useCallback((key, value) => {
     setConfig(prev => {
-      const next = { ...prev, [key]: value };
+      const next = {...prev, [key]: value};
       // Reset hair style when gender changes
       if (key === 'gender') {
         next.hairStyle = AVATAR_OPTIONS.hairStyle[value][0];
@@ -382,8 +418,8 @@ const AvatarBuilder = ({ visible, onClose, onSave }) => {
 
   const avatarSVG = buildAvatarSVG(config);
 
-  const renderSection = (section) => {
-    const { key, label, type } = section;
+  const renderSection = section => {
+    const {key, label, type} = section;
 
     if (type === 'color') {
       const colors = AVATAR_OPTIONS[key];
@@ -405,9 +441,10 @@ const AvatarBuilder = ({ visible, onClose, onSave }) => {
     }
 
     if (type === 'chip' || type === 'chip_dynamic') {
-      const options = type === 'chip_dynamic'
-        ? AVATAR_OPTIONS[key][config.gender]
-        : AVATAR_OPTIONS[key];
+      const options =
+        type === 'chip_dynamic'
+          ? AVATAR_OPTIONS[key][config.gender]
+          : AVATAR_OPTIONS[key];
 
       return (
         <View key={key} style={styles.section}>
@@ -431,29 +468,34 @@ const AvatarBuilder = ({ visible, onClose, onSave }) => {
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalContainer}>
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={styles.modalContainer}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
-            <Text style={styles.headerBtnText}>âœ• Close</Text>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.headerBtn}
+            activeOpacity={0.8}>
+            <Text style={styles.headerBtnText}>Close</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Build Avatar</Text>
           <TouchableOpacity
             onPress={() => onSave && onSave(config, avatarSVG)}
             style={[styles.headerBtn, styles.saveBtn]}
-          >
-            <Text style={[styles.headerBtnText, { color: '#fff' }]}>Save âœ“</Text>
+            activeOpacity={0.8}>
+            <Text style={[styles.headerBtnText, styles.saveBtnText]}>Save</Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}>
           {/* Avatar Preview */}
-          <View style={[styles.previewContainer, { backgroundColor: config.bgColor }]}>
+          <View
+            style={[
+              styles.previewContainer,
+              {backgroundColor: config.bgColor},
+            ]}>
             <SvgXml xml={avatarSVG} width={200} height={200} />
           </View>
 
@@ -476,29 +518,35 @@ const AvatarBuilder = ({ visible, onClose, onSave }) => {
                 bgColor: pick(AVATAR_OPTIONS.bgColor),
               });
             }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.randomBtnText}>ðŸŽ² Randomize</Text>
+            activeOpacity={0.8}>
+            <Text style={styles.randomBtnText}>Randomize</Text>
           </TouchableOpacity>
 
           {/* Option Sections */}
           {SECTIONS.map(renderSection)}
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 };
 
 // â”€â”€â”€ AvatarDisplay (small widget shown in app) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export const AvatarDisplay = ({ config, size = 60, onPress }) => {
+export const AvatarDisplay = ({config, size = 60, onPress}) => {
   const svg = config ? buildAvatarSVG(config) : buildAvatarSVG(DEFAULT_CONFIG);
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={[styles.avatarDisplay, { width: size, height: size, borderRadius: size / 2, backgroundColor: config?.bgColor || '#f5e6ff' }]}
-      activeOpacity={0.85}
-    >
+      style={[
+        styles.avatarDisplay,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: config?.bgColor || '#f5e6ff',
+        },
+      ]}
+      activeOpacity={0.85}>
       <SvgXml xml={svg} width={size * 0.9} height={size * 0.9} />
     </TouchableOpacity>
   );
@@ -511,23 +559,28 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    paddingTop: 50,
+    paddingVertical: 12,
+    paddingTop:
+      Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
   headerTitle: {
+    flex: 1,
     fontSize: 18,
     fontWeight: '700',
     color: '#222',
+    textAlign: 'center',
   },
   headerBtn: {
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    minWidth: 76,
+    alignItems: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
     borderRadius: 20,
     backgroundColor: '#f0f0f0',
   },
@@ -539,21 +592,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#444',
   },
+  saveBtnText: {
+    color: '#fff',
+  },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 60,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 48,
   },
   previewContainer: {
     alignSelf: 'center',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+    width: 210,
+    height: 210,
+    borderRadius: 105,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
     elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.15,
     shadowRadius: 8,
   },
@@ -564,8 +621,8 @@ const styles = StyleSheet.create({
     borderColor: '#6c5ce7',
     borderRadius: 24,
     paddingVertical: 10,
-    paddingHorizontal: 28,
-    marginBottom: 24,
+    paddingHorizontal: 32,
+    marginBottom: 28,
   },
   randomBtnText: {
     color: '#6c5ce7',
@@ -573,7 +630,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   section: {
-    marginBottom: 22,
+    marginBottom: 24,
   },
   sectionLabel: {
     fontSize: 14,
@@ -581,7 +638,7 @@ const styles = StyleSheet.create({
     color: '#444',
     marginBottom: 10,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0,
   },
   swatchRow: {
     flexDirection: 'row',
@@ -597,7 +654,7 @@ const styles = StyleSheet.create({
   },
   swatchSelected: {
     borderColor: '#6c5ce7',
-    transform: [{ scale: 1.15 }],
+    transform: [{scale: 1.15}],
   },
   chipRow: {
     flexDirection: 'row',
@@ -620,7 +677,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#555',
-    textTransform: 'capitalize',
   },
   chipTextSelected: {
     color: '#fff',

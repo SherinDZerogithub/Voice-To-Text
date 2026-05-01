@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, {useEffect, useState, useCallback, useRef} from 'react';
 import {
   Alert,
   Platform,
@@ -8,92 +8,233 @@ import {
   PermissionsAndroid,
   Text,
   NativeModules,
+  Animated,
+  Dimensions,
   TouchableOpacity,
 } from 'react-native';
-import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 
 // Import Custom Components
 import VoiceInput from './components/VoiceInput';
 import MoodResult from './components/MoodResult';
 import ImageGallery from './components/ImageGallery';
 import AuthScreen from './components/AuthScreen';
-import AvatarBuilder, { AvatarDisplay } from './components/AvatarBuilder';
-
+import AvatarBuilder from './components/AvatarBuilder';
+import HistoryDisplay from './components/HistoryDisplay';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import AnalyticsDisplay from './components/AnalyticsDisplay'; // Import the new component
+import DashboardHero from './components/DashboardHero';
+import {SAMPLE_IMAGES} from './constants/sampleImages';
+import {getContrastColor} from './utils/colors';
 
 // RN 0.71+ expects native event modules to expose listener stubs.
 if (NativeModules.Voice) {
   // Fix for React Native 0.71+ where addListener/removeListeners might be missing
   if (!NativeModules.Voice.addListener) {
-    NativeModules.Voice.addListener = () => { };
+    NativeModules.Voice.addListener = () => {};
   }
   if (!NativeModules.Voice.removeListeners) {
-    NativeModules.Voice.removeListeners = () => { };
+    NativeModules.Voice.removeListeners = () => {};
   }
 }
 
 import Voice from '@react-native-voice/voice';
-
-const SAMPLE_IMAGES = [
-  {
-    id: 's1',
-    uri: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&q=80',
-    fileName: 'serene_lake.jpg',
-    type: 'image/jpeg',
-    label: 'Serene Nature',
-  },
-  {
-    id: 's2',
-    uri: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&q=80',
-    fileName: 'chaotic_city.jpg',
-    type: 'image/jpeg',
-    label: 'Vibrant City',
-  },
-  {
-    id: 's3',
-    uri: 'https://images.unsplash.com/photo-1514516311115-38010f488e23?w=800&q=80',
-    fileName: 'vintage_cafe.jpg',
-    type: 'image/jpeg',
-    label: 'Vintage Cafe',
-  },
-];
-
-const getContrastColor = (hexcolor) => {
-  if (!hexcolor || hexcolor === 'transparent') return '#000000';
-  const hex = hexcolor.replace('#', '');
-  if (hex.length !== 6) return '#000000';
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
-  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-  return yiq >= 128 ? '#1a1a1a' : '#ffffff';
-};
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [token, setToken] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [userName, setUserName] = useState('');
   const [isLoginFlow, setIsLoginFlow] = useState(true);
   const [avatarVisible, setAvatarVisible] = useState(false);
+  const [moodHistory, setMoodHistory] = useState([]);
   const [avatarConfig, setAvatarConfig] = useState(null);
-
-  const [isListening, setIsListening] = useState(false);
-  const [text, setText] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null); // Track selected history item
   const [isVoiceAvailable, setIsVoiceAvailable] = useState(true);
   const [images, setImages] = useState([]);
   const [isCapturingImage, setIsCapturingImage] = useState(false);
   const [moodData, setMoodData] = useState(null);
   const [isSelectingImage, setIsSelectingImage] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [text, setText] = useState('');
   const [appBgColor, setAppBgColor] = useState('#f5f5f5');
+  const [analyticsData, setAnalyticsData] = useState(null); // New state for analytics
 
+  const [activeTab, setActiveTab] = useState('home'); // 'home', 'history', 'analytics'
 
   // Configuration for Backend
-  // Note: 10.0.2.2 is the localhost for Android emulator. 
+  // Note: 10.0.2.2 is the localhost for Android emulator.
+  const BACKEND_URL =
+    Platform.OS === 'android'
+      ? 'http://10.0.2.2:8000'
+      : 'http://localhost:8000';
+
+  const fetchAnalyticsData = useCallback(async () => {
+    if (!token) {
+      return;
+    }
+    try {
+      const response = await fetch(`${BACKEND_URL}/analytics/me?days=30`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAnalyticsData(data);
+      }
+    } catch (error) {
+      console.warn('Analytics fetch failed:', error);
+    }
+  }, [BACKEND_URL, token]);
+
+  useEffect(() => {
+    if (activeTab === 'analytics') {
+      fetchAnalyticsData();
+    }
+  }, [activeTab, fetchAnalyticsData]);
+
+  const {width: SCREEN_WIDTH} = Dimensions.get('window');
+
+  // Animation value for the dashboard avatar entry
+  const avatarAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      avatarAnim.setValue(0);
+      Animated.spring(avatarAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 35,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isAuthenticated, avatarAnim]);
+
+  // Configuration for Backend
+  // Note: 10.0.2.2 is the localhost for Android emulator.
   // Change to your machine's IP if testing on a real device.
-  const BACKEND_URL = Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
+  // (BACKEND_URL is defined at line 71)
+
+  const formatMoodHistoryItem = useCallback((item, fallbackEmoji = '') => {
+    const date = item.timestamp ? new Date(item.timestamp) : new Date();
+
+    return {
+      id: item.id?.toString() || Date.now().toString(),
+      timestamp: Number.isNaN(date.getTime())
+        ? ''
+        : date.toLocaleString([], {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+      vibe: item.vibe,
+      mood: item.vibe, // Ensure mood field is present for MoodResult
+      emoji: item.emoji || fallbackEmoji || '🌈',
+      color: item.color || '#6c5ce7',
+      caption: item.short_caption || item.caption || item.vibe || 'Mood entry',
+      scene_tags: item.scene_tags || [],
+      description: item.description || item.full_description || '',
+      feedback: item.feedback || '',
+      poetic_summary: item.poetic_summary || '',
+      confidence: item.confidence || '',
+      gemini_confidence: item.gemini_confidence || null,
+      environment_type: item.environment_type || '',
+      color_palette: item.color_palette || [],
+      secondary_moods: item.secondary_moods || [],
+      all_scores: item.all_scores || [],
+    };
+  }, []);
+
+  const fetchMoodHistory = useCallback(
+    async (authToken = token, page = 1) => {
+      if (!authToken) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `${BACKEND_URL}/mood-history?page=${page}&page_size=30`,
+          {
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+            },
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to load mood history');
+        }
+
+        const data = await response.json();
+        setMoodHistory(
+          (data.items || []).map(item => formatMoodHistoryItem(item)),
+        );
+      } catch (error) {
+        console.warn('Mood history load failed:', error);
+      }
+    },
+    [BACKEND_URL, formatMoodHistoryItem, token],
+  );
+
+  const saveMoodLog = useCallback(
+    async (analysis, fallbackCaption, shouldFetchAnalytics = true) => {
+      if (!token || !analysis) {
+        return;
+      }
+
+      try {
+        const shortCaption =
+          analysis.short_caption ||
+          analysis.short_description ||
+          fallbackCaption ||
+          analysis.vibe ||
+          'Mood entry';
+
+        const response = await fetch(`${BACKEND_URL}/mood-log`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            vibe: analysis.vibe || analysis.mood || 'unknown',
+            emoji: analysis.emoji || '',
+            short_caption: shortCaption,
+            color: analysis.color || '#6c5ce7',
+            scene_tags: analysis.scene_tags || [],
+            timestamp: new Date().toISOString(),
+            description: analysis.description || '',
+            feedback: analysis.feedback || '',
+            poetic_summary: analysis.poetic_summary || '',
+            confidence: analysis.confidence || '',
+            gemini_confidence: analysis.gemini_confidence || null,
+            environment_type: analysis.environment_type || '',
+            color_palette: analysis.color_palette || [],
+            secondary_moods: analysis.secondary_moods || [],
+            all_scores: analysis.all_scores || [],
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save mood log');
+        }
+
+        const savedLog = await response.json();
+        setMoodHistory(prev => [
+          formatMoodHistoryItem(savedLog, analysis.emoji || ''),
+          ...prev,
+        ]);
+      } catch (error) {
+        console.warn('Mood log save failed:', error);
+      }
+    },
+    [BACKEND_URL, formatMoodHistoryItem, token],
+  );
 
   const onSpeechStart = useCallback(() => {
     setIsListening(true);
@@ -106,34 +247,41 @@ const App = () => {
     console.log('onSpeechEnd');
   }, []);
 
-  const onSpeechResults = useCallback((event) => {
-    const transcript = event && event.value && event.value[0] ? event.value[0] : '';
+  const onSpeechResults = useCallback(event => {
+    const transcript =
+      event && event.value && event.value[0] ? event.value[0] : '';
     setText(transcript);
     console.log('onSpeechResults: ', transcript);
   }, []);
 
-  const onSpeechPartialResults = useCallback((event) => {
-    const partial = event && event.value && event.value[0] ? event.value[0] : '';
+  const onSpeechPartialResults = useCallback(event => {
+    const partial =
+      event && event.value && event.value[0] ? event.value[0] : '';
     if (partial) {
       setText(partial);
     }
   }, []);
 
-  const onSpeechError = useCallback((event) => {
+  const onSpeechError = useCallback(event => {
     const error = event && event.error ? event.error : event;
     const code = error && error.code ? error.code : 'unknown';
-    const message = error && error.message ? error.message : 'Unknown voice error';
+    const message =
+      error && error.message ? error.message : 'Unknown voice error';
 
     // Friendly error handling
     if (code === '7' || code === '6') {
       setErrorMessage('No speech detected. Please try again.');
     } else if (code === '9') {
-      setErrorMessage('Microphone permission is missing. Please allow it and try again.');
+      setErrorMessage(
+        'Microphone permission is missing. Please allow it and try again.',
+      );
     } else if (code === '8') {
-      setErrorMessage('Speech recognition is busy. Please wait a moment and try again.');
+      setErrorMessage(
+        'Speech recognition is busy. Please wait a moment and try again.',
+      );
     } else if (code === '5') {
       setErrorMessage(
-        'Speech recognition is unavailable on this device right now. Check Google voice services and try again.'
+        'Speech recognition is unavailable on this device right now. Check Google voice services and try again.',
       );
     } else {
       setErrorMessage(`Error (${code}): ${message}`);
@@ -151,19 +299,21 @@ const App = () => {
     Voice.onSpeechPartialResults = onSpeechPartialResults;
 
     Voice.isAvailable()
-      .then((available) => {
+      .then(available => {
         setIsVoiceAvailable(Boolean(available));
 
         if (!available) {
-          setErrorMessage('Speech recognition is not available on this device.');
+          setErrorMessage(
+            'Speech recognition is not available on this device.',
+          );
           return Promise.resolve();
         }
 
         if (Platform.OS === 'android') {
-          return Voice.getSpeechRecognitionServices().then((services) => {
+          return Voice.getSpeechRecognitionServices().then(services => {
             if (!services || services.length === 0) {
               setErrorMessage(
-                'No speech recognition service was found. Install or enable Google voice typing.'
+                'No speech recognition service was found. Install or enable Google voice typing.',
               );
             }
           });
@@ -171,7 +321,7 @@ const App = () => {
 
         return Promise.resolve();
       })
-      .catch((err) => {
+      .catch(err => {
         console.warn(err);
         setIsVoiceAvailable(false);
         setErrorMessage('Unable to initialize speech recognition.');
@@ -180,7 +330,13 @@ const App = () => {
     return () => {
       Voice.destroy().then(Voice.removeAllListeners);
     };
-  }, [onSpeechStart, onSpeechEnd, onSpeechResults, onSpeechError, onSpeechPartialResults]);
+  }, [
+    onSpeechStart,
+    onSpeechEnd,
+    onSpeechResults,
+    onSpeechError,
+    onSpeechPartialResults,
+  ]);
 
   const requestMicrophonePermission = useCallback(async () => {
     if (Platform.OS !== 'android') {
@@ -200,9 +356,10 @@ const App = () => {
         PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
         {
           title: 'Microphone Permission',
-          message: 'This app needs access to your microphone to recognize speech.',
-          buttonPositive: 'OK'
-        }
+          message:
+            'This app needs access to your microphone to recognize speech.',
+          buttonPositive: 'OK',
+        },
       );
 
       return granted === PermissionsAndroid.RESULTS.GRANTED;
@@ -231,8 +388,8 @@ const App = () => {
         {
           title: 'Camera Permission',
           message: 'This app needs access to your camera to capture images.',
-          buttonPositive: 'OK'
-        }
+          buttonPositive: 'OK',
+        },
       );
 
       return granted === PermissionsAndroid.RESULTS.GRANTED;
@@ -263,14 +420,12 @@ const App = () => {
         return true;
       }
 
-      const granted = await PermissionsAndroid.request(
-        permission,
-        {
-          title: 'Storage Permission',
-          message: 'This app needs access to your photo gallery to select images.',
-          buttonPositive: 'OK'
-        }
-      );
+      const granted = await PermissionsAndroid.request(permission, {
+        title: 'Storage Permission',
+        message:
+          'This app needs access to your photo gallery to select images.',
+        buttonPositive: 'OK',
+      });
 
       return granted === PermissionsAndroid.RESULTS.GRANTED;
     } catch (err) {
@@ -317,7 +472,8 @@ const App = () => {
     } catch (e) {
       setIsListening(false);
       setErrorMessage(
-        (e && e.message) || 'Failed to start voice recognition. Please try again.',
+        (e && e.message) ||
+          'Failed to start voice recognition. Please try again.',
       );
       console.error(e);
     }
@@ -347,8 +503,10 @@ const App = () => {
     }
   }
 
-  const analyzeMood = async (transcript) => {
-    if (!transcript.trim()) return;
+  const analyzeMood = async transcript => {
+    if (!transcript.trim()) {
+      return;
+    }
 
     setIsAnalyzing(true);
     setErrorMessage('');
@@ -357,9 +515,12 @@ const App = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ text: transcript }),
+        body: JSON.stringify({
+          text: transcript,
+          avatar_config: avatarConfig,
+        }),
       });
 
       if (!response.ok) {
@@ -367,65 +528,76 @@ const App = () => {
       }
 
       const data = await response.json();
-      setMoodData(prev => ({ ...prev, ...data }));
+      setMoodData(prev => ({...prev, ...data}));
+      await saveMoodLog(data, transcript);
     } catch (error) {
       console.error('Analysis error:', error);
-      setErrorMessage('Could not connect to mood server. Make sure it is running.');
+      setErrorMessage(
+        'Could not connect to mood server. Make sure it is running.',
+      );
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const analyzeImageDescription = async (asset) => {
-    if (!asset || !asset.uri) {
-      console.warn('No asset or URI provided to analyzeImageDescription');
-      return;
-    }
-    setIsAnalyzing(true);
-    setErrorMessage('');
-    try {
-      const isRemoteUrl = asset.uri.startsWith('http://') || asset.uri.startsWith('https://');
-      const formData = new FormData();
+  const analyzeImageDescription = useCallback(
+    async asset => {
+      if (!asset || !asset.uri) {
+        console.warn('No asset or URI provided to analyzeImageDescription');
+        return;
+      }
+      setIsAnalyzing(true);
+      setErrorMessage('');
+      try {
+        const isRemoteUrl =
+          asset.uri.startsWith('http://') || asset.uri.startsWith('https://');
+        const formData = new FormData();
 
-      if (asset.base64) {
-        formData.append('base64', asset.base64);
-        formData.append('fileName', asset.fileName || 'photo.jpg');
-        formData.append('type', asset.type || 'image/jpeg');
-      } else if (isRemoteUrl) {
-        formData.append('imageUrl', asset.uri);
-        formData.append('fileName', asset.fileName || 'photo.jpg');
-        formData.append('type', asset.type || 'image/jpeg');
-      } else {
-        formData.append('file', {
-          uri: Platform.OS === 'android' ? asset.uri : asset.uri.replace('file://', ''),
-          name: asset.fileName || 'photo.jpg',
-          type: asset.type || 'image/jpeg',
+        if (asset.base64) {
+          formData.append('base64', asset.base64);
+          formData.append('fileName', asset.fileName || 'photo.jpg');
+          formData.append('type', asset.type || 'image/jpeg');
+        } else if (isRemoteUrl) {
+          formData.append('imageUrl', asset.uri);
+          formData.append('fileName', asset.fileName || 'photo.jpg');
+          formData.append('type', asset.type || 'image/jpeg');
+        } else {
+          formData.append('file', {
+            uri:
+              Platform.OS === 'android'
+                ? asset.uri
+                : asset.uri.replace('file://', ''),
+            name: asset.fileName || 'photo.jpg',
+            type: asset.type || 'image/jpeg',
+          });
+        }
+
+        const response = await fetch(`${BACKEND_URL}/analyze-image`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
         });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Image analysis failed: ${response.status} ${text}`);
+        }
+
+        const data = await response.json();
+        setText(data.short_description);
+        setMoodData(data); // Set the full Gemini results directly
+        await saveMoodLog(data, data.short_description);
+      } catch (error) {
+        console.error('Image analysis error:', error);
+        setErrorMessage('Could not describe the image. Is the server running?');
+      } finally {
+        setIsAnalyzing(false);
       }
-
-      const response = await fetch(`${BACKEND_URL}/analyze-image`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Image analysis failed: ${response.status} ${text}`);
-      }
-
-      const data = await response.json();
-      setText(data.short_description);
-      setMoodData(data); // Set the full Gemini results directly
-    } catch (error) {
-      console.error('Image analysis error:', error);
-      setErrorMessage('Could not describe the image. Is the server running?');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
+    },
+    [BACKEND_URL, saveMoodLog, token],
+  );
 
   const handleCaptureImage = useCallback(async () => {
     if (isCapturingImage) {
@@ -457,7 +629,10 @@ const App = () => {
       }
 
       if (result.errorCode) {
-        Alert.alert('Camera error', result.errorMessage || 'Unable to capture image.');
+        Alert.alert(
+          'Camera error',
+          result.errorMessage || 'Unable to capture image.',
+        );
         return;
       }
 
@@ -476,7 +651,10 @@ const App = () => {
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Camera error', 'Something went wrong while opening the camera.');
+      Alert.alert(
+        'Camera error',
+        'Something went wrong while opening the camera.',
+      );
     } finally {
       setIsCapturingImage(false);
     }
@@ -510,7 +688,10 @@ const App = () => {
       }
 
       if (result.errorCode) {
-        Alert.alert('Image selection error', result.errorMessage || 'Unable to select image.');
+        Alert.alert(
+          'Image selection error',
+          result.errorMessage || 'Unable to select image.',
+        );
         return;
       }
 
@@ -529,7 +710,10 @@ const App = () => {
       }
     } catch (error) {
       console.error(error);
-      Alert.alert('Image selection error', 'Something went wrong while selecting an image.');
+      Alert.alert(
+        'Image selection error',
+        'Something went wrong while selecting an image.',
+      );
     } finally {
       setIsSelectingImage(false);
     }
@@ -540,146 +724,87 @@ const App = () => {
       flex: 1,
       padding: 20,
       backgroundColor: appBgColor,
-
     },
     content: {
       paddingVertical: 30,
       alignItems: 'center',
     },
-    header: {
+     statusText: {
+       marginTop: 10,
+       color: isListening
+         ? '#ff4d4d'
+         : getContrastColor(appBgColor) === '#ffffff'
+         ? 'rgba(255,255,255,0.7)'
+         : '#666',
+       fontWeight: 'bold',
+     },
+     error: {
+       marginTop: 20,
+       color: '#d9534f',
+       textAlign: 'center',
+       fontWeight: '500',
+     },
+     backButton: {
+       flexDirection: 'row',
+       alignItems: 'center',
+       padding: 12,
+       marginBottom: 10,
+       borderRadius: 12,
+       alignSelf: 'flex-start',
+       gap: 6,
+     },
+     backButtonText: {
+       fontSize: 15,
+       fontWeight: '600',
+     },
+    tabBar: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      width: '100%',
-      marginBottom: 20,
-      paddingBottom: 15,
-      borderBottomWidth: 1,
-      borderBottomColor: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+      backgroundColor: '#fff',
+      borderTopWidth: 1,
+      borderTopColor: '#eee',
+      paddingBottom: Platform.OS === 'ios' ? 20 : 10,
+      paddingTop: 10,
+      justifyContent: 'space-around',
+      elevation: 10,
+      shadowColor: '#000',
+      shadowOffset: {width: 0, height: -2},
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
     },
-    titleContainer: {
-      flex: 1,
-    },
-    title: {
-      fontSize: 28,
-      fontWeight: 'bold',
-      letterSpacing: -0.5,
-      color: getContrastColor(appBgColor),
-    },
-    logoutButton: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 15,
-      backgroundColor: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.05)',
-      borderWidth: 1,
-      borderColor: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)',
-    },
-    logoutText: {
-      fontSize: 12,
-      fontWeight: 'bold',
-      color: getContrastColor(appBgColor),
-    },
-    greeting: {
-      fontSize: 14,
-      fontWeight: '500',
-      marginTop: 4,
-      textTransform: 'uppercase',
-      letterSpacing: 1,
-      color: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)',
-    },
-    dashboardHero: {
-      width: '100%',
-      backgroundColor: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.03)',
-      borderRadius: 24,
-      padding: 20,
-      marginBottom: 25,
-      borderWidth: 1,
-      borderColor: getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)',
-      position: 'relative',
-      overflow: 'hidden',
-    },
-    heroContent: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    heroTextContainer: {
-      flex: 1,
-      paddingRight: 15,
-    },
-    heroTitle: {
-      fontSize: 14,
-      fontWeight: '800',
-      color: getContrastColor(appBgColor),
-      opacity: 0.6,
-      textTransform: 'uppercase',
-      letterSpacing: 2,
-      marginBottom: 8,
-    },
-    heroGreeting: {
-      fontSize: 20,
-      fontWeight: '400',
-      color: getContrastColor(appBgColor),
-    },
-    heroUserName: {
-      fontSize: 32,
-      fontWeight: '900',
-      color: getContrastColor(appBgColor),
-      letterSpacing: -1,
-    },
-    heroAvatarContainer: {
-      position: 'relative',
-      padding: 5,
-    },
-    editAvatarBadge: {
-      position: 'absolute',
-      bottom: 0,
-      right: 0,
-      backgroundColor: '#6c5ce7',
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+    tabItem: {
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 3,
-      borderColor: appBgColor,
-      elevation: 4,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 3,
+      flex: 1,
     },
-    editBadgeText: {
-      color: '#fff',
+    tabText: {
       fontSize: 12,
-      fontWeight: 'bold',
-    },
-    heroLogoutBtn: {
-      position: 'absolute',
-      top: 15,
-      right: 15,
-      padding: 8,
-      opacity: 0.5,
-    },
-    statusText: {
-      marginTop: 10,
-      color: isListening ? '#ff4d4d' : (getContrastColor(appBgColor) === '#ffffff' ? 'rgba(255,255,255,0.7)' : '#666'),
-      fontWeight: 'bold',
-    },
-    error: {
-      marginTop: 20,
-      color: '#d9534f',
-      textAlign: 'center',
-      fontWeight: '500',
+      marginTop: 4,
+      fontWeight: '600',
     },
   });
 
-  const handleAuth = async (isLogin, email, password, name, avatarConfigParam) => {
+  const handleAuth = async (
+    isLogin,
+    email,
+    password,
+    name,
+    avatarConfigParam,
+  ) => {
     setIsAuthLoading(true);
     setAuthError('');
     setIsLoginFlow(isLogin);
     try {
       const endpoint = isLogin ? '/login' : '/signup';
-      const body = isLogin ? { email, password } : { email, password, name, avatar_config: avatarConfigParam ? JSON.stringify(avatarConfigParam) : null };
+      const body = isLogin
+        ? {email, password}
+        : {
+            email,
+            password,
+            name,
+            avatar_config: avatarConfigParam
+              ? JSON.stringify(avatarConfigParam)
+              : null,
+          };
       const response = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: {
@@ -699,11 +824,12 @@ const App = () => {
       if (data.avatar_config) {
         try {
           setAvatarConfig(JSON.parse(data.avatar_config));
-        } catch(e) {
-          console.warn("Failed to parse avatar config from server", e);
+        } catch (e) {
+          console.warn('Failed to parse avatar config from server', e);
         }
       }
       setIsAuthenticated(true);
+      fetchMoodHistory(data.access_token);
     } catch (error) {
       console.error('Auth error:', error);
       setAuthError(error.message || 'Could not connect to server.');
@@ -719,6 +845,7 @@ const App = () => {
     setMoodData(null);
     setText('');
     setImages([]);
+    setMoodHistory([]);
     setAppBgColor('#f5f5f5');
   };
 
@@ -732,108 +859,201 @@ const App = () => {
     );
   }
 
-  return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Dashboard Hero Section */}
-      <View style={styles.dashboardHero}>
-        <TouchableOpacity style={styles.heroLogoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+  const handleClearSelection = () => {
+    setSelectedHistoryItem(null);
+  };
 
-        <View style={styles.heroContent}>
-          <View style={styles.heroTextContainer}>
-            <Text style={styles.heroTitle}>Scene Vibe</Text>
-            <Text style={styles.heroGreeting}>
-              {isLoginFlow ? 'Welcome back,' : 'Hello,'}
-            </Text>
-            <Text style={styles.heroUserName}>{userName || 'Explorer'}</Text>
-          </View>
-
-          <View style={styles.heroAvatarContainer}>
-            <AvatarDisplay
-              config={avatarConfig}
-              size={100}
-              onPress={() => setAvatarVisible(true)}
-            />
+  const renderContent = () => {
+    if (activeTab === 'analytics') {
+      return (
+        <AnalyticsDisplay
+          analyticsData={analyticsData}
+          appBgColor={appBgColor}
+        />
+      );
+    } else if (activeTab === 'history') {
+      if (selectedHistoryItem) {
+        return (
+          <>
             <TouchableOpacity
-              style={styles.editAvatarBadge}
-              onPress={() => setAvatarVisible(true)}
+              onPress={handleClearSelection}
+              style={[styles.backButton, { backgroundColor: appBgColor }]}
+              activeOpacity={0.7}
             >
-              <Text style={styles.editBadgeText}>✎</Text>
+              <Icon name="arrow-left" size={20} color={getContrastColor(appBgColor)} />
+              <Text style={[styles.backButtonText, { color: getContrastColor(appBgColor) }]}>
+                Back to List
+              </Text>
             </TouchableOpacity>
-          </View>
-        </View>
+            <MoodResult
+              moodData={selectedHistoryItem}
+              token={token}
+              backendUrl={BACKEND_URL}
+              isAnalyzing={false}
+              isListening={false}
+              hasText={!!selectedHistoryItem.description}
+              setAppBgColor={setAppBgColor}
+              appBgColor={appBgColor}
+            />
+          </>
+        );
+      }
+      return (
+        <HistoryDisplay
+          moodHistory={moodHistory}
+          appBgColor={appBgColor}
+          onSelect={(item) => setSelectedHistoryItem(item)}
+        />
+      );
+    } else {
+      return (
+        <>
+          <VoiceInput
+            text={text}
+            onChangeText={setText}
+            isListening={isListening}
+            onStartListening={startListening}
+            onStopListening={stopListening}
+            onAnalyze={() => analyzeMood(text)}
+            isAnalyzing={isAnalyzing}
+            appBgColor={appBgColor}
+            shortDescription={moodData?.short_description}
+            longDescription={moodData?.description}
+          />
+
+          <Text style={styles.statusText}>
+            {isListening
+              ? 'Recording active...'
+              : isVoiceAvailable
+              ? 'Tap button to start'
+              : 'Speech recognition unavailable'}
+          </Text>
+          {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+
+          <MoodResult
+            moodData={moodData}
+            token={token}
+            backendUrl={BACKEND_URL}
+            isAnalyzing={isAnalyzing}
+            isListening={isListening}
+            hasText={text.length > 0}
+            setAppBgColor={setAppBgColor}
+            appBgColor={appBgColor}
+          />
+
+          <ImageGallery
+            images={images}
+            sampleImages={SAMPLE_IMAGES}
+            onCapture={handleCaptureImage}
+            onSelect={handleSelectImage}
+            onAnalyzeImage={analyzeImageDescription}
+            isCapturingImage={isCapturingImage}
+            isSelectingImage={isSelectingImage}
+            isAnalyzing={isAnalyzing}
+          />
+        </>
+      );
+    }
+  };
+
+  return (
+    <View style={{flex: 1, backgroundColor: appBgColor}}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}>
+        <DashboardHero
+          appBgColor={appBgColor}
+          avatarAnim={avatarAnim}
+          avatarConfig={avatarConfig}
+          isLoginFlow={isLoginFlow}
+          onEditAvatar={() => setAvatarVisible(true)}
+          onLogout={handleLogout}
+          onOpenHistory={() => setActiveTab('history')}
+          userName={userName}
+        />
+
+        {renderContent()}
+
+        <AvatarBuilder
+          visible={avatarVisible}
+          onClose={() => setAvatarVisible(false)}
+          onSave={async (config, svgString) => {
+            setAvatarConfig(config);
+            setAvatarVisible(false);
+            try {
+              await fetch(`${BACKEND_URL}/update-avatar`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(config),
+              }).then(response => {
+                if (!response.ok) {
+                  throw new Error('Failed to save avatar.');
+                }
+                Alert.alert('Success', 'Avatar updated successfully!');
+              });
+            } catch (error) {
+              console.error('Failed to update avatar:', error);
+              Alert.alert('Error', error.message || 'Failed to update avatar.');
+            }
+          }}
+        />
+      </ScrollView>
+
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => setActiveTab('home')}>
+          <Icon
+            name="home"
+            size={24}
+            color={activeTab === 'home' ? '#6c5ce7' : '#999'}
+          />
+          <Text
+            style={[
+              styles.tabText,
+              {color: activeTab === 'home' ? '#6c5ce7' : '#999'},
+            ]}>
+            Home
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => setActiveTab('history')}>
+          <Icon
+            name="history"
+            size={24}
+            color={activeTab === 'history' ? '#6c5ce7' : '#999'}
+          />
+          <Text
+            style={[
+              styles.tabText,
+              {color: activeTab === 'history' ? '#6c5ce7' : '#999'},
+            ]}>
+            History
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => setActiveTab('analytics')}>
+          <Icon
+            name="chart-bar"
+            size={24}
+            color={activeTab === 'analytics' ? '#6c5ce7' : '#999'}
+          />
+          <Text
+            style={[
+              styles.tabText,
+              {color: activeTab === 'analytics' ? '#6c5ce7' : '#999'},
+            ]}>
+            Analytics
+          </Text>
+        </TouchableOpacity>
       </View>
-
-      <VoiceInput
-        text={text}
-        onChangeText={setText}
-        isListening={isListening}
-        onStartListening={startListening}
-        onStopListening={stopListening}
-        onAnalyze={() => analyzeMood(text)}
-        isAnalyzing={isAnalyzing}
-        appBgColor={appBgColor}
-        shortDescription={moodData?.short_description}
-        longDescription={moodData?.description}
-      />
-
-
-      <Text style={styles.statusText}>
-        {isListening
-          ? 'Recording active...'
-          : isVoiceAvailable
-            ? 'Tap button to start'
-            : 'Speech recognition unavailable'}
-      </Text>
-      {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
-
-      <MoodResult
-        moodData={moodData}
-        isAnalyzing={isAnalyzing}
-        isListening={isListening}
-        hasText={text.length > 0}
-        setAppBgColor={setAppBgColor}
-        appBgColor={appBgColor}
-      />
-
-
-
-      <ImageGallery
-        images={images}
-        sampleImages={SAMPLE_IMAGES}
-        onCapture={handleCaptureImage}
-        onSelect={handleSelectImage}
-        onAnalyzeImage={analyzeImageDescription}
-        isCapturingImage={isCapturingImage}
-        isSelectingImage={isSelectingImage}
-        isAnalyzing={isAnalyzing}
-      />
-      <AvatarBuilder
-        visible={avatarVisible}
-        onClose={() => setAvatarVisible(false)}
-        onSave={async (config, svgString) => {
-          setAvatarConfig(config);
-          setAvatarVisible(false);
-          try {
-            await fetch(`${BACKEND_URL}/update-avatar`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify(config)
-            });
-          } catch (error) {
-            console.error('Failed to update avatar:', error);
-          }
-        }}
-      />
-    </ScrollView>
+    </View>
   );
 };
 
