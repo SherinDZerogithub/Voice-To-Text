@@ -174,13 +174,16 @@ const createStyles = (appBgColor, contrastColor) => {
       position: 'absolute',
       top: 15,
       right: 15,
-      padding: 8,
-      opacity: 0.5,
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      backgroundColor: 'rgba(255, 255, 255, 0.2)', // Slightly opaque white background
+      borderRadius: 15, // Rounded corners
+      opacity: 0.8,
       zIndex: 1,
     },
     logoutText: {
-      fontSize: 12,
-      fontWeight: 'bold',
+      fontSize: 13,
+      fontWeight: '700',
       color: contrastColor,
     },
   });

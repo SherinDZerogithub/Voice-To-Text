@@ -908,8 +908,9 @@ const App = () => {
       backgroundColor: appBgColor,
     },
     content: {
-      paddingVertical: 30,
+      paddingVertical: 40,
       alignItems: 'center',
+      paddingBottom: 100, // Extra space at bottom to account for the tab bar
     },
      statusText: {
        marginTop: 10,
@@ -939,6 +940,11 @@ const App = () => {
        fontSize: 15,
        fontWeight: '600',
      },
+    heroWrapper: {
+      width: '100%',
+      marginBottom: 35,
+      paddingHorizontal: 4,
+    },
     tabBar: {
       flexDirection: 'row',
       backgroundColor: '#fff',
@@ -966,23 +972,23 @@ const App = () => {
     checkInBanner: {
       width: '100%',
       backgroundColor: '#fff',
-      borderRadius: 20,
-      padding: 16,
-      marginBottom: 20,
+      borderRadius: 24,
+      padding: 20,
+      marginBottom: 30,
       flexDirection: 'row',
       alignItems: 'center',
-      elevation: 4,
+      elevation: 6,
       shadowColor: '#6c5ce7',
       shadowOffset: {width: 0, height: 4},
-      shadowOpacity: 0.1,
-      shadowRadius: 8,
-      borderLeftWidth: 4,
+      shadowOpacity: 0.15,
+      shadowRadius: 10,
+      borderLeftWidth: 6,
       borderLeftColor: '#6c5ce7',
     },
     checkInIconContainer: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       backgroundColor: '#6c5ce715',
       justifyContent: 'center',
       alignItems: 'center',
@@ -990,8 +996,9 @@ const App = () => {
     },
     checkInText: {
       fontSize: 16,
-      fontWeight: '800',
+      fontWeight: '700',
       color: '#2d3436',
+      flex: 1,
     },
   });
 
@@ -1220,16 +1227,18 @@ const App = () => {
           style={styles.container}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}>
-          <DashboardHero
-            appBgColor={appBgColor}
-            avatarAnim={avatarAnim}
-            avatarConfig={avatarConfig}
-            isLoginFlow={isLoginFlow}
-            onEditAvatar={() => setAvatarVisible(true)}
-            onLogout={handleLogout}
-            onOpenHistory={() => setActiveTab('history')}
-            userName={userName}
-          />
+          <View style={styles.heroWrapper}>
+            <DashboardHero
+              appBgColor={appBgColor}
+              avatarAnim={avatarAnim}
+              avatarConfig={avatarConfig}
+              isLoginFlow={isLoginFlow}
+              onEditAvatar={() => setAvatarVisible(true)}
+              onLogout={handleLogout}
+              onOpenHistory={() => setActiveTab('history')}
+              userName={userName}
+            />
+          </View>
 
           {renderContent()}
 
