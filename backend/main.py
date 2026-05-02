@@ -1142,6 +1142,50 @@ def get_analytics(
         )
 
 
+@app.get("/mood-goal")
+def get_mood_goal(
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    """Return the user's current mood goal, or null if not set."""
+    goal = (
+        db.query(models.MoodGoal).filter(models.MoodGoal.user_id == db_user.id).first()
+    )
+    if not goal:
+        return {"vibe": None}
+    return {
+        "vibe": goal.vibe,
+        "updated_at": goal.updated_at.isoformat() if goal.updated_at else None,
+    }
+
+
+@app.put("/mood-goal")
+def update_mood_goal(
+    body: dict = Body(...),
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    """Create or update the user's mood goal."""
+    vibe = body.get("vibe", "").strip().lower()
+    if not vibe:
+        raise HTTPException(status_code=400, detail="vibe cannot be empty")
+    if vibe not in VIBE_LABELS:
+        raise HTTPException(status_code=400, detail=f"Unknown vibe: {vibe}")
+
+    goal = (
+        db.query(models.MoodGoal).filter(models.MoodGoal.user_id == db_user.id).first()
+    )
+    if goal:
+        goal.vibe = vibe
+        goal.updated_at = datetime.now(timezone.utc)
+    else:
+        goal = models.MoodGoal(user_id=db_user.id, vibe=vibe)
+        db.add(goal)
+    db.commit()
+    db.refresh(goal)
+    return {"vibe": goal.vibe, "updated_at": goal.updated_at.isoformat()}
+
+
 @app.get("/playlist-suggestions/{vibe}")
 async def get_playlist_suggestions(
     vibe: str, current_user: str = Depends(auth.get_current_user)

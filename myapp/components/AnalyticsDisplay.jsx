@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   Animated,
   ActivityIndicator,
   TouchableOpacity,
-  PanResponder,
   Modal,
 } from 'react-native';
 import Svg, {
@@ -21,7 +20,6 @@ import Svg, {
   Defs,
   LinearGradient,
   Stop,
-  Polygon,
 } from 'react-native-svg';
 import { getContrastColor } from '../utils/colors';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -61,14 +59,52 @@ const AnimatedNumber = ({ value, duration = 800, style, suffix = '' }) => {
 
   useEffect(() => {
     anim.setValue(0);
-    Animated.timing(anim, { toValue: value, duration, useNativeDriver: false }).start();
+    const animation = Animated.timing(anim, { toValue: value, duration, useNativeDriver: false });
+    animation.start();
     const id = anim.addListener(({ value: v }) => {
       if (isMounted.current) setDisplay(Math.round(v));
     });
-    return () => anim.removeListener(id);
+    return () => {
+      animation.stop();
+      anim.removeListener(id);
+    };
   }, [value]);
 
   return <Text style={style}>{display}{suffix}</Text>;
+};
+
+// ─── Animated Progress Bar ────────────────────────────────────────────────────
+
+const AnimatedProgressBar = ({ progress, color }) => {
+  const animWidth = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    animWidth.setValue(0);
+    Animated.spring(animWidth, {
+      toValue: progress,
+      tension: 40,
+      friction: 8,
+      useNativeDriver: false,
+    }).start();
+  }, [progress]);
+
+  return (
+    <View style={styles.goalProgressTrack}>
+      <Animated.View
+        style={[
+          styles.goalProgressBar,
+          {
+            backgroundColor: color,
+            width: animWidth.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['0%', '100%'],
+              extrapolate: 'clamp',
+            }),
+          },
+        ]}
+      />
+    </View>
+  );
 };
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
@@ -78,10 +114,12 @@ const StatCard = ({ title, value, icon, color, suffix = '', delay = 0 }) => {
   const slideAnim = useRef(new Animated.Value(24)).current;
 
   useEffect(() => {
-    Animated.parallel([
+    const anim = Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 450, delay, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, tension: 55, friction: 8, delay, useNativeDriver: true }),
-    ]).start();
+    ]);
+    anim.start();
+    return () => anim.stop();
   }, []);
 
   const numericValue = typeof value === 'number' ? value : parseFloat(value) || 0;
@@ -104,9 +142,10 @@ const StatCard = ({ title, value, icon, color, suffix = '', delay = 0 }) => {
 // ─── Donut Chart ──────────────────────────────────────────────────────────────
 
 const DonutChart = ({ data, total }) => {
-  const animProgress = useRef(new Animated.Value(0)).current;
+  // Use a key-based remount approach for clean re-animation on data change
   const [progress, setProgress] = useState(0);
   const [activeIndex, setActiveIndex] = useState(null);
+  const animProgress = useRef(new Animated.Value(0)).current;
   const isMounted = useRef(true);
 
   useEffect(() => {
@@ -114,21 +153,30 @@ const DonutChart = ({ data, total }) => {
     return () => { isMounted.current = false; };
   }, []);
 
+  // FIX: Reset and re-animate whenever data changes (use JSON key to detect content changes)
+  const dataKey = useMemo(() => JSON.stringify(data.map(d => d.count)), [data]);
+
   useEffect(() => {
+    setProgress(0);
+    setActiveIndex(null);
     animProgress.setValue(0);
-    Animated.timing(animProgress, { toValue: 1, duration: 1200, useNativeDriver: false }).start();
+    const animation = Animated.timing(animProgress, { toValue: 1, duration: 1200, useNativeDriver: false });
+    animation.start();
     const id = animProgress.addListener(({ value }) => {
       if (isMounted.current) setProgress(value);
     });
-    return () => animProgress.removeListener(id);
-  }, [data]);
+    return () => {
+      animation.stop();
+      animProgress.removeListener(id);
+    };
+  }, [dataKey]);
 
   const cx = DONUT_SIZE / 2;
   const cy = DONUT_SIZE / 2;
 
   const slices = useMemo(() => {
     let cumAngle = 0;
-    return data.map((item, i) => {
+    return data.map((item) => {
       const pct = total > 0 ? item.count / total : 0;
       const angle = pct * 360;
       const start = cumAngle;
@@ -142,7 +190,6 @@ const DonutChart = ({ data, total }) => {
   return (
     <View style={styles.donutContainer}>
       <Svg width={DONUT_SIZE} height={DONUT_SIZE}>
-        {/* Background ring */}
         <Circle cx={cx} cy={cy} r={DONUT_RADIUS} fill="none" stroke="#F0F0F5" strokeWidth={DONUT_STROKE} />
         {slices.map((slice, i) => {
           const drawnEnd = slice.startAngle + (slice.endAngle - slice.startAngle) * progress;
@@ -160,7 +207,6 @@ const DonutChart = ({ data, total }) => {
             />
           );
         })}
-        {/* Center text */}
         <SvgText x={cx} y={cy - 10} textAnchor="middle" fontSize="28" fontWeight="bold" fill="#2d3436">
           {centerLabel ? Math.round(centerLabel.pct * 100) + '%' : total}
         </SvgText>
@@ -169,7 +215,6 @@ const DonutChart = ({ data, total }) => {
         </SvgText>
       </Svg>
 
-      {/* Legend */}
       <View style={styles.legendContainer}>
         {slices.map((slice, i) => (
           <TouchableOpacity
@@ -179,12 +224,8 @@ const DonutChart = ({ data, total }) => {
             activeOpacity={0.7}
           >
             <View style={[styles.legendDot, { backgroundColor: slice.color || '#6c5ce7' }]} />
-            <Text style={styles.legendLabel} numberOfLines={1}>
-              {slice.label}
-            </Text>
-            <Text style={[styles.legendCount, { color: slice.color || '#6c5ce7' }]}>
-              {slice.count}
-            </Text>
+            <Text style={styles.legendLabel} numberOfLines={1}>{slice.label}</Text>
+            <Text style={[styles.legendCount, { color: slice.color || '#6c5ce7' }]}>{slice.count}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -195,9 +236,9 @@ const DonutChart = ({ data, total }) => {
 // ─── Line Chart (Daily Trend) ─────────────────────────────────────────────────
 
 const LineChart = ({ dailyData }) => {
-  const animProgress = useRef(new Animated.Value(0)).current;
   const [progress, setProgress] = useState(0);
   const [tooltip, setTooltip] = useState(null);
+  const animProgress = useRef(new Animated.Value(0)).current;
   const isMounted = useRef(true);
 
   useEffect(() => {
@@ -205,14 +246,26 @@ const LineChart = ({ dailyData }) => {
     return () => { isMounted.current = false; };
   }, []);
 
+  // FIX: Use JSON key to detect actual data content changes
+  const dataKey = useMemo(
+    () => JSON.stringify(dailyData?.map(d => `${d.date}:${d.total_entries}`)),
+    [dailyData],
+  );
+
   useEffect(() => {
+    setProgress(0);
+    setTooltip(null);
     animProgress.setValue(0);
-    Animated.timing(animProgress, { toValue: 1, duration: 1400, useNativeDriver: false }).start();
+    const animation = Animated.timing(animProgress, { toValue: 1, duration: 1400, useNativeDriver: false });
+    animation.start();
     const id = animProgress.addListener(({ value }) => {
       if (isMounted.current) setProgress(value);
     });
-    return () => animProgress.removeListener(id);
-  }, [dailyData]);
+    return () => {
+      animation.stop();
+      animProgress.removeListener(id);
+    };
+  }, [dataKey]);
 
   if (!dailyData || dailyData.length < 2) {
     return (
@@ -231,19 +284,15 @@ const LineChart = ({ dailyData }) => {
   const H = CHART_HEIGHT - PAD_T - PAD_B;
 
   const maxVal = Math.max(...dailyData.map(d => d.total_entries), 1);
-  const minVal = 0;
 
   const toX = (i) => PAD_L + (i / (dailyData.length - 1)) * W;
-  const toY = (v) => PAD_T + H - ((v - minVal) / (maxVal - minVal)) * H;
+  const toY = (v) => PAD_T + H - (v / maxVal) * H;
 
-  // Smooth curve using cardinal spline
   const buildPath = () => {
     const pts = dailyData.map((d, i) => ({ x: toX(i), y: toY(d.total_entries) }));
-    if (pts.length < 2) return '';
-
-    const totalPoints = Math.floor(pts.length * progress);
-    const visiblePts = pts.slice(0, Math.max(2, totalPoints));
-
+    const totalPoints = Math.max(2, Math.floor(pts.length * progress));
+    const visiblePts = pts.slice(0, totalPoints);
+    if (visiblePts.length < 2) return '';
     let d = `M ${visiblePts[0].x} ${visiblePts[0].y}`;
     for (let i = 1; i < visiblePts.length; i++) {
       const p0 = visiblePts[i - 1];
@@ -256,10 +305,9 @@ const LineChart = ({ dailyData }) => {
 
   const buildAreaPath = () => {
     const pts = dailyData.map((d, i) => ({ x: toX(i), y: toY(d.total_entries) }));
-    const totalPoints = Math.floor(pts.length * progress);
-    const visiblePts = pts.slice(0, Math.max(2, totalPoints));
+    const totalPoints = Math.max(2, Math.floor(pts.length * progress));
+    const visiblePts = pts.slice(0, totalPoints);
     if (visiblePts.length < 2) return '';
-
     let d = `M ${visiblePts[0].x} ${PAD_T + H}`;
     d += ` L ${visiblePts[0].x} ${visiblePts[0].y}`;
     for (let i = 1; i < visiblePts.length; i++) {
@@ -277,10 +325,10 @@ const LineChart = ({ dailyData }) => {
     label: Math.round(maxVal * p),
   }));
 
-  const xLabels = dailyData.filter((_, i) => {
-    const step = Math.ceil(dailyData.length / 5);
-    return i % step === 0 || i === dailyData.length - 1;
-  });
+  const step = Math.ceil(dailyData.length / 5);
+  const xLabels = dailyData
+    .map((d, i) => ({ ...d, idx: i }))
+    .filter((_, i) => i % step === 0 || i === dailyData.length - 1);
 
   const linePath = buildPath();
   const areaPath = buildAreaPath();
@@ -294,8 +342,6 @@ const LineChart = ({ dailyData }) => {
             <Stop offset="100%" stopColor="#6c5ce7" stopOpacity="0.02" />
           </LinearGradient>
         </Defs>
-
-        {/* Grid lines */}
         {gridLines.map((g, i) => (
           <G key={i}>
             <Line x1={PAD_L} y1={g.y} x2={PAD_L + W} y2={g.y} stroke="#F0EFF8" strokeWidth="1" strokeDasharray="4 3" />
@@ -304,16 +350,10 @@ const LineChart = ({ dailyData }) => {
             </SvgText>
           </G>
         ))}
-
-        {/* Area fill */}
         {areaPath ? <Path d={areaPath} fill="url(#areaGrad)" /> : null}
-
-        {/* Line */}
         {linePath ? (
           <Path d={linePath} fill="none" stroke="#6c5ce7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         ) : null}
-
-        {/* Data dots */}
         {dailyData.map((d, i) => {
           if (i > Math.floor(dailyData.length * progress)) return null;
           return (
@@ -329,15 +369,13 @@ const LineChart = ({ dailyData }) => {
             />
           );
         })}
-
-        {/* Tooltip */}
         {tooltip && (() => {
           const tx = toX(tooltip.index);
           const ty = toY(tooltip.total_entries);
           const boxW = 70;
           const boxH = 38;
           const bx = Math.min(tx - boxW / 2, CHART_WIDTH - boxW - 4);
-          const by = ty - boxH - 10;
+          const by = Math.max(PAD_T, ty - boxH - 10);
           return (
             <G>
               <Rect x={bx} y={by} width={boxW} height={boxH} rx="8" fill="#2d3436" opacity="0.92" />
@@ -350,16 +388,11 @@ const LineChart = ({ dailyData }) => {
             </G>
           );
         })()}
-
-        {/* X-axis labels */}
-        {xLabels.map((d, i) => {
-          const idx = dailyData.indexOf(d);
-          return (
-            <SvgText key={i} x={toX(idx)} y={PAD_T + H + 18} textAnchor="middle" fontSize="9" fill="#AAA" fontWeight="600">
-              {d.date?.slice(5)}
-            </SvgText>
-          );
-        })}
+        {xLabels.map((d) => (
+          <SvgText key={d.idx} x={toX(d.idx)} y={PAD_T + H + 18} textAnchor="middle" fontSize="9" fill="#AAA" fontWeight="600">
+            {d.date?.slice(5)}
+          </SvgText>
+        ))}
       </Svg>
     </View>
   );
@@ -374,12 +407,21 @@ const BarChart = ({ data, total }) => {
   const PAD_R = 50;
   const W = CHART_WIDTH - PAD_L - PAD_R;
 
-  // Keep animated values in a ref; rebuild when data length changes
-  const animWidthsRef = useRef([]);
-  if (animWidthsRef.current.length !== data.length) {
-    animWidthsRef.current = data.map(() => new Animated.Value(0));
+  // FIX: Rebuild animated values when data *content* changes, not just length.
+  // Store as ref keyed by a stable data signature.
+  const dataSignature = useMemo(
+    () => data.map(d => `${d.label}:${d.count}`).join(','),
+    [data],
+  );
+  const animWidthsRef = useRef({ sig: '', anims: [] });
+
+  if (animWidthsRef.current.sig !== dataSignature) {
+    animWidthsRef.current = {
+      sig: dataSignature,
+      anims: data.map(() => new Animated.Value(0)),
+    };
   }
-  const animWidths = animWidthsRef.current;
+  const animWidths = animWidthsRef.current.anims;
 
   useEffect(() => {
     const animations = animWidths.map((anim, i) => {
@@ -396,7 +438,7 @@ const BarChart = ({ data, total }) => {
     const composite = Animated.parallel(animations);
     composite.start();
     return () => composite.stop();
-  }, [data, total]);
+  }, [dataSignature, total]);
 
   const chartH = data.length * (BAR_H + GAP);
 
@@ -405,7 +447,7 @@ const BarChart = ({ data, total }) => {
       {data.map((item, i) => {
         const pct = total > 0 ? (item.count / total) * 100 : 0;
         return (
-          <View key={i} style={[styles.barRow, { height: BAR_H, marginBottom: GAP }]}>
+          <View key={item.label} style={[styles.barRow, { height: BAR_H, marginBottom: GAP }]}>
             <Text style={styles.barLabel} numberOfLines={1}>{item.label}</Text>
             <View style={styles.barTrack}>
               <Animated.View
@@ -442,7 +484,7 @@ const MoodHeatmap = ({ dailyData }) => {
       d.setDate(today.getDate() - i);
       const key = d.toISOString().slice(0, 10);
       const found = dailyData.find(x => x.date === key);
-      result.push({ date: key, count: found?.total_entries || 0, day: d.getDay() });
+      result.push({ date: key, count: found?.total_entries || 0 });
     }
     return result;
   }, [dailyData]);
@@ -451,10 +493,8 @@ const MoodHeatmap = ({ dailyData }) => {
 
   const CELL = 28;
   const GAP = 4;
-  const COLS = 7;
-  const ROWS = 4;
 
-  const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
   const getColor = (count) => {
     if (count === 0) return '#F0EFF8';
@@ -465,28 +505,40 @@ const MoodHeatmap = ({ dailyData }) => {
     return '#6c5ce7';
   };
 
-  const weeks = [];
-  for (let col = 0; col < COLS; col++) {
-    weeks.push(last28.slice(col * ROWS, col * ROWS + ROWS));
-  }
+  // FIX: Lay out as rows (weeks), not columns, for correct calendar grid
+  // last28[0] is the oldest day — figure out which weekday it lands on
+  const startDayOfWeek = new Date(last28[0].date).getDay(); // 0=Sun
+  // Pad front so the first day aligns to correct column
+  const paddedDays = [
+    ...Array(startDayOfWeek).fill(null),
+    ...last28,
+  ];
 
   return (
     <View style={styles.heatmapContainer}>
+      {/* Day-of-week header */}
       <View style={styles.heatmapDayLabels}>
         {dayLabels.map((l, i) => (
-          <Text key={i} style={styles.heatmapDayLabel}>{l}</Text>
+          <Text key={i} style={[styles.heatmapDayLabel, { width: CELL + GAP }]}>{l}</Text>
         ))}
       </View>
+      {/* Grid: rows of 7 */}
       <View style={styles.heatmapGrid}>
-        {last28.map((day, i) => (
+        {paddedDays.map((day, i) => (
           <View
             key={i}
             style={[
               styles.heatmapCell,
-              { backgroundColor: getColor(day.count), width: CELL, height: CELL, borderRadius: 7, margin: GAP / 2 },
+              {
+                backgroundColor: day ? getColor(day.count) : 'transparent',
+                width: CELL,
+                height: CELL,
+                borderRadius: 7,
+                margin: GAP / 2,
+              },
             ]}
           >
-            {day.count > 0 && (
+            {day && day.count > 0 && (
               <Text style={styles.heatmapCellText}>{day.count}</Text>
             )}
           </View>
@@ -517,17 +569,49 @@ const SectionCard = ({ title, icon, iconColor = '#6c5ce7', children, accentColor
   </View>
 );
 
+// ─── Mood Metadata Helpers ────────────────────────────────────────────────────
+
+const MOOD_COLORS = {
+  calm: '#A8E6CF', peaceful: '#B2E2F2', serene: '#D4F1F4', minimalist: '#D0D0D0',
+  happy: '#FFDE7D', energetic: '#FFD93D', playful: '#FF8B94', vibrant: '#6BCB77',
+  sad: '#A2D2FF', lonely: '#6C757D', pensive: '#4A4E69', gloomy: '#9A8C98',
+  anxious: '#D4A5A5', chaotic: '#E94560', intense: '#FF4D4D', gritty: '#666',
+  nostalgic: '#FFAAA5', romantic: '#FFB7B2', mystical: '#9D4EDD', vintage: '#B08968',
+  cozy: '#E6A15C', ethereal: '#B8C0FF', melancholic: '#4E6E81', industrial: '#545B64',
+  natural: '#4A7C59', futuristic: '#00F5D4', bold: '#F15BB5', solitary: '#8D99AE',
+  tense: '#D90429', hopeful: '#FEE440',
+};
+
+const MOOD_EMOJIS = {
+  calm: '😌', peaceful: '🕊️', serene: '🧘', minimalist: '⚪', happy: '😊',
+  energetic: '⚡', playful: '🎈', vibrant: '🌈', sad: '😢', lonely: '👤',
+  pensive: '🤔', gloomy: '☁️', anxious: '😰', chaotic: '🌀', intense: '🔥',
+  gritty: '⛓️', nostalgic: '📺', romantic: '❤️', mystical: '✨', vintage: '🎞️',
+  cozy: '🕯️', ethereal: '🌫️', melancholic: '🥀', industrial: '⚙️', natural: '🌲',
+  futuristic: '🤖', bold: '🏎️', solitary: '🏔️', tense: '⚠️', hopeful: '🌅',
+};
+
+const getMoodColor = (mood) => MOOD_COLORS[mood?.toLowerCase()] || '#6c5ce7';
+const getMoodEmoji = (mood) => MOOD_EMOJIS[mood?.toLowerCase()] || '🌈';
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moodGoal, onUpdateGoal }) => {
   const contrastColor = getContrastColor(appBgColor);
   const headerAnim = useRef(new Animated.Value(0)).current;
+  const [showGoalPicker, setShowGoalPicker] = useState(false);
 
   useEffect(() => {
     if (analyticsData) {
+      headerAnim.setValue(0);
       Animated.spring(headerAnim, { toValue: 1, tension: 50, friction: 8, useNativeDriver: true }).start();
     }
   }, [analyticsData]);
+
+  const handleSetGoal = useCallback((vibe) => {
+    onUpdateGoal && onUpdateGoal(vibe);
+    setShowGoalPicker(false);
+  }, [onUpdateGoal]);
 
   if (isLoading && !analyticsData) {
     return (
@@ -543,7 +627,9 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moo
       <View style={styles.centerContainer}>
         <Icon name="chart-donut-variant" size={64} color="#d0cde8" />
         <Text style={[styles.emptyText, { color: contrastColor }]}>No analytics yet.</Text>
-        <Text style={[styles.emptySubText, { color: contrastColor, opacity: 0.5 }]}>Keep logging moods to unlock insights.</Text>
+        <Text style={[styles.emptySubText, { color: contrastColor, opacity: 0.5 }]}>
+          Keep logging moods to unlock insights.
+        </Text>
         {onRefresh && (
           <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
             <Icon name="refresh" size={16} color="#fff" />
@@ -555,36 +641,30 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moo
   }
 
   const {
-    mood_distribution = [],
     daily_breakdown = [],
-    summary = {},
     total_entries = 0,
   } = analyticsData;
 
-  // Build distribution from mood_frequency if mood_distribution is not provided
-  const distribution = mood_distribution.length > 0
-    ? mood_distribution
-    : Object.entries(analyticsData.mood_frequency || {})
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
-        .map(([label, count]) => ({
-          label,
-          count,
-          color: getMoodColor(label),
-        }));
+  // FIX: Build distribution from mood_frequency (what the backend actually returns)
+  const distribution = Object.entries(analyticsData.mood_frequency || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([label, count]) => ({
+      label,
+      count,
+      color: getMoodColor(label),
+    }));
 
   const totalLogs = distribution.reduce((a, c) => a + c.count, 0) || total_entries;
-  const streak = summary?.streak || analyticsData?.streak || 0;
-  const avgConfidence = summary?.avg_confidence ?? analyticsData?.avg_confidence ?? 0;
-  const topMood = summary?.top_mood || analyticsData?.most_common || 'N/A';
+  const topMood = analyticsData.most_common || (distribution[0]?.label) || 'N/A';
 
-  // Goal Calculation
+  // FIX: Goal — derive progress directly from distribution data
   const goalVibe = moodGoal?.vibe;
-  const goalStats = goalVibe ? distribution.find(d => d.label?.toLowerCase() === goalVibe.toLowerCase()) : null;
-  const goalCount = goalStats ? goalStats.count : 0;
-  const goalProgress = totalLogs > 0 ? (goalCount / totalLogs) : 0;
-
-  const [showGoalPicker, setShowGoalPicker] = useState(false);
+  const goalStats = goalVibe
+    ? distribution.find(d => d.label?.toLowerCase() === goalVibe.toLowerCase())
+    : null;
+  const goalCount = goalStats?.count ?? 0;
+  const goalProgress = totalLogs > 0 ? goalCount / totalLogs : 0;
 
   return (
     <ScrollView
@@ -593,7 +673,14 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moo
       contentContainerStyle={{ paddingBottom: 48 }}
     >
       {/* Header */}
-      <Animated.View style={{ opacity: headerAnim, transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
+      <Animated.View
+        style={{
+          opacity: headerAnim,
+          transform: [{
+            translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }),
+          }],
+        }}
+      >
         <Text style={[styles.pageTitle, { color: contrastColor }]}>Emotional Journey</Text>
         <Text style={[styles.pageSubtitle, { color: contrastColor, opacity: 0.5 }]}>
           Last 30 days · {totalLogs} {totalLogs === 1 ? 'entry' : 'entries'}
@@ -603,16 +690,24 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moo
       {/* Stat cards */}
       <View style={styles.statsGrid}>
         <StatCard title="Entries" value={totalLogs} icon="calendar-check" color="#6c5ce7" delay={0} />
-        <StatCard title="Streak" value={streak} suffix=" days" icon="fire" color="#e17055" delay={80} />
-        <StatCard title="Confidence" value={Math.round(avgConfidence * 100)} suffix="%" icon="shield-check" color="#00b894" delay={160} />
-        <StatCard title="Top Mood" value={0} icon="emoticon-happy-outline" color="#fd79a8" delay={240}
-          // override for string value
-        />
+        {/* FIX: Correct top mood display — show it as a text card, not AnimatedNumber */}
+        <View style={styles.statCard}>
+          <Animated.View style={[{ opacity: 1 }]}>
+            <View style={[styles.statIconWrap, { backgroundColor: '#fd79a8' + '1A' }]}>
+              <Icon name="emoticon-happy-outline" size={22} color="#fd79a8" />
+            </View>
+            <Text style={styles.statTitle}>Top Mood</Text>
+            <Text style={[styles.statValueText, { color: '#fd79a8' }]} numberOfLines={1}>
+              {getMoodEmoji(topMood)} {topMood.charAt(0).toUpperCase() + topMood.slice(1)}
+            </Text>
+          </Animated.View>
+        </View>
       </View>
-      {/* Top mood card overrides */}
-      <View style={[styles.topMoodBanner, { borderColor: '#fd79a8' + '40' }]}>
+
+      {/* Top mood banner */}
+      <View style={[styles.topMoodBanner, { borderColor: getMoodColor(topMood) + '40' }]}>
         <Text style={styles.topMoodEmoji}>{getMoodEmoji(topMood)}</Text>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.topMoodLabel}>Dominant Vibe</Text>
           <Text style={[styles.topMoodName, { color: getMoodColor(topMood) }]}>
             {topMood.charAt(0).toUpperCase() + topMood.slice(1)}
@@ -620,7 +715,7 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moo
         </View>
         <View style={[styles.topMoodPill, { backgroundColor: getMoodColor(topMood) + '20' }]}>
           <Text style={[styles.topMoodPillText, { color: getMoodColor(topMood) }]}>
-            #{1}
+            {distribution[0]?.count ?? 0}×
           </Text>
         </View>
       </View>
@@ -630,16 +725,20 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moo
         {goalVibe ? (
           <View style={styles.goalActiveContainer}>
             <View style={styles.goalInfoRow}>
-              <Text style={styles.goalText}>Target Vibe: <Text style={{fontWeight: 'bold', color: getMoodColor(goalVibe)}}>{goalVibe}</Text></Text>
+              <Text style={styles.goalText}>
+                Target Vibe:{' '}
+                <Text style={{ fontWeight: 'bold', color: getMoodColor(goalVibe) }}>
+                  {getMoodEmoji(goalVibe)} {goalVibe}
+                </Text>
+              </Text>
               <TouchableOpacity onPress={() => setShowGoalPicker(true)}>
                 <Text style={styles.goalChangeBtn}>Change</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.goalProgressTrack}>
-              <Animated.View style={[styles.goalProgressBar, { width: `${goalProgress * 100}%`, backgroundColor: getMoodColor(goalVibe) }]} />
-            </View>
+            {/* FIX: Use AnimatedProgressBar instead of static width string */}
+            <AnimatedProgressBar progress={goalProgress} color={getMoodColor(goalVibe)} />
             <Text style={styles.goalSubtext}>
-              {goalCount} {goalCount === 1 ? 'entry' : 'entries'} this month · {Math.round(goalProgress * 100)}% of your vibes
+              {goalCount} {goalCount === 1 ? 'entry' : 'entries'} matched · {Math.round(goalProgress * 100)}% of your vibes this month
             </Text>
           </View>
         ) : (
@@ -651,25 +750,38 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moo
       </SectionCard>
 
       {/* Goal Picker Modal */}
-      <Modal visible={showGoalPicker} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Choose your Focus</Text>
-            <Text style={styles.modalSub}>Which vibe would you like to cultivate more?</Text>
-            <ScrollView contentContainerStyle={styles.vibeGrid} style={{maxHeight: 300}}>
-              {Object.keys(MOOD_COLORS).map((vibe) => (
-                <TouchableOpacity key={vibe} style={[styles.vibeChip, {borderColor: getMoodColor(vibe)}]} 
-                  onPress={() => { onUpdateGoal(vibe); setShowGoalPicker(false); }}>
-                  <Text style={styles.vibeChipEmoji}>{getMoodEmoji(vibe)}</Text>
-                  <Text style={styles.vibeChipText}>{vibe}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowGoalPicker(false)}>
-              <Text style={styles.closeModalBtnText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+      <Modal visible={showGoalPicker} transparent animationType="fade" onRequestClose={() => setShowGoalPicker(false)}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowGoalPicker(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Choose your Focus</Text>
+              <Text style={styles.modalSub}>Which vibe would you like to cultivate more?</Text>
+              <ScrollView contentContainerStyle={styles.vibeGrid} style={{ maxHeight: 300 }}>
+                {Object.keys(MOOD_COLORS).map((vibe) => (
+                  <TouchableOpacity
+                    key={vibe}
+                    style={[
+                      styles.vibeChip,
+                      { borderColor: getMoodColor(vibe) },
+                      goalVibe === vibe && { backgroundColor: getMoodColor(vibe) + '25' },
+                    ]}
+                    onPress={() => handleSetGoal(vibe)}
+                  >
+                    <Text style={styles.vibeChipEmoji}>{getMoodEmoji(vibe)}</Text>
+                    <Text style={styles.vibeChipText}>{vibe}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowGoalPicker(false)}>
+                <Text style={styles.closeModalBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       {/* Daily Trend */}
@@ -700,13 +812,6 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moo
         </SectionCard>
       )}
 
-      {/* AI Insight */}
-      {summary?.ai_insight && (
-        <SectionCard title="AI Insight" icon="auto-fix" iconColor="#f1c40f" accentColor="#f1c40f">
-          <Text style={styles.insightText}>{summary.ai_insight}</Text>
-        </SectionCard>
-      )}
-
       {/* Refresh */}
       {onRefresh && (
         <TouchableOpacity style={styles.fullRefreshButton} onPress={onRefresh}>
@@ -717,31 +822,6 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moo
     </ScrollView>
   );
 };
-
-// ─── Mood Metadata Helpers ────────────────────────────────────────────────────
-
-const MOOD_COLORS = {
-  calm: '#A8E6CF', peaceful: '#B2E2F2', serene: '#D4F1F4', minimalist: '#D0D0D0',
-  happy: '#FFDE7D', energetic: '#FFD93D', playful: '#FF8B94', vibrant: '#6BCB77',
-  sad: '#A2D2FF', lonely: '#6C757D', pensive: '#4A4E69', gloomy: '#9A8C98',
-  anxious: '#D4A5A5', chaotic: '#E94560', intense: '#FF4D4D', gritty: '#666',
-  nostalgic: '#FFAAA5', romantic: '#FFB7B2', mystical: '#9D4EDD', vintage: '#B08968',
-  cozy: '#E6A15C', ethereal: '#B8C0FF', melancholic: '#4E6E81', industrial: '#545B64',
-  natural: '#4A7C59', futuristic: '#00F5D4', bold: '#F15BB5', solitary: '#8D99AE',
-  tense: '#D90429', hopeful: '#FEE440',
-};
-
-const MOOD_EMOJIS = {
-  calm: '😌', peaceful: '🕊️', serene: '🧘', minimalist: '⚪', happy: '😊',
-  energetic: '⚡', playful: '🎈', vibrant: '🌈', sad: '😢', lonely: '👤',
-  pensive: '🤔', gloomy: '☁️', anxious: '😰', chaotic: '🌀', intense: '🔥',
-  gritty: '⛓️', nostalgic: '📺', romantic: '❤️', mystical: '✨', vintage: '🎞️',
-  cozy: '🕯️', ethereal: '🌫️', melancholic: '🥀', industrial: '⚙️', natural: '🌲',
-  futuristic: '🤖', bold: '🏎️', solitary: '🏔️', tense: '⚠️', hopeful: '🌅',
-};
-
-const getMoodColor = (mood) => MOOD_COLORS[mood?.toLowerCase()] || '#6c5ce7';
-const getMoodEmoji = (mood) => MOOD_EMOJIS[mood?.toLowerCase()] || '🌈';
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -760,7 +840,6 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 28, fontWeight: '900', letterSpacing: -0.5, marginTop: 8 },
   pageSubtitle: { fontSize: 13, fontWeight: '600', marginTop: 2, marginBottom: 20 },
 
-  // Stat grid
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },
   statCard: {
     width: (SCREEN_WIDTH - 58) / 2,
@@ -777,47 +856,31 @@ const styles = StyleSheet.create({
   statIconWrap: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   statTitle: { fontSize: 11, color: '#aaa', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   statValue: { fontSize: 26, fontWeight: '900', letterSpacing: -1 },
+  // FIX: text variant for non-numeric stats like top mood
+  statValueText: { fontSize: 15, fontWeight: '800', letterSpacing: -0.3 },
 
-  // Top mood banner
   topMoodBanner: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    elevation: 3,
-    shadowColor: '#fd79a8',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.09,
-    shadowRadius: 10,
+    backgroundColor: '#fff', borderRadius: 20, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    marginBottom: 14, borderWidth: 1, elevation: 3,
+    shadowColor: '#fd79a8', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.09, shadowRadius: 10,
   },
   topMoodEmoji: { fontSize: 38 },
   topMoodLabel: { fontSize: 11, color: '#aaa', fontWeight: '700', textTransform: 'uppercase' },
   topMoodName: { fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
-  topMoodPill: { marginLeft: 'auto', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
+  topMoodPill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
   topMoodPillText: { fontSize: 12, fontWeight: '800' },
 
-  // Section card
   sectionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 14,
-    elevation: 3,
-    shadowColor: '#6c5ce7',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    overflow: 'hidden',
+    backgroundColor: '#fff', borderRadius: 24, padding: 20, marginBottom: 14,
+    elevation: 3, shadowColor: '#6c5ce7', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06, shadowRadius: 12, overflow: 'hidden',
   },
   sectionCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
   sectionIconWrap: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   sectionCardTitle: { fontSize: 16, fontWeight: '800', color: '#2d3436' },
 
-  // Donut
   donutContainer: { alignItems: 'center' },
   legendContainer: { width: '100%', gap: 6, marginTop: 10 },
   legendItem: {
@@ -829,24 +892,18 @@ const styles = StyleSheet.create({
   legendLabel: { flex: 1, fontSize: 13, fontWeight: '600', color: '#2d3436', textTransform: 'capitalize' },
   legendCount: { fontSize: 13, fontWeight: '800' },
 
-  // Line chart
   chartEmpty: { height: 100, justifyContent: 'center', alignItems: 'center', gap: 8 },
   chartEmptyText: { color: '#ccc', fontSize: 13 },
 
-  // Bar chart
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   barLabel: { width: 72, fontSize: 12, fontWeight: '600', color: '#555', textTransform: 'capitalize', textAlign: 'right' },
-  barTrack: {
-    flex: 1, height: 22, backgroundColor: '#F3F2FF',
-    borderRadius: 6, overflow: 'hidden',
-  },
+  barTrack: { flex: 1, height: 22, backgroundColor: '#F3F2FF', borderRadius: 6, overflow: 'hidden' },
   barFill: { height: '100%' },
   barPct: { width: 36, fontSize: 11, fontWeight: '800', textAlign: 'right' },
 
-  // Heatmap
   heatmapContainer: { alignItems: 'center', gap: 8 },
-  heatmapDayLabels: { flexDirection: 'row', gap: 2, alignSelf: 'flex-start' },
-  heatmapDayLabel: { width: 32, textAlign: 'center', fontSize: 10, fontWeight: '700', color: '#aaa' },
+  heatmapDayLabels: { flexDirection: 'row', alignSelf: 'flex-start' },
+  heatmapDayLabel: { textAlign: 'center', fontSize: 10, fontWeight: '700', color: '#aaa' },
   heatmapGrid: { flexDirection: 'row', flexWrap: 'wrap', width: 7 * (28 + 4) },
   heatmapCell: { justifyContent: 'center', alignItems: 'center' },
   heatmapCellText: { fontSize: 9, fontWeight: '800', color: '#fff' },
@@ -854,39 +911,32 @@ const styles = StyleSheet.create({
   heatmapLegendCell: { width: 14, height: 14, borderRadius: 3 },
   heatmapLegendLabel: { fontSize: 10, color: '#aaa', fontWeight: '600' },
 
-  // Insight
   insightText: { fontSize: 14, lineHeight: 22, color: '#2d3436', fontStyle: 'italic' },
 
-  // Refresh
   fullRefreshButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, gap: 6 },
   fullRefreshText: { fontSize: 13, color: '#bbb', fontWeight: '600' },
 
-  // Goal Styles
   goalActiveContainer: { paddingVertical: 4 },
   goalInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  goalText: { fontSize: 15, color: '#2d3436' },
-  goalChangeBtn: { fontSize: 13, color: '#6c5ce7', fontWeight: '700' },
+  goalText: { fontSize: 15, color: '#2d3436', flex: 1 },
+  goalChangeBtn: { fontSize: 13, color: '#6c5ce7', fontWeight: '700', marginLeft: 8 },
   goalProgressTrack: { height: 10, backgroundColor: '#f0eff8', borderRadius: 5, overflow: 'hidden' },
   goalProgressBar: { height: '100%', borderRadius: 5 },
   goalSubtext: { fontSize: 12, color: '#aaa', marginTop: 8, fontWeight: '600' },
-  setGoalBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 12, borderStyle: 'dashed', borderWidth: 2, borderColor: '#e17055', borderRadius: 16 },
+  setGoalBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    paddingVertical: 12, borderStyle: 'dashed', borderWidth: 2, borderColor: '#e17055', borderRadius: 16,
+  },
   setGoalBtnText: { color: '#e17055', fontWeight: '700', fontSize: 14 },
 
-  // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: 400 },
   modalTitle: { fontSize: 20, fontWeight: '800', color: '#2d3436', textAlign: 'center' },
   modalSub: { fontSize: 14, color: '#666', textAlign: 'center', marginTop: 4, marginBottom: 20 },
   vibeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
-  vibeChip: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 6, 
-    paddingHorizontal: 12, 
-    paddingVertical: 8, 
-    borderRadius: 20, 
-    borderWidth: 1.5, 
-    backgroundColor: '#fff' 
+  vibeChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5, backgroundColor: '#fff',
   },
   vibeChipEmoji: { fontSize: 16 },
   vibeChipText: { fontSize: 13, fontWeight: '700', color: '#444', textTransform: 'capitalize' },

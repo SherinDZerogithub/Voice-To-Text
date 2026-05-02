@@ -20,171 +20,238 @@ const DashboardHero = ({
 
   const getTimeMetadata = () => {
     const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return { greeting: "Good morning", question: "How are you starting your day?", emoji: "☀️" };
-    if (hour >= 12 && hour < 17) return { greeting: "Good afternoon", question: "How has your afternoon been so far?", emoji: "🌤️" };
-    if (hour >= 17 && hour < 21) return { greeting: "Good evening", question: "Ready to reflect on your day?", emoji: "🌆" };
-    return { greeting: "Late night check-in", question: "What's on your mind tonight?", emoji: "🌙" };
+    if (hour >= 5 && hour < 12)
+      return {greeting: 'Good morning', question: 'How are you starting your day?', emoji: '☀️'};
+    if (hour >= 12 && hour < 17)
+      return {greeting: 'Good afternoon', question: 'How has your afternoon been?', emoji: '🌤️'};
+    if (hour >= 17 && hour < 21)
+      return {greeting: 'Good evening', question: 'Ready to reflect on your day?', emoji: '🌆'};
+    return {greeting: 'Late night', question: "What's on your mind tonight?", emoji: '🌙'};
   };
 
   const timeMetadata = getTimeMetadata();
 
   return (
-    <View style={styles.dashboardHero}>
-      <TouchableOpacity style={styles.heroHistoryBtn} onPress={onOpenHistory}>
-        <Icon name="history" size={24} color={iconColor} />
-      </TouchableOpacity>
+    <View style={styles.card}>
 
-      <TouchableOpacity style={styles.heroLogoutBtn} onPress={onLogout}>
-        <Text style={styles.logoutText}>Logout</Text>
-      </TouchableOpacity>
-
-      <View style={styles.heroContent}>
-        <View style={styles.heroTextContainer}>
-          <Text style={styles.heroTitle}>Scene Vibe</Text>
-          <Text style={styles.heroGreeting}>
-            {isLoginFlow ? 'Welcome back 👋' : `${timeMetadata.greeting} ${timeMetadata.emoji}`}
-          </Text>
-          <Text style={styles.heroUserName}>{userName || 'Explorer'}</Text>
-          <Text style={styles.heroQuestion}>{timeMetadata.question}</Text>
+      {/* ── Top bar: app label + action buttons ── */}
+      <View style={styles.topBar}>
+        <View style={styles.appBadge}>
+          <View style={styles.appBadgeDot} />
+          <Text style={styles.appBadgeText}>Scene Vibe</Text>
         </View>
 
+        <View style={styles.topActions}>
+          <TouchableOpacity style={styles.iconBtn} onPress={onOpenHistory} activeOpacity={0.7}>
+            <Icon name="history" size={18} color={iconColor} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.7}>
+            <Icon name="logout-variant" size={14} color={iconColor} />
+            <Text style={styles.logoutText}>Sign out</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* ── Divider ── */}
+      <View style={styles.divider} />
+
+      {/* ── Main content: greeting text + avatar ── */}
+      <View style={styles.contentRow}>
+
+        {/* Left: greeting */}
+        <View style={styles.textBlock}>
+          <Text style={styles.greetingLine}>
+            {isLoginFlow ? 'Welcome back 👋' : `${timeMetadata.greeting} ${timeMetadata.emoji}`}
+          </Text>
+          <Text style={styles.userName} numberOfLines={1}>
+            {userName || 'Explorer'}
+          </Text>
+          <Text style={styles.question}>{timeMetadata.question}</Text>
+        </View>
+
+        {/* Right: avatar */}
         <Animated.View
           style={[
-            styles.heroAvatarContainer,
+            styles.avatarWrap,
             {
               opacity: avatarAnim,
               transform: [
                 {
                   scale: avatarAnim.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [0.8, 1],
+                    outputRange: [0.75, 1],
                   }),
                 },
                 {
                   translateY: avatarAnim.interpolate({
                     inputRange: [0, 1],
-                    outputRange: [20, 0],
+                    outputRange: [16, 0],
                   }),
                 },
               ],
             },
           ]}>
-          <AvatarDisplay config={avatarConfig} size={100} onPress={onEditAvatar} />
-          <TouchableOpacity style={styles.editAvatarBadge} onPress={onEditAvatar}>
-            <Icon name="pencil" size={16} color="#fff" />
+          <AvatarDisplay config={avatarConfig} size={88} onPress={onEditAvatar} />
+          <TouchableOpacity style={styles.editBadge} onPress={onEditAvatar} activeOpacity={0.8}>
+            <Icon name="pencil" size={12} color="#fff" />
           </TouchableOpacity>
         </Animated.View>
+
       </View>
     </View>
   );
 };
 
 const createStyles = (appBgColor, contrastColor) => {
-  const isDarkBg = contrastColor === '#ffffff';
+  const isDark = contrastColor === '#ffffff';
+  const subtleWhite = 'rgba(255,255,255,0.12)';
+  const subtleDark = 'rgba(0,0,0,0.06)';
+  const border = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)';
 
   return StyleSheet.create({
-    dashboardHero: {
+    card: {
       width: '100%',
-      backgroundColor: isDarkBg ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.03)',
+      backgroundColor: isDark ? subtleWhite : '#ffffff',
       borderRadius: 24,
-      padding: 20,
-      marginBottom: 25,
+      paddingHorizontal: 18,
+      paddingTop: 14,
+      paddingBottom: 18,
+      marginBottom: 20,
       borderWidth: 1,
-      borderColor: isDarkBg ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.05)',
-      position: 'relative',
-      overflow: 'hidden',
-      elevation: 4,
+      borderColor: border,
+      elevation: 3,
       shadowColor: '#000',
-      shadowOffset: {width: 0, height: 10},
-      shadowOpacity: 0.1,
-      shadowRadius: 15,
+      shadowOffset: {width: 0, height: 6},
+      shadowOpacity: 0.08,
+      shadowRadius: 14,
     },
-    heroContent: {
+
+    // ── Top bar ──
+    topBar: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
     },
-    heroTextContainer: {
-      flex: 1,
-      paddingRight: 15,
+    appBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
-    heroTitle: {
-      fontSize: 14,
-      fontWeight: '800',
-      color: contrastColor,
-      opacity: 0.6,
-      textTransform: 'uppercase',
-      letterSpacing: 2,
-      marginBottom: 8,
-    },
-    heroGreeting: {
-      fontSize: 20,
-      fontWeight: '400',
-      color: contrastColor,
-    },
-    heroUserName: {
-      fontSize: 36,
-      fontWeight: '800',
-      color: contrastColor,
-      letterSpacing: -1,
-      lineHeight: 40,
-      marginBottom: 4,
-    },
-    heroQuestion: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: contrastColor,
-      opacity: 0.8,
-    },
-    heroAvatarContainer: {
-      position: 'relative',
-      padding: 4,
-      borderRadius: 60,
-      backgroundColor: isDarkBg ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.02)',
-      borderWidth: 1,
-      borderColor: isDarkBg ? 'rgba(255,255,255,0.3)' : 'rgba(108, 92, 231, 0.2)',
-    },
-    editAvatarBadge: {
-      position: 'absolute',
-      bottom: -2,
-      right: -2,
+    appBadgeDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
       backgroundColor: '#6c5ce7',
+    },
+    appBadgeText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: contrastColor,
+      opacity: 0.5,
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+    },
+    topActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    iconBtn: {
       width: 34,
       height: 34,
-      borderRadius: 17,
+      borderRadius: 10,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: border,
+    },
+    logoutBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      height: 34,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)',
+      borderWidth: 1,
+      borderColor: border,
+    },
+    logoutText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: contrastColor,
+      opacity: 0.75,
+    },
+
+    // ── Divider ──
+    divider: {
+      height: 1,
+      backgroundColor: border,
+      marginBottom: 16,
+    },
+
+    // ── Content row ──
+    contentRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    textBlock: {
+      flex: 1,
+    },
+    greetingLine: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: contrastColor,
+      opacity: 0.6,
+      marginBottom: 2,
+    },
+    userName: {
+      fontSize: 30,
+      fontWeight: '800',
+      color: contrastColor,
+      letterSpacing: -0.8,
+      lineHeight: 34,
+      marginBottom: 5,
+    },
+    question: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: contrastColor,
+      opacity: 0.65,
+      lineHeight: 18,
+    },
+
+    // ── Avatar ──
+    avatarWrap: {
+      position: 'relative',
+      padding: 3,
+      borderRadius: 52,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(108,92,231,0.07)',
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(108,92,231,0.18)',
+    },
+    editBadge: {
+      position: 'absolute',
+      bottom: -1,
+      right: -1,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: '#6c5ce7',
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 2,
       borderColor: appBgColor,
-      elevation: 8,
-      shadowColor: '#000',
-      shadowOffset: {width: 0, height: 4},
-      shadowOpacity: 0.3,
-      shadowRadius: 5,
-    },
-    heroHistoryBtn: {
-      position: 'absolute',
-      top: 15,
-      left: 15,
-      padding: 8,
-      opacity: 0.6,
-      zIndex: 1,
-    },
-    heroLogoutBtn: {
-      position: 'absolute',
-      top: 15,
-      right: 15,
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      backgroundColor: 'rgba(255, 255, 255, 0.2)', // Slightly opaque white background
-      borderRadius: 15, // Rounded corners
-      opacity: 0.8,
-      zIndex: 1,
-    },
-    logoutText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: contrastColor,
+      elevation: 6,
+      shadowColor: '#6c5ce7',
+      shadowOffset: {width: 0, height: 2},
+      shadowOpacity: 0.4,
+      shadowRadius: 4,
     },
   });
 };
