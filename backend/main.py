@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import asyncio
 from fastapi import FastAPI, HTTPException, File, UploadFile, Body, Form, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
@@ -28,6 +29,34 @@ import requests
 
 load_dotenv()
 
+# ── Create uploads directory for storing user photos ──
+UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+
+def save_user_image(
+    image: Image.Image, user_id: int, filename: str = "photo.jpg"
+) -> str:
+    """
+    Save image to user-specific directory and return the relative path.
+    Directory structure: uploads/user_{user_id}/photo_{timestamp}.jpg
+    """
+    user_dir = os.path.join(UPLOADS_DIR, f"user_{user_id}")
+    os.makedirs(user_dir, exist_ok=True)
+
+    # Generate unique filename with timestamp
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")[:-3]
+    file_ext = os.path.splitext(filename)[1] or ".jpg"
+    saved_filename = f"photo_{timestamp}{file_ext}"
+
+    filepath = os.path.join(user_dir, saved_filename)
+    image.convert("RGB").save(filepath, "JPEG", quality=85)
+
+    # Return relative path for storage in database
+    relative_path = os.path.join("uploads", f"user_{user_id}", saved_filename)
+    return relative_path
+
+
 app = FastAPI(title="Emotion Mood Analytics Server")
 
 models.Base.metadata.create_all(bind=database.engine)
@@ -39,6 +68,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount uploads directory for serving photos
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 # Lazy-load models to avoid multiprocessing conflicts with --reload
 vibe_model = None
@@ -290,36 +322,36 @@ VIBE_META = {
 
 
 VIBE_YOUTUBE_QUERIES = {
-    "calm":        ["calm piano music playlist", "ambient relaxing music"],
-    "peaceful":    ["peaceful nature sounds music", "zen meditation music"],
-    "serene":      ["serene acoustic guitar playlist", "peaceful instrumental"],
-    "happy":       ["happy upbeat playlist 2024", "feel good pop music"],
-    "energetic":   ["high energy workout music", "pump up EDM playlist"],
-    "playful":     ["fun indie pop playlist", "playful quirky music"],
-    "vibrant":     ["vibrant latin music playlist", "upbeat world music"],
-    "sad":         ["sad indie playlist", "emotional piano music"],
-    "lonely":      ["lonely night music playlist", "solitary ambient music"],
-    "pensive":     ["pensive jazz playlist", "thoughtful instrumental music"],
-    "gloomy":      ["gloomy post-rock playlist", "dark ambient music"],
-    "anxious":     ["anxiety relief music", "calming music for anxiety"],
-    "chaotic":     ["chaotic drum and bass", "intense electronic music"],
-    "intense":     ["intense cinematic music", "powerful orchestral playlist"],
-    "gritty":      ["gritty blues rock playlist", "raw garage rock"],
-    "nostalgic":   ["nostalgic 80s playlist", "retro synthwave music"],
-    "romantic":    ["romantic jazz playlist", "love songs acoustic"],
-    "mystical":    ["mystical ethereal music", "magical fantasy soundtrack"],
-    "vintage":     ["vintage jazz cafe playlist", "classic 60s soul music"],
-    "cozy":        ["cozy coffee shop music", "cozy lo-fi playlist"],
-    "ethereal":    ["ethereal dream pop playlist", "floating ambient music"],
+    "calm": ["calm piano music playlist", "ambient relaxing music"],
+    "peaceful": ["peaceful nature sounds music", "zen meditation music"],
+    "serene": ["serene acoustic guitar playlist", "peaceful instrumental"],
+    "happy": ["happy upbeat playlist 2024", "feel good pop music"],
+    "energetic": ["high energy workout music", "pump up EDM playlist"],
+    "playful": ["fun indie pop playlist", "playful quirky music"],
+    "vibrant": ["vibrant latin music playlist", "upbeat world music"],
+    "sad": ["sad indie playlist", "emotional piano music"],
+    "lonely": ["lonely night music playlist", "solitary ambient music"],
+    "pensive": ["pensive jazz playlist", "thoughtful instrumental music"],
+    "gloomy": ["gloomy post-rock playlist", "dark ambient music"],
+    "anxious": ["anxiety relief music", "calming music for anxiety"],
+    "chaotic": ["chaotic drum and bass", "intense electronic music"],
+    "intense": ["intense cinematic music", "powerful orchestral playlist"],
+    "gritty": ["gritty blues rock playlist", "raw garage rock"],
+    "nostalgic": ["nostalgic 80s playlist", "retro synthwave music"],
+    "romantic": ["romantic jazz playlist", "love songs acoustic"],
+    "mystical": ["mystical ethereal music", "magical fantasy soundtrack"],
+    "vintage": ["vintage jazz cafe playlist", "classic 60s soul music"],
+    "cozy": ["cozy coffee shop music", "cozy lo-fi playlist"],
+    "ethereal": ["ethereal dream pop playlist", "floating ambient music"],
     "melancholic": ["melancholic classical music", "bittersweet indie folk"],
-    "industrial":  ["industrial techno playlist", "dark industrial music"],
-    "natural":     ["nature sounds forest music", "earthy folk music playlist"],
-    "futuristic":  ["futuristic synthwave playlist", "cyberpunk electronic music"],
-    "bold":        ["bold hip hop playlist", "powerful trap music"],
-    "solitary":    ["solitary acoustic music", "lone wolf playlist"],
-    "tense":       ["tense thriller soundtrack", "suspense music playlist"],
-    "hopeful":     ["hopeful uplifting music", "morning motivation playlist"],
-    "minimalist":  ["minimalist piano playlist", "sparse ambient music"],
+    "industrial": ["industrial techno playlist", "dark industrial music"],
+    "natural": ["nature sounds forest music", "earthy folk music playlist"],
+    "futuristic": ["futuristic synthwave playlist", "cyberpunk electronic music"],
+    "bold": ["bold hip hop playlist", "powerful trap music"],
+    "solitary": ["solitary acoustic music", "lone wolf playlist"],
+    "tense": ["tense thriller soundtrack", "suspense music playlist"],
+    "hopeful": ["hopeful uplifting music", "morning motivation playlist"],
+    "minimalist": ["minimalist piano playlist", "sparse ambient music"],
 }
 
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
@@ -366,7 +398,11 @@ def serialize_mood_log(log: models.MoodLog):
         "user_id": log.user_id,
         "vibe": log.vibe,
         "emoji": log.emoji,
-        "timestamp": log.timestamp.replace(tzinfo=timezone.utc).isoformat() if log.timestamp.tzinfo is None else log.timestamp.isoformat(),
+        "timestamp": (
+            log.timestamp.replace(tzinfo=timezone.utc).isoformat()
+            if log.timestamp.tzinfo is None
+            else log.timestamp.isoformat()
+        ),
         "short_caption": log.short_caption,
         "color": log.color,
         "scene_tags": scene_tags if isinstance(scene_tags, list) else [],
@@ -379,6 +415,7 @@ def serialize_mood_log(log: models.MoodLog):
         "color_palette": color_palette,
         "secondary_moods": secondary_moods,
         "all_scores": all_scores,
+        "image_path": log.image_path,
     }
 
 
@@ -442,7 +479,11 @@ def describe_avatar(avatar_config: Optional[dict]) -> str:
         return "an unspecified person"
 
     gender = avatar_config.get("gender", "person")
-    person = "young woman" if gender == "girl" else "young man" if gender == "boy" else "person"
+    person = (
+        "young woman"
+        if gender == "girl"
+        else "young man" if gender == "boy" else "person"
+    )
     skin = COLOR_NAMES.get(avatar_config.get("skinTone"), "")
     hair_color = COLOR_NAMES.get(avatar_config.get("hairColor"), "")
     hair_style = STYLE_NAMES.get(avatar_config.get("hairStyle"), "")
@@ -765,9 +806,11 @@ async def analyze_image(
     imageUrl: Optional[str] = Form(None),
     fileName: Optional[str] = Form("photo.jpg"),
     image_type: Optional[str] = Form("image/jpeg", alias="type"),
-    current_user: str = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
 ):
     image = None
+    image_path = None
 
     try:
         # ── 1. Receive the image ──
@@ -799,6 +842,13 @@ async def analyze_image(
         else:
             raise HTTPException(status_code=400, detail="No image provided")
 
+        # ── Save image to user's directory ──
+        try:
+            image_path = save_user_image(image, db_user.id, fileName)
+        except Exception as e:
+            print(f"[Image Save Error] {e}")
+            image_path = None
+
         # ── 2. Advanced Gemini pipeline ──
         if gemini_model:
             try:
@@ -818,13 +868,17 @@ async def analyze_image(
                         ).item()
                     ]
                 )
-                return build_full_response(vibe, description, structured)
+                response = build_full_response(vibe, description, structured)
+                response["image_path"] = image_path
+                return response
 
             except json.JSONDecodeError as je:
                 # Stage 2 JSON parse failed — fall back to BERT on Stage 1 description
                 print(f"[Stage 2 JSON Error] {je} — falling back to BERT")
                 bert_labels, _ = build_enriched_scores_from_bert(description)
-                return build_full_response(bert_labels[0], description, None)
+                response = build_full_response(bert_labels[0], description, None)
+                response["image_path"] = image_path
+                return response
 
             except Exception as ge:
                 print(f"[Gemini ERROR] {type(ge).__name__}: {ge}")
@@ -837,7 +891,9 @@ async def analyze_image(
                 bert_labels, _ = build_enriched_scores_from_bert(description)
                 vibe = bert_labels[0]
 
-                return build_full_response(vibe, description, None)
+                response = build_full_response(vibe, description, None)
+                response["image_path"] = image_path
+                return response
 
         else:
             # No Gemini key — Use Local BLIP for factual description
@@ -845,7 +901,9 @@ async def analyze_image(
             description = generate_local_caption(image)
             bert_labels, _ = build_enriched_scores_from_bert(description)
             vibe = bert_labels[0]
-            return build_full_response(vibe, description, None)
+            response = build_full_response(vibe, description, None)
+            response["image_path"] = image_path
+            return response
 
     except HTTPException:
         raise
@@ -861,13 +919,23 @@ def signup(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
 
     hashed_password = auth.get_password_hash(user.password)
-    new_user = models.User(email=user.email, name=user.name, hashed_password=hashed_password, avatar_config=user.avatar_config)
+    new_user = models.User(
+        email=user.email,
+        name=user.name,
+        hashed_password=hashed_password,
+        avatar_config=user.avatar_config,
+    )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
     access_token = auth.create_access_token(data={"sub": new_user.email})
-    return {"access_token": access_token, "token_type": "bearer", "user_name": new_user.name, "avatar_config": new_user.avatar_config}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_name": new_user.name,
+        "avatar_config": new_user.avatar_config,
+    }
 
 
 @app.post("/login", response_model=schemas.Token)
@@ -877,19 +945,24 @@ def login(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     access_token = auth.create_access_token(data={"sub": db_user.email})
-    return {"access_token": access_token, "token_type": "bearer", "user_name": db_user.name, "avatar_config": db_user.avatar_config}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_name": db_user.name,
+        "avatar_config": db_user.avatar_config,
+    }
 
 
 @app.put("/update-avatar")
 async def update_avatar(
     avatar_config: dict = Body(...),
     db: Session = Depends(database.get_db),
-    current_user: str = Depends(auth.get_current_user)
+    current_user: str = Depends(auth.get_current_user),
 ):
     db_user = db.query(models.User).filter(models.User.email == current_user).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     db_user.avatar_config = json.dumps(avatar_config)
     db.commit()
     return {"message": "Avatar updated successfully"}
@@ -912,11 +985,7 @@ def create_mood_log(
     if not color:
         raise HTTPException(status_code=400, detail="Color cannot be empty")
 
-    scene_tags = [
-        str(tag).strip()
-        for tag in mood_log.scene_tags
-        if str(tag).strip()
-    ]
+    scene_tags = [str(tag).strip() for tag in mood_log.scene_tags if str(tag).strip()]
 
     new_log = models.MoodLog(
         user_id=db_user.id,
@@ -926,6 +995,7 @@ def create_mood_log(
         short_caption=short_caption,
         color=color,
         scene_tags=json.dumps(scene_tags),
+        image_path=mood_log.image_path,
         description=mood_log.description,
         feedback=mood_log.feedback,
         poetic_summary=mood_log.poetic_summary,
@@ -967,6 +1037,38 @@ def get_mood_history(
         "total": total,
         "has_more": offset + len(logs) < total,
     }
+
+
+@app.get("/user-photos")
+def get_user_photos(
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    """Get all photos uploaded by the current user with their associated mood logs."""
+    logs_with_photos = (
+        db.query(models.MoodLog)
+        .filter(
+            models.MoodLog.user_id == db_user.id,
+            models.MoodLog.image_path.isnot(None),
+        )
+        .order_by(models.MoodLog.timestamp.desc())
+        .all()
+    )
+
+    photos = [
+        {
+            "mood_log_id": log.id,
+            "image_path": log.image_path,
+            "vibe": log.vibe,
+            "emoji": log.emoji,
+            "short_caption": log.short_caption,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+            "color": log.color,
+        }
+        for log in logs_with_photos
+    ]
+
+    return {"photos": photos, "total": len(photos)}
 
 
 @app.get("/analytics/me")
@@ -1016,12 +1118,11 @@ def get_analytics(
 
 @app.get("/playlist-suggestions/{vibe}")
 async def get_playlist_suggestions(
-    vibe: str,
-    current_user: str = Depends(auth.get_current_user)
+    vibe: str, current_user: str = Depends(auth.get_current_user)
 ):
     if not YOUTUBE_API_KEY:
         raise HTTPException(status_code=503, detail="YouTube API not configured")
-    
+
     if vibe not in VIBE_YOUTUBE_QUERIES:
         raise HTTPException(status_code=400, detail="Unknown vibe label")
 
@@ -1040,22 +1141,82 @@ async def get_playlist_suggestions(
         resp = requests.get(url, params=params, timeout=10)
         if resp.status_code != 200:
             continue
-        
+
         data = resp.json()
         for item in data.get("items", []):
             playlist_id = item["id"].get("playlistId")
             if not playlist_id:
                 continue
             snippet = item["snippet"]
-            results.append({
-                "id": playlist_id,
-                "title": snippet.get("title", ""),
-                "channel": snippet.get("channelTitle", ""),
-                "thumbnail": snippet["thumbnails"].get("medium", {}).get("url", ""),
-                "url": f"https://www.youtube.com/playlist?list={playlist_id}",
-            })
+            results.append(
+                {
+                    "id": playlist_id,
+                    "title": snippet.get("title", ""),
+                    "channel": snippet.get("channelTitle", ""),
+                    "thumbnail": snippet["thumbnails"].get("medium", {}).get("url", ""),
+                    "url": f"https://www.youtube.com/playlist?list={playlist_id}",
+                }
+            )
 
     return {"vibe": vibe, "playlists": results[:4]}  # Return max 4
+
+
+# ─── Therapist Chat ───────────────────────────────────────────────
+class ChatMessage(BaseModel):
+    role: str  # "user" or "model"
+    text: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    vibe_context: Optional[str] = None  # pass the current mood vibe for context
+
+
+THERAPIST_SYSTEM_PROMPT = """You are a warm, empathetic AI therapist named Sage. 
+You listen deeply, reflect emotions back, ask thoughtful follow-up questions, 
+and gently offer perspective. You never diagnose. You never give medical advice. 
+You speak in a calm, grounding, supportive tone. Keep responses concise (2-4 sentences) 
+unless the user clearly needs more. Always validate feelings before offering insight.
+If someone is in crisis, gently encourage professional help."""
+
+
+@app.post("/chat")
+async def therapist_chat(
+    request: ChatRequest, current_user: str = Depends(auth.get_current_user)
+):
+    if not gemini_model:
+        raise HTTPException(status_code=503, detail="AI model not configured")
+
+    try:
+        # Build Gemini chat history format
+        history = []
+
+        # Add vibe context as a system-like first message if provided
+        system_note = THERAPIST_SYSTEM_PROMPT
+        if request.vibe_context:
+            system_note += f"\n\nContext: The user's current mood vibe is '{request.vibe_context}'. Keep this in mind when responding."
+
+        # Gemini uses "user" and "model" roles
+        for msg in request.messages[:-1]:  # all except last
+            history.append({"role": msg.role, "parts": [msg.text]})
+
+        # Start a chat session with history
+        chat = gemini_model.start_chat(history=history)
+
+        # The last message is the new user input
+        last_message = request.messages[-1].text
+
+        # Prepend system prompt to first message only
+        if len(history) == 0:
+            last_message = f"[System: {system_note}]\n\nUser: {last_message}"
+
+        response = await asyncio.to_thread(chat.send_message, last_message)
+
+        return {"reply": response.text.strip()}
+
+    except Exception as e:
+        print(f"[Chat error] {e}")
+        raise HTTPException(status_code=500, detail="Chat failed")
 
 
 @app.get("/")

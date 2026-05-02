@@ -23,6 +23,7 @@ import AvatarBuilder from './components/AvatarBuilder';
 import HistoryDisplay from './components/HistoryDisplay';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnalyticsDisplay from './components/AnalyticsDisplay'; // Import the new component
+import TherapistChat from './components/TherapistChat';
 import DashboardHero from './components/DashboardHero';
 import {SAMPLE_IMAGES} from './constants/sampleImages';
 import {getContrastColor} from './utils/colors';
@@ -181,6 +182,43 @@ const App = () => {
     [BACKEND_URL, formatMoodHistoryItem, token],
   );
 
+  const fetchUserPhotos = useCallback(async () => {
+    if (!token) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/user-photos`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Convert photo objects to image format compatible with existing code
+        const photoImages = (data.photos || []).map(photo => ({
+          id: `photo_${photo.mood_log_id}`,
+          uri: `${BACKEND_URL}/${photo.image_path}`,
+          fileName: photo.image_path.split('/').pop(),
+          type: 'image/jpeg',
+          vibe: photo.vibe,
+          emoji: photo.emoji,
+          caption: photo.short_caption,
+          timestamp: photo.timestamp,
+          color: photo.color,
+        }));
+        // Merge saved photos with local images
+        setImages(prev => [
+          ...photoImages.filter(p => !prev.find(i => i.id === p.id)),
+          ...prev,
+        ]);
+      }
+    } catch (error) {
+      console.warn('Failed to fetch user photos:', error);
+    }
+  }, [BACKEND_URL, token]);
+
   const saveMoodLog = useCallback(
     async (analysis, fallbackCaption, shouldFetchAnalytics = true) => {
       if (!token || !analysis) {
@@ -208,6 +246,7 @@ const App = () => {
             color: analysis.color || '#6c5ce7',
             scene_tags: analysis.scene_tags || [],
             timestamp: new Date().toISOString(),
+            image_path: analysis.image_path || null,
             description: analysis.description || '',
             feedback: analysis.feedback || '',
             poetic_summary: analysis.poetic_summary || '',
@@ -434,6 +473,41 @@ const App = () => {
     }
   }, []);
 
+  /**
+   * Request WRITE_EXTERNAL_STORAGE for saving photos to the gallery.
+   * Only needed on Android < 10 (API level < 29). On API 29+ the system
+   * handles gallery writes via MediaStore without needing this permission.
+   */
+  const requestWriteStoragePermission = useCallback(async () => {
+    if (Platform.OS !== 'android') {
+      return true;
+    }
+    // API 29 (Android 10) and above do not need WRITE_EXTERNAL_STORAGE
+    if (Platform.Version >= 29) {
+      return true;
+    }
+    try {
+      const alreadyGranted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+      );
+      if (alreadyGranted) {
+        return true;
+      }
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        {
+          title: 'Save Photo Permission',
+          message: 'This app needs permission to save photos to your gallery.',
+          buttonPositive: 'OK',
+        },
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch (err) {
+      console.warn(err);
+      return false;
+    }
+  }, []);
+
   async function startListening() {
     if (isListening) {
       return;
@@ -604,15 +678,33 @@ const App = () => {
       return;
     }
 
+    // Safety timeout: always unlock the button after 30s even if launchCamera
+    // never resolves (a known emulator / older device hang).
+    let timeoutId;
+    const resetCapturing = () => {
+      clearTimeout(timeoutId);
+      setIsCapturingImage(false);
+    };
+
     try {
       setErrorMessage('');
       setIsCapturingImage(true);
 
+      timeoutId = setTimeout(() => {
+        console.warn('Camera timed out — resetting capture state.');
+        setIsCapturingImage(false);
+      }, 30000);
+
       const hasPermission = await requestCameraPermission();
       if (!hasPermission) {
         Alert.alert('Permission needed', 'Camera permission was denied.');
+        resetCapturing();
         return;
       }
+
+      // Request write-storage permission so the photo can be saved to the
+      // device gallery (required on Android < 10 / API < 29).
+      await requestWriteStoragePermission();
 
       const result = await launchCamera({
         mediaType: 'photo',
@@ -620,11 +712,16 @@ const App = () => {
         maxWidth: 1024,
         maxHeight: 1024,
         quality: 0.7,
-        saveToPhotos: false,
-        includeBase64: true,
+        // Save the captured photo directly to the device gallery.
+        saveToPhotos: true,
+        // Do NOT include base64 here — encoding a full-res photo on the JS
+        // thread freezes the UI and causes the camera to appear stuck.
+        // analyzeImageDescription handles plain file URIs directly.
+        includeBase64: false,
       });
 
       if (result.didCancel) {
+        resetCapturing();
         return;
       }
 
@@ -633,6 +730,7 @@ const App = () => {
           'Camera error',
           result.errorMessage || 'Unable to capture image.',
         );
+        resetCapturing();
         return;
       }
 
@@ -656,9 +754,14 @@ const App = () => {
         'Something went wrong while opening the camera.',
       );
     } finally {
-      setIsCapturingImage(false);
+      resetCapturing();
     }
-  }, [isCapturingImage, requestCameraPermission, analyzeImageDescription]);
+  }, [
+    isCapturingImage,
+    requestCameraPermission,
+    requestWriteStoragePermission,
+    analyzeImageDescription,
+  ]);
 
   const handleSelectImage = useCallback(async () => {
     if (isSelectingImage) {
@@ -830,6 +933,31 @@ const App = () => {
       }
       setIsAuthenticated(true);
       fetchMoodHistory(data.access_token);
+      // Fetch user's saved photos
+      try {
+        const photosResponse = await fetch(`${BACKEND_URL}/user-photos`, {
+          headers: {
+            Authorization: `Bearer ${data.access_token}`,
+          },
+        });
+        if (photosResponse.ok) {
+          const photosData = await photosResponse.json();
+          const photoImages = (photosData.photos || []).map(photo => ({
+            id: `photo_${photo.mood_log_id}`,
+            uri: `${BACKEND_URL}/${photo.image_path}`,
+            fileName: photo.image_path.split('/').pop(),
+            type: 'image/jpeg',
+            vibe: photo.vibe,
+            emoji: photo.emoji,
+            caption: photo.short_caption,
+            timestamp: photo.timestamp,
+            color: photo.color,
+          }));
+          setImages(photoImages);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch user photos:', error);
+      }
     } catch (error) {
       console.error('Auth error:', error);
       setAuthError(error.message || 'Could not connect to server.');
@@ -958,50 +1086,60 @@ const App = () => {
 
   return (
     <View style={{flex: 1, backgroundColor: appBgColor}}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}>
-        <DashboardHero
-          appBgColor={appBgColor}
-          avatarAnim={avatarAnim}
-          avatarConfig={avatarConfig}
-          isLoginFlow={isLoginFlow}
-          onEditAvatar={() => setAvatarVisible(true)}
-          onLogout={handleLogout}
-          onOpenHistory={() => setActiveTab('history')}
-          userName={userName}
+      {activeTab === 'chat' ? (
+        // TherapistChat contains a FlatList — must NOT be inside a ScrollView
+        <TherapistChat
+          token={token}
+          backendUrl={BACKEND_URL}
+          vibeContext={moodData?.vibe}
+          onClose={() => setActiveTab('home')}
         />
+      ) : (
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}>
+          <DashboardHero
+            appBgColor={appBgColor}
+            avatarAnim={avatarAnim}
+            avatarConfig={avatarConfig}
+            isLoginFlow={isLoginFlow}
+            onEditAvatar={() => setAvatarVisible(true)}
+            onLogout={handleLogout}
+            onOpenHistory={() => setActiveTab('history')}
+            userName={userName}
+          />
 
-        {renderContent()}
+          {renderContent()}
 
-        <AvatarBuilder
-          visible={avatarVisible}
-          onClose={() => setAvatarVisible(false)}
-          onSave={async (config, svgString) => {
-            setAvatarConfig(config);
-            setAvatarVisible(false);
-            try {
-              await fetch(`${BACKEND_URL}/update-avatar`, {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify(config),
-              }).then(response => {
-                if (!response.ok) {
-                  throw new Error('Failed to save avatar.');
-                }
-                Alert.alert('Success', 'Avatar updated successfully!');
-              });
-            } catch (error) {
-              console.error('Failed to update avatar:', error);
-              Alert.alert('Error', error.message || 'Failed to update avatar.');
-            }
-          }}
-        />
-      </ScrollView>
+          <AvatarBuilder
+            visible={avatarVisible}
+            onClose={() => setAvatarVisible(false)}
+            onSave={async (config, svgString) => {
+              setAvatarConfig(config);
+              setAvatarVisible(false);
+              try {
+                await fetch(`${BACKEND_URL}/update-avatar`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify(config),
+                }).then(response => {
+                  if (!response.ok) {
+                    throw new Error('Failed to save avatar.');
+                  }
+                  Alert.alert('Success', 'Avatar updated successfully!');
+                });
+              } catch (error) {
+                console.error('Failed to update avatar:', error);
+                Alert.alert('Error', error.message || 'Failed to update avatar.');
+              }
+            }}
+          />
+        </ScrollView>
+      )}
 
       <View style={styles.tabBar}>
         <TouchableOpacity
@@ -1018,6 +1156,22 @@ const App = () => {
               {color: activeTab === 'home' ? '#6c5ce7' : '#999'},
             ]}>
             Home
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => setActiveTab('chat')}>
+          <Icon
+            name="chat-outline"
+            size={24}
+            color={activeTab === 'chat' ? '#6c5ce7' : '#999'}
+          />
+          <Text
+            style={[
+              styles.tabText,
+              {color: activeTab === 'chat' ? '#6c5ce7' : '#999'},
+            ]}>
+            Chat
           </Text>
         </TouchableOpacity>
         <TouchableOpacity

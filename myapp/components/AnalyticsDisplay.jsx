@@ -51,11 +51,19 @@ const describeArc = (cx, cy, r, startAngle, endAngle) => {
 const AnimatedNumber = ({ value, duration = 800, style, suffix = '' }) => {
   const anim = useRef(new Animated.Value(0)).current;
   const [display, setDisplay] = useState(0);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   useEffect(() => {
     anim.setValue(0);
     Animated.timing(anim, { toValue: value, duration, useNativeDriver: false }).start();
-    const id = anim.addListener(({ value: v }) => setDisplay(Math.round(v)));
+    const id = anim.addListener(({ value: v }) => {
+      if (isMounted.current) setDisplay(Math.round(v));
+    });
     return () => anim.removeListener(id);
   }, [value]);
 
@@ -98,11 +106,19 @@ const DonutChart = ({ data, total }) => {
   const animProgress = useRef(new Animated.Value(0)).current;
   const [progress, setProgress] = useState(0);
   const [activeIndex, setActiveIndex] = useState(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   useEffect(() => {
     animProgress.setValue(0);
     Animated.timing(animProgress, { toValue: 1, duration: 1200, useNativeDriver: false }).start();
-    const id = animProgress.addListener(({ value }) => setProgress(value));
+    const id = animProgress.addListener(({ value }) => {
+      if (isMounted.current) setProgress(value);
+    });
     return () => animProgress.removeListener(id);
   }, [data]);
 
@@ -181,11 +197,19 @@ const LineChart = ({ dailyData }) => {
   const animProgress = useRef(new Animated.Value(0)).current;
   const [progress, setProgress] = useState(0);
   const [tooltip, setTooltip] = useState(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   useEffect(() => {
     animProgress.setValue(0);
     Animated.timing(animProgress, { toValue: 1, duration: 1400, useNativeDriver: false }).start();
-    const id = animProgress.addListener(({ value }) => setProgress(value));
+    const id = animProgress.addListener(({ value }) => {
+      if (isMounted.current) setProgress(value);
+    });
     return () => animProgress.removeListener(id);
   }, [dailyData]);
 
@@ -349,20 +373,28 @@ const BarChart = ({ data, total }) => {
   const PAD_R = 50;
   const W = CHART_WIDTH - PAD_L - PAD_R;
 
-  const animWidths = useRef(data.map(() => new Animated.Value(0))).current;
+  // Keep animated values in a ref; rebuild when data length changes
+  const animWidthsRef = useRef([]);
+  if (animWidthsRef.current.length !== data.length) {
+    animWidthsRef.current = data.map(() => new Animated.Value(0));
+  }
+  const animWidths = animWidthsRef.current;
 
   useEffect(() => {
-    animWidths.forEach((anim, i) => {
+    const animations = animWidths.map((anim, i) => {
       anim.setValue(0);
       const pct = total > 0 ? data[i].count / total : 0;
-      Animated.spring(anim, {
+      return Animated.spring(anim, {
         toValue: pct * W,
         tension: 40,
         friction: 8,
         delay: i * 80,
         useNativeDriver: false,
-      }).start();
+      });
     });
+    const composite = Animated.parallel(animations);
+    composite.start();
+    return () => composite.stop();
   }, [data, total]);
 
   const chartH = data.length * (BAR_H + GAP);
