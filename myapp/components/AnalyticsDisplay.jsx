@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   PanResponder,
+  Modal,
 } from 'react-native';
 import Svg, {
   G,
@@ -518,7 +519,7 @@ const SectionCard = ({ title, icon, iconColor = '#6c5ce7', children, accentColor
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh }) => {
+const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh, moodGoal, onUpdateGoal }) => {
   const contrastColor = getContrastColor(appBgColor);
   const headerAnim = useRef(new Animated.Value(0)).current;
 
@@ -577,6 +578,14 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh }) =
   const avgConfidence = summary?.avg_confidence ?? analyticsData?.avg_confidence ?? 0;
   const topMood = summary?.top_mood || analyticsData?.most_common || 'N/A';
 
+  // Goal Calculation
+  const goalVibe = moodGoal?.vibe;
+  const goalStats = goalVibe ? distribution.find(d => d.label?.toLowerCase() === goalVibe.toLowerCase()) : null;
+  const goalCount = goalStats ? goalStats.count : 0;
+  const goalProgress = totalLogs > 0 ? (goalCount / totalLogs) : 0;
+
+  const [showGoalPicker, setShowGoalPicker] = useState(false);
+
   return (
     <ScrollView
       style={styles.container}
@@ -615,6 +624,53 @@ const AnalyticsDisplay = ({ analyticsData, appBgColor, isLoading, onRefresh }) =
           </Text>
         </View>
       </View>
+
+      {/* Weekly Goal Section */}
+      <SectionCard title="Weekly Focus" icon="target" iconColor="#e17055" accentColor="#e17055">
+        {goalVibe ? (
+          <View style={styles.goalActiveContainer}>
+            <View style={styles.goalInfoRow}>
+              <Text style={styles.goalText}>Target Vibe: <Text style={{fontWeight: 'bold', color: getMoodColor(goalVibe)}}>{goalVibe}</Text></Text>
+              <TouchableOpacity onPress={() => setShowGoalPicker(true)}>
+                <Text style={styles.goalChangeBtn}>Change</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.goalProgressTrack}>
+              <Animated.View style={[styles.goalProgressBar, { width: `${goalProgress * 100}%`, backgroundColor: getMoodColor(goalVibe) }]} />
+            </View>
+            <Text style={styles.goalSubtext}>
+              {goalCount} {goalCount === 1 ? 'entry' : 'entries'} this month · {Math.round(goalProgress * 100)}% of your vibes
+            </Text>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.setGoalBtn} onPress={() => setShowGoalPicker(true)}>
+            <Icon name="plus-circle-outline" size={20} color="#e17055" />
+            <Text style={styles.setGoalBtnText}>Set a target vibe for the week</Text>
+          </TouchableOpacity>
+        )}
+      </SectionCard>
+
+      {/* Goal Picker Modal */}
+      <Modal visible={showGoalPicker} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Choose your Focus</Text>
+            <Text style={styles.modalSub}>Which vibe would you like to cultivate more?</Text>
+            <ScrollView contentContainerStyle={styles.vibeGrid} style={{maxHeight: 300}}>
+              {Object.keys(MOOD_COLORS).map((vibe) => (
+                <TouchableOpacity key={vibe} style={[styles.vibeChip, {borderColor: getMoodColor(vibe)}]} 
+                  onPress={() => { onUpdateGoal(vibe); setShowGoalPicker(false); }}>
+                  <Text style={styles.vibeChipEmoji}>{getMoodEmoji(vibe)}</Text>
+                  <Text style={styles.vibeChipText}>{vibe}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowGoalPicker(false)}>
+              <Text style={styles.closeModalBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Daily Trend */}
       {daily_breakdown.length > 1 && (
@@ -804,6 +860,38 @@ const styles = StyleSheet.create({
   // Refresh
   fullRefreshButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, gap: 6 },
   fullRefreshText: { fontSize: 13, color: '#bbb', fontWeight: '600' },
+
+  // Goal Styles
+  goalActiveContainer: { paddingVertical: 4 },
+  goalInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  goalText: { fontSize: 15, color: '#2d3436' },
+  goalChangeBtn: { fontSize: 13, color: '#6c5ce7', fontWeight: '700' },
+  goalProgressTrack: { height: 10, backgroundColor: '#f0eff8', borderRadius: 5, overflow: 'hidden' },
+  goalProgressBar: { height: '100%', borderRadius: 5 },
+  goalSubtext: { fontSize: 12, color: '#aaa', marginTop: 8, fontWeight: '600' },
+  setGoalBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 12, borderStyle: 'dashed', borderWidth: 2, borderColor: '#e17055', borderRadius: 16 },
+  setGoalBtnText: { color: '#e17055', fontWeight: '700', fontSize: 14 },
+
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#fff', borderRadius: 24, padding: 24, width: '100%', maxWidth: 400 },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#2d3436', textAlign: 'center' },
+  modalSub: { fontSize: 14, color: '#666', textAlign: 'center', marginTop: 4, marginBottom: 20 },
+  vibeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
+  vibeChip: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 6, 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 20, 
+    borderWidth: 1.5, 
+    backgroundColor: '#fff' 
+  },
+  vibeChipEmoji: { fontSize: 16 },
+  vibeChipText: { fontSize: 13, fontWeight: '700', color: '#444', textTransform: 'capitalize' },
+  closeModalBtn: { marginTop: 24, alignItems: 'center' },
+  closeModalBtnText: { color: '#999', fontWeight: '700', fontSize: 15 },
 });
 
 export default AnalyticsDisplay;

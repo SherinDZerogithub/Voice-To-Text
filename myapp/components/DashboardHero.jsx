@@ -18,6 +18,16 @@ const DashboardHero = ({
   const iconColor = getContrastColor(appBgColor);
   const styles = createStyles(appBgColor, iconColor);
 
+  const getTimeMetadata = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return { greeting: "Good morning", question: "How are you starting your day?", emoji: "☀️" };
+    if (hour >= 12 && hour < 17) return { greeting: "Good afternoon", question: "How has your afternoon been so far?", emoji: "🌤️" };
+    if (hour >= 17 && hour < 21) return { greeting: "Good evening", question: "Ready to reflect on your day?", emoji: "🌆" };
+    return { greeting: "Late night check-in", question: "What's on your mind tonight?", emoji: "🌙" };
+  };
+
+  const timeMetadata = getTimeMetadata();
+
   return (
     <View style={styles.dashboardHero}>
       <TouchableOpacity style={styles.heroHistoryBtn} onPress={onOpenHistory}>
@@ -32,9 +42,10 @@ const DashboardHero = ({
         <View style={styles.heroTextContainer}>
           <Text style={styles.heroTitle}>Scene Vibe</Text>
           <Text style={styles.heroGreeting}>
-            {isLoginFlow ? 'Welcome back,' : 'Hello,'}
+            {isLoginFlow ? 'Welcome back 👋' : `${timeMetadata.greeting} ${timeMetadata.emoji}`}
           </Text>
           <Text style={styles.heroUserName}>{userName || 'Explorer'}</Text>
+          <Text style={styles.heroQuestion}>{timeMetadata.question}</Text>
         </View>
 
         <Animated.View
@@ -117,6 +128,13 @@ const createStyles = (appBgColor, contrastColor) => {
       color: contrastColor,
       letterSpacing: -1,
       lineHeight: 40,
+      marginBottom: 4,
+    },
+    heroQuestion: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: contrastColor,
+      opacity: 0.8,
     },
     heroAvatarContainer: {
       position: 'relative',

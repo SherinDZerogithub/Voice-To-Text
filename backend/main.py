@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, File, UploadFile, Body, Form, Depend
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 import database
@@ -60,6 +61,23 @@ def save_user_image(
 app = FastAPI(title="Emotion Mood Analytics Server")
 
 models.Base.metadata.create_all(bind=database.engine)
+
+
+# Ensure existing SQLite databases are compatible with the current models.
+# SQLAlchemy create_all does not alter existing tables, so add any missing columns here.
+def ensure_sqlite_schema():
+    if database.engine.dialect.name != "sqlite":
+        return
+
+    with database.engine.connect() as conn:
+        result = conn.execute(text("PRAGMA table_info('mood_logs')"))
+        columns = [row[1] for row in result.fetchall()]
+        if "image_path" not in columns:
+            conn.execute(text("ALTER TABLE mood_logs ADD COLUMN image_path TEXT"))
+            print("Added missing image_path column to mood_logs table")
+
+
+ensure_sqlite_schema()
 
 app.add_middleware(
     CORSMiddleware,
@@ -1077,43 +1095,51 @@ def get_analytics(
     db: Session = Depends(database.get_db),
     db_user: models.User = Depends(get_current_db_user),
 ):
-    user_id = db_user.id
+    try:
+        user_id = db_user.id
 
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-    entries = (
-        db.query(models.MoodLog)
-        .filter(
-            models.MoodLog.user_id == user_id,
-            models.MoodLog.timestamp >= since,
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        entries = (
+            db.query(models.MoodLog)
+            .filter(
+                models.MoodLog.user_id == user_id,
+                models.MoodLog.timestamp >= since,
+            )
+            .order_by(models.MoodLog.timestamp.asc(), models.MoodLog.id.asc())
+            .all()
         )
-        .order_by(models.MoodLog.timestamp.asc(), models.MoodLog.id.asc())
-        .all()
-    )
 
-    mood_counts = Counter(entry.vibe for entry in entries)
-    daily_counts = defaultdict(Counter)
+        mood_counts = Counter(entry.vibe for entry in entries)
+        daily_counts = defaultdict(Counter)
 
-    for entry in entries:
-        day = entry.timestamp.date().isoformat()
-        daily_counts[day][entry.vibe] += 1
+        for entry in entries:
+            if entry.timestamp is None:
+                continue
+            day = entry.timestamp.date().isoformat()
+            daily_counts[day][entry.vibe] += 1
 
-    daily_breakdown = [
-        {
-            "date": day,
-            "total_entries": sum(counts.values()),
-            "mood_frequency": dict(counts),
-            "most_common": counts.most_common(1)[0][0] if counts else None,
+        daily_breakdown = [
+            {
+                "date": day,
+                "total_entries": sum(counts.values()),
+                "mood_frequency": dict(counts),
+                "most_common": counts.most_common(1)[0][0] if counts else None,
+            }
+            for day, counts in sorted(daily_counts.items())
+        ]
+
+        return {
+            "total_entries": len(entries),
+            "date_range_days": days,
+            "mood_frequency": dict(mood_counts),
+            "most_common": mood_counts.most_common(1)[0][0] if mood_counts else None,
+            "daily_breakdown": daily_breakdown,
         }
-        for day, counts in sorted(daily_counts.items())
-    ]
-
-    return {
-        "total_entries": len(entries),
-        "date_range_days": days,
-        "mood_frequency": dict(mood_counts),
-        "most_common": mood_counts.most_common(1)[0][0] if mood_counts else None,
-        "daily_breakdown": daily_breakdown,
-    }
+    except Exception as e:
+        print(f"Analytics endpoint error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load analytics: {str(e)}"
+        )
 
 
 @app.get("/playlist-suggestions/{vibe}")

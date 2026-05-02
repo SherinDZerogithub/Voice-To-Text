@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useCallback, useRef} from 'react';
+import React, {useEffect, useState, useCallback, useRef, useMemo} from 'react';
 import {
   Alert,
   Platform,
@@ -29,15 +29,17 @@ import {SAMPLE_IMAGES} from './constants/sampleImages';
 import {getContrastColor} from './utils/colors';
 
 // RN 0.71+ expects native event modules to expose listener stubs.
-if (NativeModules.Voice) {
-  // Fix for React Native 0.71+ where addListener/removeListeners might be missing
-  if (!NativeModules.Voice.addListener) {
-    NativeModules.Voice.addListener = () => {};
+// We stub common module names used by voice libraries to prevent NativeEventEmitter warnings.
+['Voice', 'ReactNativeVoice', 'RCTVoice'].forEach(moduleName => {
+  if (NativeModules[moduleName]) {
+    if (!NativeModules[moduleName].addListener) {
+      NativeModules[moduleName].addListener = () => {};
+    }
+    if (!NativeModules[moduleName].removeListeners) {
+      NativeModules[moduleName].removeListeners = () => {};
+    }
   }
-  if (!NativeModules.Voice.removeListeners) {
-    NativeModules.Voice.removeListeners = () => {};
-  }
-}
+});
 
 import Voice from '@react-native-voice/voice';
 
@@ -62,9 +64,20 @@ const App = () => {
   const [isListening, setIsListening] = useState(false);
   const [text, setText] = useState('');
   const [appBgColor, setAppBgColor] = useState('#f5f5f5');
+  const [moodGoal, setMoodGoal] = useState(null); // { vibe: string }
   const [analyticsData, setAnalyticsData] = useState(null); // New state for analytics
 
   const [activeTab, setActiveTab] = useState('home'); // 'home', 'history', 'analytics'
+
+  // Check if a mood has been logged today
+  const hasLoggedToday = useMemo(() => {
+    const today = new Date().toDateString();
+    return moodHistory.some(item => {
+      // Use rawTimestamp which we'll add to the formatted item
+      const itemDate = item.rawTimestamp ? new Date(item.rawTimestamp) : null;
+      return itemDate && itemDate.toDateString() === today;
+    });
+  }, [moodHistory]);
 
   // Configuration for Backend
   // Note: 10.0.2.2 is the localhost for Android emulator.
@@ -73,30 +86,79 @@ const App = () => {
       ? 'http://10.0.2.2:8000'
       : 'http://localhost:8000';
 
-  const fetchAnalyticsData = useCallback(async () => {
-    if (!token) {
+  const fetchMoodGoal = useCallback(async (authToken = token) => {
+    if (!authToken) return;
+    try {
+      const response = await fetch(`${BACKEND_URL}/mood-goal`, {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMoodGoal(data);
+      }
+    } catch (error) {
+      console.warn('Mood goal fetch failed:', error);
+    }
+  }, [BACKEND_URL, token]);
+
+  const updateMoodGoal = useCallback(async (vibe) => {
+    if (!token) return;
+    try {
+      const response = await fetch(`${BACKEND_URL}/mood-goal`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ vibe }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMoodGoal(data);
+      }
+    } catch (error) {
+      console.error('Failed to update mood goal:', error);
+    }
+  }, [BACKEND_URL, token]);
+
+  const fetchAnalyticsData = useCallback(async (authToken = token) => {
+    if (!authToken) {
       return;
     }
     try {
       const response = await fetch(`${BACKEND_URL}/analytics/me?days=30`, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${authToken}`,
         },
       });
-      if (response.ok) {
-        const data = await response.json();
-        setAnalyticsData(data);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to load analytics: ${response.status} ${errorText}`);
       }
+
+      const data = await response.json();
+      console.log('Analytics data loaded:', data);
+      setAnalyticsData(data);
     } catch (error) {
-      console.warn('Analytics fetch failed:', error);
+      console.warn('Analytics fetch failed:', error.message || error);
     }
-  }, [BACKEND_URL, token]);
+  }, [BACKEND_URL]);
 
   useEffect(() => {
-    if (activeTab === 'analytics') {
-      fetchAnalyticsData();
+    if (activeTab === 'analytics' && token) {
+      fetchAnalyticsData(token);
+      fetchMoodGoal(token);
     }
-  }, [activeTab, fetchAnalyticsData]);
+  }, [activeTab, token, fetchAnalyticsData, fetchMoodGoal]);
+
+  useEffect(() => {
+    if (activeTab === 'history' && token) {
+      fetchMoodHistory(token);
+    }
+  }, [activeTab, token, fetchMoodHistory]);
 
   const {width: SCREEN_WIDTH} = Dimensions.get('window');
 
@@ -125,6 +187,7 @@ const App = () => {
 
     return {
       id: item.id?.toString() || Date.now().toString(),
+      rawTimestamp: item.timestamp || date.toISOString(),
       timestamp: Number.isNaN(date.getTime())
         ? ''
         : date.toLocaleString([], {
@@ -168,7 +231,8 @@ const App = () => {
         );
 
         if (!response.ok) {
-          throw new Error('Failed to load mood history');
+          const errorText = await response.text();
+          throw new Error(`Failed to load mood history: ${response.status} ${errorText}`);
         }
 
         const data = await response.json();
@@ -176,10 +240,10 @@ const App = () => {
           (data.items || []).map(item => formatMoodHistoryItem(item)),
         );
       } catch (error) {
-        console.warn('Mood history load failed:', error);
+        console.warn('Mood history load failed:', error.message || error);
       }
     },
-    [BACKEND_URL, formatMoodHistoryItem, token],
+    [BACKEND_URL, formatMoodHistoryItem],
   );
 
   const fetchUserPhotos = useCallback(async () => {
@@ -251,7 +315,7 @@ const App = () => {
             feedback: analysis.feedback || '',
             poetic_summary: analysis.poetic_summary || '',
             confidence: analysis.confidence || '',
-            gemini_confidence: analysis.gemini_confidence || null,
+            gemini_confidence: (analysis.gemini_confidence !== undefined && analysis.gemini_confidence !== null) ? analysis.gemini_confidence : null,
             environment_type: analysis.environment_type || '',
             color_palette: analysis.color_palette || [],
             secondary_moods: analysis.secondary_moods || [],
@@ -260,7 +324,8 @@ const App = () => {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to save mood log');
+          const errorText = await response.text();
+          throw new Error(`Failed to save mood log: ${response.status} ${errorText}`);
         }
 
         const savedLog = await response.json();
@@ -269,7 +334,7 @@ const App = () => {
           ...prev,
         ]);
       } catch (error) {
-        console.warn('Mood log save failed:', error);
+        console.warn('Mood log save failed:', error.message || error);
       }
     },
     [BACKEND_URL, formatMoodHistoryItem, token],
@@ -376,6 +441,18 @@ const App = () => {
     onSpeechError,
     onSpeechPartialResults,
   ]);
+
+  // Fetch mood history and analytics when user authenticates
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      if (moodHistory.length === 0) {
+        fetchMoodHistory(token);
+      }
+      // Also fetch analytics on authentication
+      fetchAnalyticsData(token);
+      fetchMoodGoal(token);
+    }
+  }, [isAuthenticated, token, fetchMoodHistory, fetchAnalyticsData, fetchMoodGoal]);
 
   const requestMicrophonePermission = useCallback(async () => {
     if (Platform.OS !== 'android') {
@@ -598,7 +675,8 @@ const App = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Server unreachable or error in analysis');
+        const errorText = await response.text();
+        throw new Error(`Server analysis error: ${response.status} ${errorText}`);
       }
 
       const data = await response.json();
@@ -783,7 +861,8 @@ const App = () => {
         maxWidth: 1024,
         maxHeight: 1024,
         quality: 0.7,
-        includeBase64: true,
+        // Do NOT include base64 to avoid UI freezes on large images
+        includeBase64: false,
       });
 
       if (result.didCancel) {
@@ -883,6 +962,36 @@ const App = () => {
       fontSize: 12,
       marginTop: 4,
       fontWeight: '600',
+    },
+    checkInBanner: {
+      width: '100%',
+      backgroundColor: '#fff',
+      borderRadius: 20,
+      padding: 16,
+      marginBottom: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+      elevation: 4,
+      shadowColor: '#6c5ce7',
+      shadowOffset: {width: 0, height: 4},
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      borderLeftWidth: 4,
+      borderLeftColor: '#6c5ce7',
+    },
+    checkInIconContainer: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: '#6c5ce715',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    checkInText: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: '#2d3436',
     },
   });
 
@@ -997,6 +1106,10 @@ const App = () => {
         <AnalyticsDisplay
           analyticsData={analyticsData}
           appBgColor={appBgColor}
+          isLoading={!analyticsData}
+          onRefresh={() => fetchAnalyticsData(token)}
+          moodGoal={moodGoal}
+          onUpdateGoal={updateMoodGoal}
         />
       );
     } else if (activeTab === 'history') {
@@ -1036,6 +1149,14 @@ const App = () => {
     } else {
       return (
         <>
+          {!hasLoggedToday && (
+            <View style={styles.checkInBanner}>
+              <View style={styles.checkInIconContainer}>
+                <Icon name="star" size={20} color="#6c5ce7" />
+              </View>
+              <Text style={styles.checkInText}>How are you feeling today?</Text>
+            </View>
+          )}
           <VoiceInput
             text={text}
             onChangeText={setText}
