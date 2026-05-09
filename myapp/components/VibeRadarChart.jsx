@@ -41,7 +41,7 @@ const VibeRadarChart = ({ vibeScores, size = SCREEN_WIDTH * 0.9, color = '#6c5ce
             .sort((a, b) => b[1] - a[1])
             .slice(0, 8)
             .map(([label, score]) => ({
-                label: label.charAt(0).toUpperCase() + label.slice(1),
+                label: `${label.charAt(0).toUpperCase() + label.slice(1)} ${Math.round(score * 100)}%`,
                 value: Math.min(1, Math.max(0.1, score)) // Clamp between 0.1 and 1
             }));
     }, [vibeScores]);

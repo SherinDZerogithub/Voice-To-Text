@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, File, UploadFile, Body, Form, Depend
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 import database
@@ -75,6 +75,15 @@ def ensure_sqlite_schema():
         if "image_path" not in columns:
             conn.execute(text("ALTER TABLE mood_logs ADD COLUMN image_path TEXT"))
             print("Added missing image_path column to mood_logs table")
+        if "reflection" not in columns:
+            conn.execute(text("ALTER TABLE mood_logs ADD COLUMN reflection TEXT"))
+            print("Added missing reflection column to mood_logs table")
+        if "doodles" not in columns:
+            conn.execute(text("ALTER TABLE mood_logs ADD COLUMN doodles TEXT"))
+            print("Added missing doodles column to mood_logs table")
+        if "gentle_reminder" not in columns:
+            conn.execute(text("ALTER TABLE mood_logs ADD COLUMN gentle_reminder TEXT"))
+            print("Added missing gentle_reminder column to mood_logs table")
 
 
 ensure_sqlite_schema()
@@ -95,6 +104,7 @@ vibe_model = None
 vision_model = None
 caption_processor = None
 caption_model = None
+label_embeddings = None
 
 
 def get_vibe_model():
@@ -126,6 +136,176 @@ def get_caption_models():
     return caption_processor, caption_model
 
 
+def get_label_embeddings():
+    global label_embeddings
+    if label_embeddings is None:
+        print("Computing label embeddings for VIBE_LABELS...")
+        label_embeddings = get_vibe_model().encode(VIBE_LABELS, convert_to_tensor=True)
+    return label_embeddings, VIBE_LABELS
+
+
+STATIC_JOURNAL_PROMPTS = {
+    "calm": [
+        "What helped you arrive at this stillness?",
+        "What are you grateful for right now?",
+        "How can you protect this feeling today?",
+    ],
+    "happy": [
+        "What specifically made today feel good?",
+        "Who would you like to share this joy with?",
+        "What does happiness feel like in your body right now?",
+    ],
+    "energetic": [
+        "What are you most excited to tackle today?",
+        "How can you channel this energy productively?",
+        "What does this surge feel like — where is it coming from?",
+    ],
+    "sad": [
+        "What is this sadness trying to tell you?",
+        "Is there something you need to let go of?",
+        "What small act of kindness can you offer yourself right now?",
+    ],
+    "anxious": [
+        "What's one thing you can control right now?",
+        "What would you say to a friend feeling this way?",
+        "Name 3 things you can see from where you are.",
+    ],
+    "lonely": [
+        "What kind of connection are you craving?",
+        "Who in your life could you reach out to today?",
+        "What does your ideal sense of belonging look like?",
+    ],
+    "nostalgic": [
+        "What from your past are you longing for?",
+        "How has that experience shaped who you are?",
+        "What part of that past self can you honor today?",
+    ],
+    "pensive": [
+        "What question keeps coming back to you lately?",
+        "What are you trying to figure out?",
+        "What would happen if you sat with the uncertainty a little longer?",
+    ],
+    "gloomy": [
+        "When did this cloudiness begin?",
+        "What would a small ray of light look like for you today?",
+        "Is there something heavy you've been carrying alone?",
+    ],
+    "tense": [
+        "What is the source of this tension?",
+        "What would release feel like right now?",
+        "What's one thing you can let go of today?",
+    ],
+    "hopeful": [
+        "What are you hoping for?",
+        "What's one step toward that hope you can take today?",
+        "What feels possible that didn't before?",
+    ],
+    "cozy": [
+        "What makes this moment feel safe and warm?",
+        "How can you savour this feeling a little longer?",
+        "Who or what created this sense of comfort?",
+    ],
+    "chaotic": [
+        "What is the core thing overwhelming you right now?",
+        "What's one thing you can remove from your plate?",
+        "What does your mind need most — rest, clarity, or movement?",
+    ],
+}
+
+STATIC_COMPANION_QUESTIONS = {
+    "returning_long": [
+        "It's been a while — how are you, honestly?",
+        "What do you most want to acknowledge about this past stretch?",
+        "What brought you back today?",
+    ],
+    "returning_short": [
+        "Welcome back — what's been on your mind?",
+        "What's the first thing you want to check in about?",
+    ],
+    "declining": [
+        "Things seem heavier lately. What's been weighing on you?",
+        "What would it look like to give yourself some extra care today?",
+        "Is there something you've been carrying alone?",
+    ],
+    "improving": [
+        "Something seems to be shifting for the better. What's been different?",
+        "Your mood has been lifting — what do you think is driving that?",
+    ],
+    "earlyMorning": [
+        "How did you sleep last night?",
+        "What intention are you setting for today?",
+    ],
+    "morning": [
+        "How are you starting your day?",
+        "Is there anything you're carrying from yesterday?",
+    ],
+    "afternoon": [
+        "How's your energy holding up today?",
+        "Are you getting what you needed from this day?",
+    ],
+    "evening": [
+        "What moment from today stands out to you?",
+        "What do you want to let go of before bed?",
+    ],
+    "night": [
+        "What's keeping you up tonight?",
+        "How does the quiet feel for you right now?",
+    ],
+    "default": [
+        "How are you feeling right now, in this moment?",
+        "What's on your mind today?",
+        "What do you need most right now?",
+    ],
+}
+
+DEFAULT_JOURNAL_PROMPTS = [
+    "What's on your mind right now?",
+    "How does your body feel in this moment?",
+    "What do you need most right now — and how could you give it to yourself?",
+]
+
+STATIC_AFFIRMATIONS = {
+    "calm": "You have found a quiet center within the noise. Let this stillness anchor you as you move through the day.",
+    "peaceful": "There is grace in the peace you carry right now. You are exactly where you need to be.",
+    "happy": "Your joy today is real, and it belongs to you. Carry it forward and let it light up the spaces around you.",
+    "energetic": "You are a force of momentum right now. Channel this energy toward something that matters to your future self.",
+    "sad": "Your pain is not a sign of weakness. Feeling deeply means you are fully alive — and that takes courage.",
+    "anxious": "You have navigated uncertainty before and arrived on the other side. You are more capable than your fear suggests.",
+    "chaotic": "Chaos is not your natural state — it's a season. You will find your footing again, and you don't have to rush.",
+    "gloomy": "Even the heaviest clouds don't last forever. You are allowed to rest under them without pretending they aren't there.",
+    "tense": "You are carrying more than you should have to right now. It's okay to set something down — even briefly.",
+    "lonely": "Even in solitude, you are not forgotten. The connection you need exists — and you are worthy of it.",
+    "nostalgic": "The past you're remembering helped build the person reading this. Honor it, then gently return to the now.",
+    "hopeful": "The future you're hoping for is not naïve — it's a compass. Let it guide your next small step.",
+    "cozy": "Softness and warmth are not small things — they are restorative. You deserve every moment of this comfort.",
+    "melancholic": "Beauty and sadness live side by side in you right now. That bittersweet feeling is deeply human.",
+    "pensive": "Your willingness to sit with hard questions is wisdom in action. Not everything needs an answer today.",
+}
+
+DEFAULT_AFFIRMATION = "Whatever you're carrying today, you don't have to carry it perfectly. You are doing better than you know."
+
+
+def pick_static_companion_question(req: schemas.CompanionQuestionRequest) -> str:
+    import datetime
+
+    day_index = datetime.date.today().day
+
+    if req.days_away >= 7:
+        pool = STATIC_COMPANION_QUESTIONS["returning_long"]
+    elif req.days_away >= 2:
+        pool = STATIC_COMPANION_QUESTIONS["returning_short"]
+    elif req.trend == "declining":
+        pool = STATIC_COMPANION_QUESTIONS["declining"]
+    elif req.trend == "improving":
+        pool = STATIC_COMPANION_QUESTIONS["improving"]
+    elif req.time_slot in STATIC_COMPANION_QUESTIONS:
+        pool = STATIC_COMPANION_QUESTIONS[req.time_slot]
+    else:
+        pool = STATIC_COMPANION_QUESTIONS["default"]
+
+    return pool[day_index % len(pool)]
+
+
 GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -134,210 +314,6 @@ if GEMINI_API_KEY:
 else:
     print("WARNING: GOOGLE_API_KEY not found. Gemini features will be disabled.")
     gemini_model = None
-
-VIBE_LABELS = [
-    "calm",
-    "peaceful",
-    "serene",
-    "minimalist",
-    "happy",
-    "energetic",
-    "playful",
-    "vibrant",
-    "sad",
-    "lonely",
-    "pensive",
-    "gloomy",
-    "anxious",
-    "chaotic",
-    "intense",
-    "gritty",
-    "nostalgic",
-    "romantic",
-    "mystical",
-    "vintage",
-    "cozy",
-    "ethereal",
-    "melancholic",
-    "industrial",
-    "natural",
-    "futuristic",
-    "bold",
-    "solitary",
-    "tense",
-    "hopeful",
-]
-
-# Lazy-load models and pre-compute embeddings on first request
-LABEL_EMBEDDINGS = None
-VISION_LABEL_EMBEDDINGS = None
-
-
-def get_label_embeddings():
-    global LABEL_EMBEDDINGS, VISION_LABEL_EMBEDDINGS
-    if LABEL_EMBEDDINGS is None:
-        print("Pre-computing label embeddings...")
-        LABEL_EMBEDDINGS = get_vibe_model().encode(VIBE_LABELS, convert_to_tensor=True)
-        VISION_LABEL_EMBEDDINGS = get_vision_model().encode(
-            VIBE_LABELS, convert_to_tensor=True
-        )
-        print("Model loaded successfully!")
-    return LABEL_EMBEDDINGS, VISION_LABEL_EMBEDDINGS
-
-
-VIBE_META = {
-    "calm": {
-        "color": "#A8E6CF",
-        "emoji": "😌",
-        "feedback": "Take a deep breath. You are centered.",
-    },
-    "peaceful": {
-        "color": "#B2E2F2",
-        "emoji": "🕊️",
-        "feedback": "Harmony surrounds you right now.",
-    },
-    "serene": {
-        "color": "#D4F1F4",
-        "emoji": "🧘",
-        "feedback": "Find strength in this quiet moment.",
-    },
-    "minimalist": {
-        "color": "#F5F5F5",
-        "emoji": "⚪",
-        "feedback": "Simplicity is the ultimate sophistication.",
-    },
-    "happy": {
-        "color": "#FFDE7D",
-        "emoji": "😊",
-        "feedback": "Your light is shining bright today!",
-    },
-    "energetic": {
-        "color": "#FFD93D",
-        "emoji": "⚡",
-        "feedback": "Channel this power into something great.",
-    },
-    "playful": {
-        "color": "#FF8B94",
-        "emoji": "🎈",
-        "feedback": "Don't forget to keep that inner spark.",
-    },
-    "vibrant": {
-        "color": "#6BCB77",
-        "emoji": "🌈",
-        "feedback": "The world is a canvas of possibilities.",
-    },
-    "sad": {
-        "color": "#A2D2FF",
-        "emoji": "😢",
-        "feedback": "It's okay to let the rain fall sometimes.",
-    },
-    "lonely": {
-        "color": "#6C757D",
-        "emoji": "👤",
-        "feedback": "I'm here with you in this space.",
-    },
-    "pensive": {
-        "color": "#4A4E69",
-        "emoji": "🤔",
-        "feedback": "Depth of thought leads to growth.",
-    },
-    "gloomy": {
-        "color": "#9A8C98",
-        "emoji": "☁️",
-        "feedback": "Even clouds eventually move on.",
-    },
-    "anxious": {
-        "color": "#D4A5A5",
-        "emoji": "😰",
-        "feedback": "Ground yourself. Focus on one thing.",
-    },
-    "chaotic": {
-        "color": "#E94560",
-        "emoji": "🌀",
-        "feedback": "Find the still point in the storm.",
-    },
-    "intense": {
-        "color": "#FF4D4D",
-        "emoji": "🔥",
-        "feedback": "This intensity shows how much you care.",
-    },
-    "gritty": {
-        "color": "#2B2B2B",
-        "emoji": "⛓️",
-        "feedback": "Strength is often forged in the rough.",
-    },
-    "nostalgic": {
-        "color": "#FFAAA5",
-        "emoji": "📺",
-        "feedback": "A beautiful echo of where you've been.",
-    },
-    "romantic": {
-        "color": "#FFB7B2",
-        "emoji": "❤️",
-        "feedback": "Love is the thread that binds us.",
-    },
-    "mystical": {
-        "color": "#9D4EDD",
-        "emoji": "✨",
-        "feedback": "There is magic in the unknown.",
-    },
-    "vintage": {
-        "color": "#B08968",
-        "emoji": "🎞️",
-        "feedback": "Timeless vibes for a timeless soul.",
-    },
-    "cozy": {
-        "color": "#E6A15C",
-        "emoji": "🕯️",
-        "feedback": "Warmth and comfort wrap around you.",
-    },
-    "ethereal": {
-        "color": "#B8C0FF",
-        "emoji": "🌫️",
-        "feedback": "A dreamlike state where reality blurs.",
-    },
-    "melancholic": {
-        "color": "#4E6E81",
-        "emoji": "🥀",
-        "feedback": "There is a beautiful weight in this sadness.",
-    },
-    "industrial": {
-        "color": "#545B64",
-        "emoji": "⚙️",
-        "feedback": "Raw, structural energy and cold metal.",
-    },
-    "natural": {
-        "color": "#4A7C59",
-        "emoji": "🌲",
-        "feedback": "Connected to the rhythm of the earth.",
-    },
-    "futuristic": {
-        "color": "#00F5D4",
-        "emoji": "🤖",
-        "feedback": "A glimpse into what lies ahead.",
-    },
-    "bold": {
-        "color": "#F15BB5",
-        "emoji": "🏎️",
-        "feedback": "Fearless, high-contrast presence.",
-    },
-    "solitary": {
-        "color": "#8D99AE",
-        "emoji": "🏔️",
-        "feedback": "Finding peace in your own company.",
-    },
-    "tense": {
-        "color": "#D90429",
-        "emoji": "⚠️",
-        "feedback": "The air is thick with anticipation.",
-    },
-    "hopeful": {
-        "color": "#FEE440",
-        "emoji": "🌅",
-        "feedback": "A new dawn is just beginning.",
-    },
-}
-
 
 VIBE_YOUTUBE_QUERIES = {
     "calm": ["calm piano music playlist", "ambient relaxing music"],
@@ -371,6 +347,41 @@ VIBE_YOUTUBE_QUERIES = {
     "hopeful": ["hopeful uplifting music", "morning motivation playlist"],
     "minimalist": ["minimalist piano playlist", "sparse ambient music"],
 }
+
+VIBE_META = {
+    "calm": {"color": "#A8E6CF", "emoji": "😌"},
+    "peaceful": {"color": "#B2E2F2", "emoji": "🕊️"},
+    "serene": {"color": "#D4F1F4", "emoji": "🧘"},
+    "minimalist": {"color": "#D0D0D0", "emoji": "⚪"},
+    "happy": {"color": "#FFDE7D", "emoji": "😊"},
+    "energetic": {"color": "#FFD93D", "emoji": "⚡"},
+    "playful": {"color": "#FF8B94", "emoji": "🎈"},
+    "vibrant": {"color": "#6BCB77", "emoji": "🌈"},
+    "sad": {"color": "#A2D2FF", "emoji": "😢"},
+    "lonely": {"color": "#6C757D", "emoji": "👤"},
+    "pensive": {"color": "#4A4E69", "emoji": "🤔"},
+    "gloomy": {"color": "#9A8C98", "emoji": "☁️"},
+    "anxious": {"color": "#D4A5A5", "emoji": "😰"},
+    "chaotic": {"color": "#E94560", "emoji": "🌀"},
+    "intense": {"color": "#FF4D4D", "emoji": "🔥"},
+    "gritty": {"color": "#545B64", "emoji": "⛓️"},
+    "nostalgic": {"color": "#FFAAA5", "emoji": "📺"},
+    "romantic": {"color": "#FFB7B2", "emoji": "❤️"},
+    "mystical": {"color": "#9D4EDD", "emoji": "✨"},
+    "vintage": {"color": "#B08968", "emoji": "🎞️"},
+    "cozy": {"color": "#E6A15C", "emoji": "🕯️"},
+    "ethereal": {"color": "#B8C0FF", "emoji": "🌫️"},
+    "melancholic": {"color": "#4E6E81", "emoji": "🥀"},
+    "industrial": {"color": "#545B64", "emoji": "⚙️"},
+    "natural": {"color": "#4A7C59", "emoji": "🌲"},
+    "futuristic": {"color": "#00F5D4", "emoji": "🤖"},
+    "bold": {"color": "#F15BB5", "emoji": "🏎️"},
+    "solitary": {"color": "#8D99AE", "emoji": "🏔️"},
+    "tense": {"color": "#D90429", "emoji": "⚠️"},
+    "hopeful": {"color": "#FEE440", "emoji": "🌅"},
+}
+
+VIBE_LABELS = list(VIBE_META.keys())
 
 YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 
@@ -434,6 +445,8 @@ def serialize_mood_log(log: models.MoodLog):
         "secondary_moods": secondary_moods,
         "all_scores": all_scores,
         "image_path": log.image_path,
+        "reflection": log.reflection,
+        "gentle_reminder": log.gentle_reminder,
     }
 
 
@@ -758,6 +771,11 @@ def build_full_response(vibe: str, description: str, structured: Optional[dict] 
     dominant_meta = VIBE_META.get(
         dominant_label, {"color": "#808080", "emoji": "🌈", "feedback": "Unique vibe!"}
     )
+    dominant_color = dominant_meta.get("color", "#808080")
+    dominant_emoji = dominant_meta.get("emoji", "🌈")
+    dominant_feedback = dominant_meta.get(
+        "feedback", f"This moment carries a {dominant_label} energy."
+    )
 
     # Build the all_scores list from BERT (full 20 labels)
     bert_enriched = [
@@ -796,9 +814,9 @@ def build_full_response(vibe: str, description: str, structured: Optional[dict] 
         "short_description": short_desc,
         "mood": dominant_label,
         "confidence": f"{round(bert_scores[bert_labels.index(dominant_label)] * 100, 2)}%",
-        "emoji": dominant_meta["emoji"],
-        "color": dominant_meta["color"],
-        "feedback": dominant_meta["feedback"],
+        "emoji": dominant_emoji,
+        "color": dominant_color,
+        "feedback": dominant_feedback,
         "all_scores": bert_enriched,
     }
 
@@ -1005,11 +1023,26 @@ def create_mood_log(
 
     scene_tags = [str(tag).strip() for tag in mood_log.scene_tags if str(tag).strip()]
 
+    timestamp_value = mood_log.timestamp or datetime.now(timezone.utc)
+    duplicate_log = (
+        db.query(models.MoodLog)
+        .filter(
+            models.MoodLog.user_id == db_user.id,
+            models.MoodLog.vibe == vibe,
+            models.MoodLog.short_caption == short_caption,
+            func.date(models.MoodLog.timestamp) == timestamp_value.date().isoformat(),
+        )
+        .first()
+    )
+
+    if duplicate_log:
+        return serialize_mood_log(duplicate_log)
+
     new_log = models.MoodLog(
         user_id=db_user.id,
         vibe=vibe,
         emoji=mood_log.emoji,
-        timestamp=mood_log.timestamp or datetime.now(timezone.utc),
+        timestamp=timestamp_value,
         short_caption=short_caption,
         color=color,
         scene_tags=json.dumps(scene_tags),
@@ -1023,6 +1056,9 @@ def create_mood_log(
         color_palette=json.dumps(mood_log.color_palette),
         secondary_moods=json.dumps(mood_log.secondary_moods),
         all_scores=json.dumps(mood_log.all_scores),
+        reflection=mood_log.reflection,
+        doodles=mood_log.doodles,
+        gentle_reminder=mood_log.gentle_reminder,
     )
     db.add(new_log)
     db.commit()
@@ -1031,14 +1067,63 @@ def create_mood_log(
     return serialize_mood_log(new_log)
 
 
+@app.delete("/mood-log/{log_id}", status_code=204)
+def delete_mood_log(
+    log_id: int,
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    """Delete a single mood log entry. Returns 404 if not found or not owned by user."""
+    log = (
+        db.query(models.MoodLog)
+        .filter(
+            models.MoodLog.id == log_id,
+            models.MoodLog.user_id == db_user.id,
+        )
+        .first()
+    )
+
+    if not log:
+        raise HTTPException(status_code=404, detail="Mood log not found")
+
+    # Optionally clean up the associated image file from disk
+    if log.image_path:
+        try:
+            full_path = os.path.join(os.path.dirname(__file__), log.image_path)
+            if os.path.isfile(full_path):
+                os.remove(full_path)
+        except Exception as e:
+            print(f"[Image cleanup warning] {e}")
+
+    db.delete(log)
+    db.commit()
+    # 204 No Content — no body returned
+
+
 @app.get("/mood-history", response_model=schemas.MoodHistoryResponse)
 def get_mood_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(
+        None, description="Filter by vibe name or caption text"
+    ),
     db: Session = Depends(database.get_db),
     db_user: models.User = Depends(get_current_db_user),
 ):
     query = db.query(models.MoodLog).filter(models.MoodLog.user_id == db_user.id)
+
+    # ── Search filter ──
+    if search and search.strip():
+        term = f"%{search.strip().lower()}%"
+        from sqlalchemy import func, or_
+
+        query = query.filter(
+            or_(
+                func.lower(models.MoodLog.vibe).like(term),
+                func.lower(models.MoodLog.short_caption).like(term),
+            )
+        )
+
     total = query.count()
     offset = (page - 1) * page_size
     logs = (
@@ -1112,6 +1197,34 @@ def get_analytics(
         mood_counts = Counter(entry.vibe for entry in entries)
         daily_counts = defaultdict(Counter)
 
+        # Calculate vibe scores
+        vibe_score_sums = defaultdict(float)
+        vibe_score_counts = defaultdict(int)
+        for entry in entries:
+            if entry.all_scores:
+                try:
+                    scores = json.loads(entry.all_scores)
+                    for score_item in scores:
+                        if (
+                            isinstance(score_item, dict)
+                            and "label" in score_item
+                            and "score" in score_item
+                        ):
+                            vibe = score_item["label"]
+                            score = float(score_item["score"])
+                            vibe_score_sums[vibe] += score
+                            vibe_score_counts[vibe] += 1
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        vibe_scores = {}
+        for vibe in vibe_score_sums:
+            vibe_scores[vibe] = (
+                vibe_score_sums[vibe] / vibe_score_counts[vibe]
+                if vibe_score_counts[vibe] > 0
+                else 0
+            )
+
         for entry in entries:
             if entry.timestamp is None:
                 continue
@@ -1132,6 +1245,7 @@ def get_analytics(
             "total_entries": len(entries),
             "date_range_days": days,
             "mood_frequency": dict(mood_counts),
+            "vibe_scores": vibe_scores,
             "most_common": mood_counts.most_common(1)[0][0] if mood_counts else None,
             "daily_breakdown": daily_breakdown,
         }
@@ -1184,6 +1298,144 @@ def update_mood_goal(
     db.commit()
     db.refresh(goal)
     return {"vibe": goal.vibe, "updated_at": goal.updated_at.isoformat()}
+
+
+@app.post("/journal-prompts")
+async def get_journal_prompts(
+    request: schemas.JournalPromptsRequest,
+    current_user: str = Depends(auth.get_current_user),
+):
+    vibe = request.vibe.strip().lower()
+
+    # Try Gemini first
+    if gemini_model and request.description:
+        try:
+            prompt = f"""You are a compassionate journaling coach. A person just analyzed their mood and their current emotional vibe is "{vibe}".
+ 
+Here is the scene description from their mood analysis:
+"{request.description[:400]}"
+ 
+Generate exactly 3 short, thoughtful reflection questions tailored to this specific vibe and scene.
+Rules:
+- Each question should be 1 sentence, personal, gently probing, and non-clinical
+- Do NOT use the word "vibe"
+- Write questions that feel like a wise, warm friend asking — not a therapist
+- Return ONLY a JSON array of 3 strings, no other text, no markdown
+ 
+Example format: ["Question one?", "Question two?", "Question three?"]"""
+
+            response = await asyncio.to_thread(gemini_model.generate_content, prompt)
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            prompts = json.loads(raw.strip())
+            if isinstance(prompts, list) and len(prompts) >= 2:
+                return {"prompts": prompts[:3], "source": "ai"}
+        except Exception as e:
+            print(f"[Journal Prompts Gemini Error] {e}")
+
+    # Static fallback
+    prompts = STATIC_JOURNAL_PROMPTS.get(vibe, DEFAULT_JOURNAL_PROMPTS)
+    return {"prompts": prompts, "source": "static"}
+
+
+@app.post("/affirmation")
+async def get_affirmation(
+    request: schemas.AffirmationRequest,
+    current_user: str = Depends(auth.get_current_user),
+):
+    vibe = request.vibe.strip().lower()
+
+    # Try Gemini
+    if gemini_model:
+        try:
+            hour = datetime.now().hour
+            if 5 <= hour < 12:
+                time_context = "morning"
+            elif 12 <= hour < 17:
+                time_context = "afternoon"
+            elif 17 <= hour < 21:
+                time_context = "evening"
+            else:
+                time_context = "late night"
+
+            prompt = f"""Write a personal affirmation for someone whose current emotional vibe is "{vibe}" during the {time_context}.
+  
+Rules:
+- Exactly 2 sentences
+- Warm, poetic, and grounding — not generic or clinical
+- Speak directly to the person using "you" or "your"
+- Acknowledge the vibe without dramatizing it
+- End on a note of quiet strength or self-compassion
+- Return ONLY the affirmation text, nothing else"""
+
+            response = await asyncio.to_thread(gemini_model.generate_content, prompt)
+            affirmation = response.text.strip().strip('"')
+            if affirmation:
+                return {"affirmation": affirmation, "source": "ai"}
+        except Exception as e:
+            print(f"[Affirmation Gemini Error] {e}")
+
+    # Static fallback
+    affirmation = STATIC_AFFIRMATIONS.get(vibe, DEFAULT_AFFIRMATION)
+    return {"affirmation": affirmation, "source": "static"}
+
+
+@app.post("/companion-question")
+async def get_companion_question(
+    request: schemas.CompanionQuestionRequest,
+    current_user: str = Depends(auth.get_current_user),
+):
+    """
+    Returns a contextual check-in question tailored to the user's mood history.
+    Tries Gemini first; falls back to static questions.
+    """
+    # ── Try Gemini ──
+    if gemini_model and request.recent_vibes:
+        try:
+            context_parts = []
+            if request.days_away >= 1:
+                context_parts.append(
+                    f"They have been away for {request.days_away} day(s)."
+                )
+            if request.trend != "neutral":
+                context_parts.append(f"Their mood trend is {request.trend}.")
+            if request.recent_vibes:
+                context_parts.append(
+                    f"Their recent vibes (most recent first): {request.recent_vibes}."
+                )
+            context_parts.append(
+                f"It is currently {request.time_slot.replace('earlyMorning', 'early morning')}."
+            )
+            context_parts.append(
+                f"They have logged {request.total_logs} total entries."
+            )
+
+            prompt = f"""You are a compassionate mood journal companion. Based on this context about a user:
+
+{chr(10).join(context_parts)}
+
+Write exactly ONE thoughtful, gentle check-in question for them. The question should:
+- Feel personal and specific to their context (not generic)
+- Be warm and non-clinical — like a close, wise friend asking
+- Be a single sentence ending with a question mark
+- Avoid the words "vibe", "mood", "trend", or "entry"
+- NOT start with "How are you feeling?" (too common)
+
+Return ONLY the question text, nothing else."""
+
+            response = await asyncio.to_thread(gemini_model.generate_content, prompt)
+            question = response.text.strip().strip('"')
+            if question and question.endswith("?"):
+                return {"question": question, "source": "ai"}
+        except Exception as e:
+            print(f"[Companion Question Gemini Error] {e}")
+
+    # ── Static fallback ──
+    question = pick_static_companion_question(request)
+    return {"question": question, "source": "static"}
 
 
 @app.get("/playlist-suggestions/{vibe}")

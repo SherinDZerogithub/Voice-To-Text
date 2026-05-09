@@ -13,13 +13,15 @@ import {
   Dimensions,
   StatusBar,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants ───────────────────────────────────────────────
 const SAGE_COLOR   = '#7c6ff7';
 const SAGE_LIGHT   = '#ede9fe';
 const SAGE_DARK    = '#5b4fd4';
 const SCREEN_W     = Dimensions.get('window').width;
+const CHAT_STORAGE_KEY = 'therapist_chat_history';
 
 const STARTER_PROMPTS = [
   { icon: 'emoticon-sad-outline',      label: "I've been feeling overwhelmed lately…" },
@@ -150,6 +152,7 @@ const TherapistChat = ({ token, backendUrl, vibeContext, onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error,     setError]     = useState('');
   const [retryText, setRetryText] = useState('');
+  const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
 
   useEffect(() => {
     isMounted.current = true;
@@ -161,6 +164,32 @@ const TherapistChat = ({ token, backendUrl, vibeContext, onClose }) => {
   function formatTime(date) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
+
+  const loadChatHistory = useCallback(async () => {
+    try {
+      const saved = await AsyncStorage.getItem(CHAT_STORAGE_KEY);
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setMessages(parsed);
+      }
+    } catch (err) {
+      console.warn('Failed to load therapist chat history', err);
+    } finally {
+      setIsHistoryLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadChatHistory();
+  }, [loadChatHistory]);
+
+  useEffect(() => {
+    if (!isHistoryLoaded) return;
+    AsyncStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages)).catch((err) => {
+      console.warn('Failed to save therapist chat history', err);
+    });
+  }, [messages, isHistoryLoaded]);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
@@ -236,18 +265,24 @@ const TherapistChat = ({ token, backendUrl, vibeContext, onClose }) => {
     [input, messages, isLoading, backendUrl, token, vibeContext, scrollToBottom]
   );
 
-  const clearChat = () => {
-    setMessages([
-      {
-        id:   'intro',
-        role: 'model',
-        text: "Let's start fresh. I'm here whenever you're ready. 🌿",
-        time: formatTime(new Date()),
-      },
-    ]);
+  const clearChat = async () => {
+    const freshIntro = {
+      id:   'intro',
+      role: 'model',
+      text: "Let's start fresh. I'm here whenever you're ready. 🌿",
+      time: formatTime(new Date()),
+    };
+
+    setMessages([freshIntro]);
     setInput('');
     setError('');
     setRetryText('');
+
+    try {
+      await AsyncStorage.removeItem(CHAT_STORAGE_KEY);
+    } catch (err) {
+      console.warn('Failed to clear therapist chat history', err);
+    }
   };
 
   // ── Render helpers ──────────────────────────────────────────────

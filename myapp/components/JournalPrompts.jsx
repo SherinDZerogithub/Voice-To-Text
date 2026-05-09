@@ -1,0 +1,1198 @@
+import React, {useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle} from 'react';
+import {
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Modal,
+  PanResponder,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Svg, {Path, Circle, Rect, Line} from 'react-native-svg';
+
+const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
+
+// ─── Static fallback prompts per vibe ────────────────────────────────────────
+
+const FALLBACK_PROMPTS = {
+  calm: [
+    'What helped you arrive at this stillness?',
+    'What are you grateful for right now?',
+    'How can you protect this feeling today?',
+  ],
+  happy: [
+    'What specifically made today feel good?',
+    'Who would you like to share this joy with?',
+    'What does happiness feel like in your body right now?',
+  ],
+  energetic: [
+    'What are you most excited to tackle today?',
+    'How can you channel this energy productively?',
+    'What does this surge feel like — where is it coming from?',
+  ],
+  sad: [
+    'What is this sadness trying to tell you?',
+    'Is there something you need to let go of?',
+    'What small act of kindness can you offer yourself right now?',
+  ],
+  anxious: [
+    "What's one thing you can control right now?",
+    'What would you say to a friend feeling this way?',
+    'Name 3 things you can see from where you are.',
+  ],
+  angry: [
+    "What need of yours isn't being met?",
+    'What would help you feel heard?',
+    'What boundary might need to be set or reasserted?',
+  ],
+  lonely: [
+    'What kind of connection are you craving?',
+    'Who in your life could you reach out to today?',
+    'What does your ideal sense of belonging look like?',
+  ],
+  nostalgic: [
+    'What from your past are you longing for?',
+    'How has that experience shaped who you are?',
+    'What part of that past self can you honor today?',
+  ],
+  pensive: [
+    'What question keeps coming back to you lately?',
+    'What are you trying to figure out?',
+    'What would happen if you sat with the uncertainty a little longer?',
+  ],
+  gloomy: [
+    'When did this cloudiness begin?',
+    'What would a small ray of light look like for you today?',
+    "Is there something heavy you've been carrying alone?",
+  ],
+  tense: [
+    'What is the source of this tension?',
+    'What would release feel like right now?',
+    "What's one thing you can let go of today?",
+  ],
+  hopeful: [
+    'What are you hoping for?',
+    "What's one step toward that hope you can take today?",
+    "What feels possible that didn't before?",
+  ],
+  cozy: [
+    'What makes this moment feel safe and warm?',
+    'How can you savour this feeling a little longer?',
+    'Who or what created this sense of comfort?',
+  ],
+  chaotic: [
+    'What is the core thing overwhelming you right now?',
+    "What's one thing you can remove from your plate?",
+    'What does your mind need most — rest, clarity, or movement?',
+  ],
+  default: [
+    "What's on your mind right now?",
+    'How does your body feel in this moment?',
+    'What do you need most right now — and how could you give it to yourself?',
+  ],
+};
+
+const getStaticPrompts = vibe => {
+  const key = vibe?.toLowerCase() ?? 'default';
+  return FALLBACK_PROMPTS[key] ?? FALLBACK_PROMPTS.default;
+};
+
+// ─── Doodle Canvas ───────────────────────────────────────────────────────────
+
+const BRUSH_SIZES = [2, 4, 8, 14];
+const BRUSH_COLORS = [
+  '#2d3436', '#6c5ce7', '#e84393', '#e17055',
+  '#fdcb6e', '#00b894', '#0984e3', '#fd79a8',
+  '#a29bfe', '#55efc4', '#ffffff',
+];
+
+const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
+  const [paths, setPaths] = useState([]);
+  const [currentPath, setCurrentPath] = useState(null);
+  const [brushColor, setBrushColor] = useState('#2d3436');
+  const [brushSize, setBrushSize] = useState(4);
+  const [isEraser, setIsEraser] = useState(false);
+  const [bgColor, setBgColor] = useState('#fffdf7');
+  const canvasRef = useRef(null);
+  const scaleAnim = useRef(new Animated.Value(0.92)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(scaleAnim, {toValue: 1, tension: 60, friction: 10, useNativeDriver: true}),
+        Animated.timing(opacityAnim, {toValue: 1, duration: 250, useNativeDriver: true}),
+      ]).start();
+    } else {
+      scaleAnim.setValue(0.92);
+      opacityAnim.setValue(0);
+    }
+  }, [visible]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: evt => {
+        const {locationX, locationY} = evt.nativeEvent;
+        const newPath = {
+          points: [{x: locationX, y: locationY}],
+          color: isEraser ? bgColor : brushColor,
+          size: isEraser ? brushSize * 3 : brushSize,
+          id: Date.now(),
+        };
+        setCurrentPath(newPath);
+      },
+      onPanResponderMove: evt => {
+        const {locationX, locationY} = evt.nativeEvent;
+        setCurrentPath(prev => {
+          if (!prev) return prev;
+          return {...prev, points: [...prev.points, {x: locationX, y: locationY}]};
+        });
+      },
+      onPanResponderRelease: () => {
+        setCurrentPath(prev => {
+          if (prev) {
+            setPaths(ps => [...ps, prev]);
+          }
+          return null;
+        });
+      },
+    }),
+  ).current;
+
+  const pointsToPath = points => {
+    if (!points || points.length === 0) return '';
+    if (points.length === 1) {
+      return `M ${points[0].x} ${points[0].y} L ${points[0].x + 0.1} ${points[0].y}`;
+    }
+    let d = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      d += ` L ${points[i].x} ${points[i].y}`;
+    }
+    return d;
+  };
+
+  const handleUndo = () => setPaths(prev => prev.slice(0, -1));
+  const handleClear = () => setPaths([]);
+
+  const handleSave = () => {
+    // Serialize path data for saving
+    const doodleData = {paths, bgColor, timestamp: Date.now()};
+    onSave && onSave(doodleData);
+    onClose();
+  };
+
+  const BG_COLORS = ['#fffdf7', '#f0eeff', '#e8f5e9', '#fce4ec', '#e3f2fd', '#1a1a2e'];
+
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <View style={doodleStyles.overlay}>
+        <Animated.View
+          style={[doodleStyles.sheet, {opacity: opacityAnim, transform: [{scale: scaleAnim}]}]}>
+
+          {/* Header */}
+          <View style={doodleStyles.header}>
+            <View style={doodleStyles.headerLeft}>
+              <View style={[doodleStyles.headerIcon, {backgroundColor: (accentColor || '#6c5ce7') + '18'}]}>
+                <Icon name="draw" size={16} color={accentColor || '#6c5ce7'} />
+              </View>
+              <View>
+                <Text style={doodleStyles.headerTitle}>Doodle Space</Text>
+                <Text style={doodleStyles.headerSub}>Express what words can't</Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={onClose} style={doodleStyles.closeBtn}>
+              <Icon name="close" size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Toolbar */}
+          <View style={doodleStyles.toolbar}>
+            {/* Color picker */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={doodleStyles.colorScroll}>
+              {BRUSH_COLORS.map(c => (
+                <TouchableOpacity
+                  key={c}
+                  onPress={() => {setIsEraser(false); setBrushColor(c);}}
+                  style={[
+                    doodleStyles.colorDot,
+                    {backgroundColor: c, borderWidth: !isEraser && brushColor === c ? 3 : 1},
+                    c === '#ffffff' && {borderColor: '#ddd'},
+                  ]}
+                />
+              ))}
+            </ScrollView>
+
+            {/* Brush size */}
+            <View style={doodleStyles.sizeRow}>
+              {BRUSH_SIZES.map(s => (
+                <TouchableOpacity
+                  key={s}
+                  onPress={() => setBrushSize(s)}
+                  style={[doodleStyles.sizeBtn, brushSize === s && !isEraser && {backgroundColor: brushColor + '22'}]}>
+                  <View style={[doodleStyles.sizeDot, {
+                    width: s + 4,
+                    height: s + 4,
+                    borderRadius: (s + 4) / 2,
+                    backgroundColor: brushColor,
+                  }]} />
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                onPress={() => setIsEraser(e => !e)}
+                style={[doodleStyles.sizeBtn, isEraser && doodleStyles.activeTool]}>
+                <Icon name="eraser" size={16} color={isEraser ? '#6c5ce7' : '#888'} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Background color picker */}
+          <View style={doodleStyles.bgRow}>
+            <Text style={doodleStyles.bgLabel}>Canvas:</Text>
+            {BG_COLORS.map(c => (
+              <TouchableOpacity
+                key={c}
+                onPress={() => setBgColor(c)}
+                style={[
+                  doodleStyles.bgDot,
+                  {backgroundColor: c, borderWidth: bgColor === c ? 2 : 1, borderColor: bgColor === c ? '#6c5ce7' : '#ddd'},
+                ]}
+              />
+            ))}
+          </View>
+
+          {/* Canvas */}
+          <View
+            style={[doodleStyles.canvas, {backgroundColor: bgColor}]}
+            {...panResponder.panHandlers}
+            ref={canvasRef}>
+            <Svg style={StyleSheet.absoluteFill}>
+              {paths.map(path => (
+                <Path
+                  key={path.id}
+                  d={pointsToPath(path.points)}
+                  stroke={path.color}
+                  strokeWidth={path.size}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              ))}
+              {currentPath && (
+                <Path
+                  d={pointsToPath(currentPath.points)}
+                  stroke={currentPath.color}
+                  strokeWidth={currentPath.size}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              )}
+            </Svg>
+            {paths.length === 0 && !currentPath && (
+              <View style={doodleStyles.canvasHint}>
+                <Icon name="gesture-swipe" size={28} color="#ccc" />
+                <Text style={doodleStyles.canvasHintText}>Draw anything…</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Actions */}
+          <View style={doodleStyles.actions}>
+            <TouchableOpacity style={doodleStyles.actionBtn} onPress={handleUndo} disabled={paths.length === 0}>
+              <Icon name="undo" size={18} color={paths.length === 0 ? '#ddd' : '#666'} />
+              <Text style={[doodleStyles.actionText, paths.length === 0 && {color: '#ddd'}]}>Undo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={doodleStyles.actionBtn} onPress={handleClear} disabled={paths.length === 0}>
+              <Icon name="trash-can-outline" size={18} color={paths.length === 0 ? '#ddd' : '#e74c3c'} />
+              <Text style={[doodleStyles.actionText, {color: paths.length === 0 ? '#ddd' : '#e74c3c'}]}>Clear</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[doodleStyles.saveBtn, {backgroundColor: accentColor || '#6c5ce7'}]}
+              onPress={handleSave}>
+              <Icon name="check" size={16} color="#fff" />
+              <Text style={doodleStyles.saveBtnText}>Save Doodle</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+};
+
+// ─── Answer Popup Modal ───────────────────────────────────────────────────────
+
+const AnswerModal = ({visible, prompt, existingAnswer, onClose, onSave, accentColor}) => {
+  const [text, setText] = useState(existingAnswer || '');
+  const [showDoodle, setShowDoodle] = useState(false);
+  const [savedDoodle, setSavedDoodle] = useState(null);
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const overlayAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setText(existingAnswer || '');
+      Animated.parallel([
+        Animated.spring(slideAnim, {toValue: 0, tension: 55, friction: 10, useNativeDriver: true}),
+        Animated.timing(overlayAnim, {toValue: 1, duration: 300, useNativeDriver: true}),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, {toValue: SCREEN_HEIGHT, duration: 280, useNativeDriver: true}),
+        Animated.timing(overlayAnim, {toValue: 0, duration: 250, useNativeDriver: true}),
+      ]).start();
+    }
+  }, [visible]);
+
+  const handleSave = () => {
+    if (!text.trim() && !savedDoodle) return;
+    onSave({text: text.trim(), doodle: savedDoodle});
+    onClose();
+  };
+
+  const handleDoodleSave = doodleData => {
+    setSavedDoodle(doodleData);
+  };
+
+  const color = accentColor || '#6c5ce7';
+
+  return (
+    <>
+      <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex: 1}}>
+          <Animated.View style={[answerStyles.overlay, {opacity: overlayAnim}]}>
+            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+          </Animated.View>
+          <Animated.View style={[answerStyles.sheet, {transform: [{translateY: slideAnim}]}]}>
+            {/* Handle */}
+            <View style={answerStyles.handle} />
+
+            {/* Prompt question */}
+            <View style={[answerStyles.promptBubble, {borderLeftColor: color}]}>
+              <Icon name="format-quote-open" size={14} color={color} style={{marginBottom: 4}} />
+              <Text style={answerStyles.promptText}>{prompt}</Text>
+            </View>
+
+            {/* Text answer area */}
+            <View style={answerStyles.inputWrapper}>
+              <TextInput
+                style={answerStyles.textInput}
+                placeholder="Write your thoughts here…"
+                placeholderTextColor="#bbb"
+                value={text}
+                onChangeText={setText}
+                multiline
+                autoFocus
+                textAlignVertical="top"
+                maxLength={1000}
+              />
+              <Text style={answerStyles.charCount}>{text.length}/1000</Text>
+            </View>
+
+            {/* Doodle attachment indicator */}
+            {savedDoodle && (
+              <TouchableOpacity
+                style={[answerStyles.doodleBadge, {borderColor: color + '40', backgroundColor: color + '08'}]}
+                onPress={() => setShowDoodle(true)}>
+                <Icon name="draw" size={14} color={color} />
+                <Text style={[answerStyles.doodleBadgeText, {color}]}>Doodle attached · tap to edit</Text>
+                <TouchableOpacity onPress={() => setSavedDoodle(null)} hitSlop={{top: 8, right: 8, bottom: 8, left: 8}}>
+                  <Icon name="close-circle" size={14} color="#bbb" />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            )}
+
+            {/* Actions */}
+            <View style={answerStyles.actions}>
+              <TouchableOpacity
+                style={[answerStyles.doodleBtn, {borderColor: color + '40', backgroundColor: color + '08'}]}
+                onPress={() => setShowDoodle(true)}>
+                <Icon name="draw" size={16} color={color} />
+                <Text style={[answerStyles.doodleBtnText, {color}]}>
+                  {savedDoodle ? 'Edit Doodle' : 'Add Doodle'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[answerStyles.saveBtn, {backgroundColor: color}, (!text.trim() && !savedDoodle) && answerStyles.saveBtnDisabled]}
+                onPress={handleSave}
+                disabled={!text.trim() && !savedDoodle}>
+                <Icon name="check" size={16} color="#fff" />
+                <Text style={answerStyles.saveBtnText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Doodle canvas opened from answer modal */}
+      <DoodleCanvas
+        visible={showDoodle}
+        onClose={() => setShowDoodle(false)}
+        onSave={handleDoodleSave}
+        accentColor={color}
+      />
+    </>
+  );
+};
+
+// ─── Saved Answer Card ────────────────────────────────────────────────────────
+
+const SavedAnswerCard = ({prompt, answer, index, color, onEdit, onDelete}) => {
+  const [expanded, setExpanded] = useState(false);
+  const heightAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+
+  const toggle = () => {
+    const toVal = expanded ? 0 : 1;
+    setExpanded(!expanded);
+    Animated.parallel([
+      Animated.spring(heightAnim, {toValue: toVal, tension: 60, friction: 10, useNativeDriver: false}),
+      Animated.timing(rotateAnim, {toValue: toVal, duration: 200, useNativeDriver: true}),
+    ]).start();
+  };
+
+  const rotate = rotateAnim.interpolate({inputRange: [0, 1], outputRange: ['0deg', '180deg']});
+
+  return (
+    <View style={[savedStyles.card, {borderLeftColor: color}]}>
+      <TouchableOpacity style={savedStyles.cardHeader} onPress={toggle} activeOpacity={0.8}>
+        <View style={[savedStyles.indexBadge, {backgroundColor: color + '18'}]}>
+          <Text style={[savedStyles.indexText, {color}]}>{index + 1}</Text>
+        </View>
+        <Text style={savedStyles.promptSnippet} numberOfLines={expanded ? undefined : 1}>{prompt}</Text>
+        <Animated.View style={{transform: [{rotate}]}}>
+          <Icon name="chevron-down" size={16} color="#ccc" />
+        </Animated.View>
+      </TouchableOpacity>
+
+      <Animated.View style={{
+        maxHeight: heightAnim.interpolate({inputRange: [0, 1], outputRange: [0, 300]}),
+        overflow: 'hidden',
+        opacity: heightAnim,
+      }}>
+        <View style={savedStyles.answerBody}>
+          {answer.text ? (
+            <Text style={savedStyles.answerText}>{answer.text}</Text>
+          ) : null}
+          {answer.doodle && (
+            <View style={savedStyles.doodlePreview}>
+              <Svg width="100%" height={80} style={{backgroundColor: answer.doodle.bgColor || '#fffdf7', borderRadius: 8}}>
+                {(answer.doodle.paths || []).slice(0, 30).map(path => {
+                  if (!path.points || path.points.length < 2) return null;
+                  // Scale down paths to fit preview
+                  const scaleX = (SCREEN_WIDTH - 80) / (SCREEN_WIDTH - 32);
+                  const scaleY = 80 / 280;
+                  const scaledPoints = path.points.map(p => ({x: p.x * scaleX, y: p.y * scaleY}));
+                  let d = `M ${scaledPoints[0].x} ${scaledPoints[0].y}`;
+                  for (let i = 1; i < scaledPoints.length; i++) {
+                    d += ` L ${scaledPoints[i].x} ${scaledPoints[i].y}`;
+                  }
+                  return (
+                    <Path key={path.id} d={d} stroke={path.color} strokeWidth={path.size * 0.5}
+                      strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  );
+                })}
+              </Svg>
+              <Text style={savedStyles.doodleLabel}>🎨 Doodle</Text>
+            </View>
+          )}
+          <View style={savedStyles.cardActions}>
+            <TouchableOpacity style={savedStyles.editAction} onPress={() => onEdit(index)}>
+              <Icon name="pencil-outline" size={13} color="#888" />
+              <Text style={savedStyles.editActionText}>Edit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={savedStyles.deleteAction} onPress={() => onDelete(index)}>
+              <Icon name="trash-can-outline" size={13} color="#e74c3c" />
+              <Text style={savedStyles.deleteActionText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Animated.View>
+    </View>
+  );
+};
+
+// ─── Prompt Chip ─────────────────────────────────────────────────────────────
+
+const PromptChip = ({text, index, color, onOpenAnswer, hasAnswer}) => {
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 55,
+        friction: 9,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 350,
+        delay: index * 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [index, slideAnim, opacityAnim]);
+
+  return (
+    <Animated.View style={{opacity: opacityAnim, transform: [{translateY: slideAnim}]}}>
+      <TouchableOpacity
+        style={[
+          styles.promptChip,
+          hasAnswer && {backgroundColor: (color || '#6c5ce7') + '08', borderColor: (color || '#6c5ce7') + '30'},
+        ]}
+        onPress={() => onOpenAnswer(index)}
+        activeOpacity={0.75}>
+        <View style={styles.promptChipRow}>
+          <View style={[styles.promptIndex, {backgroundColor: (color || '#6c5ce7') + '20'}]}>
+            <Text style={[styles.promptIndexText, {color: color || '#6c5ce7'}]}>{index + 1}</Text>
+          </View>
+          <Text style={styles.promptText}>{text}</Text>
+          {hasAnswer ? (
+            <View style={[styles.answeredBadge, {backgroundColor: (color || '#6c5ce7') + '18'}]}>
+              <Icon name="check" size={10} color={color || '#6c5ce7'} />
+            </View>
+          ) : (
+            <Icon name="pencil-outline" size={15} color="#ccc" />
+          )}
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accentColor, savedReflection, savedDoodles}, ref) => {
+  const [prompts, setPrompts] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [source, setSource] = useState('static');
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Answer state
+  const [answers, setAnswers] = useState({}); // { [promptIndex]: { text, doodle } }
+  const [answerModal, setAnswerModal] = useState({visible: false, index: null});
+  const [showDoodleStandalone, setShowDoodleStandalone] = useState(false);
+  const [showAnswers, setShowAnswers] = useState(false);
+
+  const color = accentColor || '#6c5ce7';
+
+  // Parse saved doodles if string
+  const parsedSavedDoodles = savedDoodles ? (typeof savedDoodles === 'string' ? JSON.parse(savedDoodles) : savedDoodles) : null;
+
+  const pointsToPath = points => {
+    if (!points || points.length === 0) return '';
+    if (points.length === 1) {
+      return `M ${points[0].x} ${points[0].y} L ${points[0].x + 0.1} ${points[0].y}`;
+    }
+    let d = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      d += ` L ${points[i].x} ${points[i].y}`;
+    }
+    return d;
+  };
+
+  // Expose answers via ref for parent to access
+  useImperativeHandle(ref, () => ({
+    getAnswers: () => answers,
+    clearAnswers: () => setAnswers({}),
+  }), [answers]);
+
+  // Fetch prompts
+  useEffect(() => {
+    if (!vibe) {
+      setPrompts([]);
+      return;
+    }
+    setPrompts(getStaticPrompts(vibe));
+    setSource('static');
+    setCollapsed(false);
+    // Reset answers when vibe changes
+    setAnswers({});
+    setShowAnswers(false);
+
+    if (!backendUrl || !token || !description) return;
+
+    let cancelled = false;
+    const fetchAIPrompts = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`${backendUrl}/journal-prompts`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+          body: JSON.stringify({vibe, description}),
+        });
+        if (!response.ok) throw new Error('AI prompts failed');
+        const data = await response.json();
+        if (!cancelled && Array.isArray(data.prompts) && data.prompts.length > 0) {
+          setPrompts(data.prompts.slice(0, 3));
+          setSource('ai');
+        }
+      } catch {
+        // Keep static silently
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    fetchAIPrompts();
+    return () => {cancelled = true;};
+  }, [vibe, description, backendUrl, token]);
+
+  const answeredCount = Object.keys(answers).length;
+
+  const handleOpenAnswer = index => {
+    setAnswerModal({visible: true, index});
+  };
+
+  const handleSaveAnswer = useCallback(answer => {
+    const {index} = answerModal;
+    if (index === null) return;
+    setAnswers(prev => ({...prev, [index]: answer}));
+    setShowAnswers(true);
+  }, [answerModal]);
+
+  const handleDeleteAnswer = index => {
+    setAnswers(prev => {
+      const next = {...prev};
+      delete next[index];
+      return next;
+    });
+  };
+
+  if (!vibe || (prompts.length === 0 && !savedReflection && !parsedSavedDoodles)) return null;
+
+  const hasSavedData = savedReflection || parsedSavedDoodles;
+
+  return (
+    <View style={[styles.container, {borderColor: color + '30'}]}>
+      {/* Header */}
+      <TouchableOpacity style={styles.header} onPress={() => setCollapsed(c => !c)} activeOpacity={0.75}>
+        <View style={[styles.iconWrap, {backgroundColor: color + '18'}]}>
+          <Icon name="pen" size={16} color={color} />
+        </View>
+        <View style={styles.headerText}>
+          <Text style={styles.headerTitle}>
+            {hasSavedData ? 'Saved Reflections' : 'Reflect on this moment'}
+          </Text>
+          <Text style={styles.headerSub}>
+            {hasSavedData ? 'From this mood entry' : source === 'ai' ? '✦ Personalized prompts' : 'Journal prompts'}
+            {isLoading ? ' · personalizing…' : ''}
+            {answeredCount > 0 ? ` · ${answeredCount}/${prompts.length} answered` : ''}
+          </Text>
+        </View>
+        <Icon name={collapsed ? 'chevron-down' : 'chevron-up'} size={17} color="#bbb" />
+      </TouchableOpacity>
+
+      {/* Saved Reflection */}
+      {!collapsed && hasSavedData && (
+        <View style={styles.savedDataSection}>
+          {savedReflection && (
+            <View style={styles.savedReflection}>
+              <Text style={styles.savedReflectionText}>{savedReflection}</Text>
+            </View>
+          )}
+          {parsedSavedDoodles && (
+            <View style={styles.savedDoodle}>
+              <Svg width="100%" height="120" viewBox="0 0 200 120">
+                <Rect width="200" height="120" fill={parsedSavedDoodles.bgColor || '#fffdf7'} />
+                {parsedSavedDoodles.paths?.map((path, idx) => (
+                  <Path
+                    key={idx}
+                    d={pointsToPath(path.points)}
+                    stroke={path.color}
+                    strokeWidth={path.size}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                ))}
+              </Svg>
+              <Text style={styles.doodleLabel}>🎨 Saved Doodle</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Prompts */}
+      {!collapsed && !hasSavedData && prompts.map((prompt, i) => (
+        <PromptChip
+          key={`${vibe}-${i}`}
+          text={prompt}
+          index={i}
+          color={color}
+          onOpenAnswer={handleOpenAnswer}
+          hasAnswer={!!answers[i]}
+        />
+      ))}
+
+      {/* Doodle standalone button */}
+      {!collapsed && (
+        <TouchableOpacity
+          style={[styles.doodleStandaloneBtn, {borderColor: color + '30', backgroundColor: color + '06'}]}
+          onPress={() => setShowDoodleStandalone(true)}
+          activeOpacity={0.8}>
+          <Icon name="draw" size={15} color={color} />
+          <Text style={[styles.doodleStandaloneTxt, {color}]}>Open doodle canvas</Text>
+          <Icon name="arrow-right" size={13} color={color + '88'} />
+        </TouchableOpacity>
+      )}
+
+      {/* Saved answers section */}
+      {answeredCount > 0 && !collapsed && (
+        <View style={styles.savedSection}>
+          <TouchableOpacity
+            style={[styles.savedHeader, {backgroundColor: color + '08'}]}
+            onPress={() => setShowAnswers(s => !s)}
+            activeOpacity={0.8}>
+            <Icon name="book-open-variant" size={14} color={color} />
+            <Text style={[styles.savedHeaderText, {color}]}>
+              {answeredCount} saved reflection{answeredCount !== 1 ? 's' : ''}
+            </Text>
+            <Icon name={showAnswers ? 'chevron-up' : 'chevron-down'} size={14} color={color + '88'} />
+          </TouchableOpacity>
+
+          {showAnswers && (
+            <View style={styles.savedList}>
+              {Object.entries(answers).map(([idxStr, answer]) => {
+                const idx = parseInt(idxStr, 10);
+                return (
+                  <SavedAnswerCard
+                    key={idx}
+                    prompt={prompts[idx]}
+                    answer={answer}
+                    index={idx}
+                    color={color}
+                    onEdit={i => setAnswerModal({visible: true, index: i})}
+                    onDelete={handleDeleteAnswer}
+                  />
+                );
+              })}
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Answer Modal */}
+      <AnswerModal
+        visible={answerModal.visible}
+        prompt={prompts[answerModal.index] || ''}
+        existingAnswer={answerModal.index !== null ? answers[answerModal.index]?.text : ''}
+        onClose={() => setAnswerModal({visible: false, index: null})}
+        onSave={handleSaveAnswer}
+        accentColor={color}
+      />
+
+      {/* Standalone Doodle Canvas */}
+      <DoodleCanvas
+        visible={showDoodleStandalone}
+        onClose={() => setShowDoodleStandalone(false)}
+        onSave={doodleData => {
+          // Save standalone doodle under a special key
+          setAnswers(prev => ({...prev, doodle_standalone: {text: '', doodle: doodleData}}));
+          setShowAnswers(true);
+        }}
+        accentColor={color}
+      />
+    </View>
+  );
+});
+
+JournalPrompts.displayName = 'JournalPrompts';
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  container: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 16,
+    gap: 10,
+    elevation: 3,
+    shadowColor: '#6c5ce7',
+    shadowOffset: {width: 0, height: 3},
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerText: {flex: 1},
+  headerTitle: {fontSize: 14, fontWeight: '800', color: '#2d3436', letterSpacing: -0.2},
+  headerSub: {fontSize: 11, color: '#aaa', fontWeight: '600', marginTop: 1},
+  promptChip: {
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#fafafa',
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  promptChipRow: {flexDirection: 'row', alignItems: 'center', gap: 10},
+  promptIndex: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  promptIndexText: {fontSize: 11, fontWeight: '800'},
+  promptText: {flex: 1, fontSize: 13, color: '#444', lineHeight: 19, fontStyle: 'italic'},
+  answeredBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  doodleStandaloneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    borderStyle: 'dashed',
+    padding: 10,
+    marginTop: 2,
+  },
+  doodleStandaloneTxt: {flex: 1, fontSize: 13, fontWeight: '600'},
+  savedSection: {marginTop: 4, gap: 8},
+  savedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: 12,
+  },
+  savedHeaderText: {flex: 1, fontSize: 13, fontWeight: '700'},
+  savedList: {gap: 8},
+  savedDataSection: {gap: 12},
+  savedReflection: {
+    backgroundColor: '#fafafa',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  savedReflectionText: {
+    fontSize: 15,
+    color: '#444',
+    lineHeight: 22,
+  },
+  savedDoodle: {
+    backgroundColor: '#fafafa',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+    alignItems: 'center',
+  },
+  doodleLabel: {
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '600',
+    marginTop: 8,
+  },
+});
+
+const answerStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
+    minHeight: 420,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: -4},
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#ddd',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 18,
+  },
+  promptBubble: {
+    borderLeftWidth: 3,
+    paddingLeft: 12,
+    marginBottom: 16,
+  },
+  promptText: {fontSize: 15, color: '#2d3436', lineHeight: 22, fontStyle: 'italic', fontWeight: '500'},
+  inputWrapper: {
+    backgroundColor: '#fafafa',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#eee',
+    padding: 14,
+    marginBottom: 12,
+    minHeight: 140,
+  },
+  textInput: {
+    fontSize: 15,
+    color: '#2d3436',
+    lineHeight: 22,
+    minHeight: 110,
+    textAlignVertical: 'top',
+  },
+  charCount: {
+    fontSize: 10,
+    color: '#ccc',
+    textAlign: 'right',
+    marginTop: 6,
+    fontWeight: '600',
+  },
+  doodleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 12,
+  },
+  doodleBadgeText: {flex: 1, fontSize: 12, fontWeight: '600'},
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  doodleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  doodleBtnText: {fontSize: 14, fontWeight: '700'},
+  saveBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  saveBtnDisabled: {opacity: 0.4},
+  saveBtnText: {color: '#fff', fontSize: 14, fontWeight: '700'},
+});
+
+const doodleStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 12,
+  },
+  sheet: {
+    width: '100%',
+    maxWidth: 500,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    overflow: 'hidden',
+    elevation: 16,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 8},
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  headerLeft: {flexDirection: 'row', alignItems: 'center', gap: 10},
+  headerIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {fontSize: 15, fontWeight: '800', color: '#2d3436'},
+  headerSub: {fontSize: 11, color: '#aaa', fontWeight: '600'},
+  closeBtn: {padding: 6},
+  toolbar: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
+    gap: 8,
+  },
+  colorScroll: {flexDirection: 'row'},
+  colorDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    marginRight: 8,
+    borderColor: '#ddd',
+  },
+  sizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sizeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sizeDot: {},
+  activeTool: {backgroundColor: '#6c5ce720'},
+  bgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
+  },
+  bgLabel: {fontSize: 11, color: '#aaa', fontWeight: '700', marginRight: 2},
+  bgDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  canvas: {
+    width: '100%',
+    height: 280,
+    position: 'relative',
+  },
+  canvasHint: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  canvasHintText: {fontSize: 13, color: '#ccc', fontWeight: '600'},
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#f5f5f5',
+  },
+  actionText: {fontSize: 13, fontWeight: '600', color: '#666'},
+  saveBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 12,
+    paddingVertical: 10,
+  },
+  saveBtnText: {color: '#fff', fontSize: 14, fontWeight: '700'},
+});
+
+const savedStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#fafafa',
+    borderRadius: 14,
+    borderLeftWidth: 3,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 10,
+  },
+  indexBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  indexText: {fontSize: 11, fontWeight: '800'},
+  promptSnippet: {flex: 1, fontSize: 13, color: '#555', fontStyle: 'italic'},
+  answerBody: {padding: 12, paddingTop: 0, gap: 10},
+  answerText: {fontSize: 14, color: '#2d3436', lineHeight: 21},
+  doodlePreview: {gap: 4},
+  doodleLabel: {fontSize: 11, color: '#aaa', fontWeight: '600'},
+  cardActions: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingTop: 4,
+  },
+  editAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  editActionText: {fontSize: 12, color: '#888', fontWeight: '600'},
+  deleteAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff0f0',
+    borderRadius: 8,
+  },
+  deleteActionText: {fontSize: 12, color: '#e74c3c', fontWeight: '600'},
+});
+
+export default JournalPrompts;

@@ -20,8 +20,8 @@ const AVATAR_OPTIONS = {
   skinTone: ['#FDDBB4', '#F1A97A', '#C68642', '#8D5524', '#4A2912'],
 
   hairStyle: {
-    girl: ['long_straight', 'long_wavy', 'bun', 'ponytail', 'short_bob'],
-    boy: ['short_side', 'short_curly', 'buzz', 'messy', 'slick'],
+    girl: ['long_straight', 'long_wavy', 'bun', 'ponytail', 'short_bob', 'space_buns', 'braid'],
+    boy: ['short_side', 'short_curly', 'buzz', 'messy', 'slick', 'fade', 'mohawk'],
   },
 
   hairColor: [
@@ -33,17 +33,19 @@ const AVATAR_OPTIONS = {
     '#C0392B',
     '#8E44AD',
     '#2980B9',
+    '#E67E22',
+    '#2ECC71',
   ],
 
-  eyeStyle: ['normal', 'happy', 'wink', 'sleepy', 'surprised'],
+  eyeStyle: ['normal', 'happy', 'wink', 'sleepy', 'surprised', 'starstruck'],
 
-  eyeColor: ['#2c3e50', '#1a6b3c', '#6B4226', '#1e90ff', '#808080'],
+  eyeColor: ['#2c3e50', '#1a6b3c', '#6B4226', '#1e90ff', '#808080', '#FFD700'],
 
-  mouthStyle: ['smile', 'big_smile', 'neutral', 'smirk', 'open'],
+  mouthStyle: ['smile', 'big_smile', 'neutral', 'smirk', 'open', 'tongue'],
 
-  glasses: ['none', 'round', 'square', 'cat_eye', 'sunglasses'],
+  glasses: ['none', 'round', 'square', 'cat_eye', 'sunglasses', 'heart_glasses'],
 
-  accessories: ['none', 'earrings', 'necklace', 'bow', 'headband', 'cap'],
+  accessories: ['none', 'earrings', 'necklace', 'bow', 'headband', 'cap', 'flower_crown', 'tie'],
 
   bgColor: [
     '#f5e6ff',
@@ -54,63 +56,92 @@ const AVATAR_OPTIONS = {
     '#e6e6ff',
     '#fff0e6',
     '#f0f0f0',
+    '#ffecf3',
+    '#e8f8f5',
   ],
 };
 
-// â”€â”€â”€ SVG Part Generators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── SVG Part Generators ─────────────────────────────────────────────────────
 
 const getHairPath = (style, gender) => {
   const hairPaths = {
     // Girl styles
     long_straight: `
-      <path d="M50,80 Q20,90 18,160 Q16,200 20,240 L25,240 Q22,200 25,160 Q26,110 50,95 Z" fill="HAIR"/>
-      <path d="M150,80 Q180,90 182,160 Q184,200 180,240 L175,240 Q178,200 175,160 Q174,110 150,95 Z" fill="HAIR"/>
-      <path d="M40,70 Q50,20 100,18 Q150,20 160,70 Q165,50 160,40 Q140,0 100,0 Q60,0 40,40 Q35,50 40,70 Z" fill="HAIR"/>
+      <path d="M50,90 Q15,100 18,170 Q16,210 20,250 L26,250 Q22,210 26,170 Q27,115 52,100 Z" fill="HAIR"/>
+      <path d="M150,90 Q185,100 182,170 Q184,210 180,250 L174,250 Q178,210 174,170 Q173,115 148,100 Z" fill="HAIR"/>
+      <path d="M38,75 Q48,22 100,18 Q152,22 162,75 Q167,52 158,38 Q138,0 100,-2 Q62,0 42,38 Q33,52 38,75 Z" fill="HAIR"/>
     `,
     long_wavy: `
-      <path d="M50,80 Q15,100 20,140 Q10,160 22,180 Q8,200 20,220 Q10,240 22,250 L27,250 Q16,238 27,220 Q14,198 28,178 Q14,155 27,138 Q20,100 52,88 Z" fill="HAIR"/>
-      <path d="M150,80 Q185,100 180,140 Q190,160 178,180 Q192,200 180,220 Q190,240 178,250 L173,250 Q184,238 173,220 Q186,198 172,178 Q186,155 173,138 Q180,100 148,88 Z" fill="HAIR"/>
-      <path d="M40,70 Q50,20 100,18 Q150,20 160,70 Q165,50 160,40 Q140,0 100,0 Q60,0 40,40 Q35,50 40,70 Z" fill="HAIR"/>
+      <path d="M50,90 Q12,105 18,140 Q8,165 22,185 Q10,210 20,235 Q12,255 22,250 L27,250 Q16,238 27,220 Q14,200 28,178 Q14,158 27,138 Q20,102 52,92 Z" fill="HAIR"/>
+      <path d="M150,90 Q188,105 182,140 Q192,165 178,185 Q190,210 180,235 Q188,255 178,250 L173,250 Q184,238 173,220 Q186,200 172,178 Q186,158 173,138 Q180,102 148,92 Z" fill="HAIR"/>
+      <path d="M38,75 Q48,22 100,18 Q152,22 162,75 Q167,52 158,38 Q138,0 100,-2 Q62,0 42,38 Q33,52 38,75 Z" fill="HAIR"/>
     `,
     bun: `
-      <path d="M40,70 Q50,20 100,18 Q150,20 160,70 Q165,50 160,40 Q140,0 100,0 Q60,0 40,40 Q35,50 40,70 Z" fill="HAIR"/>
-      <circle cx="100" cy="10" r="22" fill="HAIR"/>
-      <circle cx="100" cy="10" r="12" fill="HAIR_LIGHT"/>
+      <path d="M38,75 Q48,22 100,18 Q152,22 162,75 Q167,52 158,38 Q138,0 100,-2 Q62,0 42,38 Q33,52 38,75 Z" fill="HAIR"/>
+      <ellipse cx="100" cy="6" rx="28" ry="24" fill="HAIR"/>
+      <ellipse cx="100" cy="4" rx="14" ry="12" fill="HAIR_LIGHT"/>
+      <path d="M85,20 Q100,10 115,18" stroke="HAIR_LIGHT" stroke-width="2" fill="none"/>
     `,
     ponytail: `
-      <path d="M40,70 Q50,20 100,18 Q150,20 160,70 Q165,50 160,40 Q140,0 100,0 Q60,0 40,40 Q35,50 40,70 Z" fill="HAIR"/>
-      <path d="M155,55 Q180,50 185,80 Q188,110 175,140 Q170,155 165,140 Q170,115 167,90 Q165,68 155,65 Z" fill="HAIR"/>
+      <path d="M38,75 Q48,22 100,18 Q152,22 162,75 Q167,52 158,38 Q138,0 100,-2 Q62,0 42,38 Q33,52 38,75 Z" fill="HAIR"/>
+      <path d="M155,58 Q182,52 188,85 Q192,118 178,152 Q172,168 166,150 Q172,120 168,95 Q165,70 155,66 Z" fill="HAIR"/>
+      <ellipse cx="170" cy="100" rx="10" ry="14" fill="HAIR_LIGHT"/>
     `,
     short_bob: `
-      <path d="M35,75 Q40,20 100,18 Q160,20 165,75 Q170,100 160,110 Q140,118 100,118 Q60,118 40,110 Q30,100 35,75 Z" fill="HAIR"/>
+      <path d="M35,78 Q40,22 100,18 Q160,22 165,78 Q172,108 158,120 Q135,132 100,132 Q65,132 42,120 Q28,108 35,78 Z" fill="HAIR"/>
+      <path d="M42,120 Q38,130 40,138 Q44,135 50,128 Z" fill="HAIR"/>
+      <path d="M158,120 Q162,130 160,138 Q156,135 150,128 Z" fill="HAIR"/>
+    `,
+    space_buns: `
+      <path d="M38,75 Q48,22 100,18 Q152,22 162,75 Q167,52 158,38 Q138,0 100,-2 Q62,0 42,38 Q33,52 38,75 Z" fill="HAIR"/>
+      <circle cx="75" cy="5" r="18" fill="HAIR"/>
+      <circle cx="125" cy="5" r="18" fill="HAIR"/>
+      <circle cx="75" cy="3" r="8" fill="HAIR_LIGHT"/>
+      <circle cx="125" cy="3" r="8" fill="HAIR_LIGHT"/>
+    `,
+    braid: `
+      <path d="M38,75 Q48,22 100,18 Q152,22 162,75 Q167,52 158,38 Q138,0 100,-2 Q62,0 42,38 Q33,52 38,75 Z" fill="HAIR"/>
+      <path d="M85,40 Q80,80 78,130 Q76,170 80,210 Q78,230 82,250 L88,250 Q84,230 86,210 Q82,170 84,130 Q86,80 92,45 Z" fill="HAIR"/>
+      <path d="M80,60 L86,58 M82,80 L88,78 M80,100 L86,98 M82,120 L88,118 M80,140 L86,138 M82,160 L88,158" stroke="HAIR_DARK" stroke-width="2" fill="none"/>
     `,
     // Boy styles
     short_side: `
-      <path d="M38,72 Q42,22 100,20 Q158,22 162,72 Q158,55 150,48 Q130,38 100,37 Q72,38 52,47 Q42,54 38,72 Z" fill="HAIR"/>
-      <path d="M38,72 Q36,60 40,52 Q38,68 42,75 Z" fill="HAIR"/>
+      <path d="M35,78 Q40,22 100,18 Q160,22 165,78 Q165,58 156,46 Q132,32 100,30 Q68,32 44,46 Q35,58 35,78 Z" fill="HAIR"/>
+      <path d="M35,78 Q32,62 38,52 Q35,68 42,80 Z" fill="HAIR"/>
+      <line x1="42" y1="48" x2="45" y2="52" stroke="HAIR_LIGHT" stroke-width="1"/>
     `,
     short_curly: `
-      <path d="M38,72 Q42,22 100,20 Q158,22 162,72 Q158,55 150,48 Q130,38 100,37 Q72,38 52,47 Q42,54 38,72 Z" fill="HAIR"/>
-      <circle cx="52" cy="48" r="8" fill="HAIR"/>
-      <circle cx="70" cy="38" r="9" fill="HAIR"/>
-      <circle cx="90" cy="34" r="9" fill="HAIR"/>
-      <circle cx="110" cy="34" r="9" fill="HAIR"/>
-      <circle cx="130" cy="38" r="9" fill="HAIR"/>
-      <circle cx="148" cy="48" r="8" fill="HAIR"/>
+      <path d="M35,78 Q40,22 100,18 Q160,22 165,78 Q165,58 156,46 Q132,32 100,30 Q68,32 44,46 Q35,58 35,78 Z" fill="HAIR"/>
+      <circle cx="50" cy="50" r="9" fill="HAIR"/>
+      <circle cx="68" cy="38" r="10" fill="HAIR"/>
+      <circle cx="88" cy="33" r="10" fill="HAIR"/>
+      <circle cx="108" cy="33" r="10" fill="HAIR"/>
+      <circle cx="128" cy="38" r="10" fill="HAIR"/>
+      <circle cx="148" cy="50" r="9" fill="HAIR"/>
     `,
     buzz: `
-      <path d="M40,75 Q44,26 100,24 Q156,26 160,75 Q160,55 152,44 Q130,32 100,31 Q70,32 48,44 Q40,55 40,75 Z" fill="HAIR"/>
+      <path d="M35,78 Q42,28 100,24 Q158,28 165,78 Q165,56 155,44 Q132,32 100,30 Q68,32 45,44 Q35,56 35,78 Z" fill="HAIR"/>
+      <path d="M45,44 Q48,36 52,40" stroke="HAIR_LIGHT" stroke-width="1" fill="none"/>
     `,
     messy: `
-      <path d="M38,72 Q42,22 100,20 Q158,22 162,72 Q158,55 150,48 Q130,38 100,37 Q72,38 52,47 Q42,54 38,72 Z" fill="HAIR"/>
-      <path d="M55,44 Q50,28 60,22 Q58,34 65,38 Z" fill="HAIR"/>
-      <path d="M80,35 Q82,18 92,16 Q88,28 94,34 Z" fill="HAIR"/>
-      <path d="M108,35 Q112,18 120,22 Q114,30 116,36 Z" fill="HAIR"/>
-      <path d="M138,44 Q148,30 152,24 Q148,36 142,40 Z" fill="HAIR"/>
+      <path d="M35,78 Q40,22 100,18 Q160,22 165,78 Q165,58 156,46 Q132,32 100,30 Q68,32 44,46 Q35,58 35,78 Z" fill="HAIR"/>
+      <path d="M52,43 Q45,24 58,18 Q55,32 62,36 Z" fill="HAIR"/>
+      <path d="M82,34 Q86,14 96,12 Q92,26 98,32 Z" fill="HAIR"/>
+      <path d="M110,34 Q115,16 124,20 Q118,30 122,36 Z" fill="HAIR"/>
+      <path d="M142,46 Q152,30 158,24 Q152,38 148,42 Z" fill="HAIR"/>
     `,
     slick: `
-      <path d="M38,72 Q42,22 100,20 Q158,22 162,72 Q158,55 150,48 Q130,38 100,37 Q72,38 52,47 Q42,54 38,72 Z" fill="HAIR"/>
-      <path d="M40,60 Q50,30 80,26 Q60,30 55,50 Z" fill="HAIR_DARK"/>
+      <path d="M35,78 Q40,22 100,18 Q160,22 165,78 Q165,58 156,46 Q132,32 100,30 Q68,32 44,46 Q35,58 35,78 Z" fill="HAIR"/>
+      <path d="M38,65 Q48,32 80,28 Q58,32 52,55 Z" fill="HAIR_LIGHT"/>
+      <path d="M85,30 Q90,26 95,28" stroke="HAIR_DARK" stroke-width="1" fill="none"/>
+    `,
+    fade: `
+      <path d="M35,78 Q42,28 100,24 Q158,28 165,78 Q165,56 155,44 Q132,32 100,30 Q68,32 45,44 Q35,56 35,78 Z" fill="HAIR"/>
+      <rect x="35" y="72" width="130" height="8" opacity="0.3"/>
+    `,
+    mohawk: `
+      <path d="M50,78 Q52,20 100,14 Q148,20 150,78 Q148,55 140,42 Q130,32 100,30 Q70,32 60,42 Q52,55 50,78 Z" fill="HAIR"/>
+      <path d="M90,18 Q94,0 100,-4 Q106,0 110,18 Z" fill="HAIR"/>
     `,
   };
   return hairPaths[style] || hairPaths.short_side;
@@ -129,29 +160,43 @@ const getEyesSVG = (style, color) => {
       <circle cx="127" cy="107" r="1.5" fill="white"/>
     `,
     happy: `
-      <path d="M66,108 Q76,100 86,108" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-      <path d="M114,108 Q124,100 134,108" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <path d="M66,108 Q76,98 86,108" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <path d="M114,108 Q124,98 134,108" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <circle cx="76" cy="112" r="1" fill="#333"/>
+      <circle cx="124" cy="112" r="1" fill="#333"/>
     `,
     wink: `
-      <ellipse cx="76" cy="108" rx="10" ry="11" fill="white"/>
-      <circle cx="76" cy="110" r="7" fill="${color}"/>
-      <circle cx="76" cy="110" r="3.5" fill="#111"/>
-      <circle cx="79" cy="107" r="1.5" fill="white"/>
-      <path d="M114,108 Q124,100 134,108" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <ellipse cx="76" cy="106" rx="10" ry="11" fill="white"/>
+      <circle cx="76" cy="108" r="7" fill="${color}"/>
+      <circle cx="76" cy="108" r="3.5" fill="#111"/>
+      <circle cx="79" cy="105" r="1.5" fill="white"/>
+      <path d="M114,108 Q124,98 134,108" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
     `,
     sleepy: `
-      <path d="M66,106 Q76,112 86,106" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-      <path d="M114,106 Q124,112 134,106" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <path d="M66,106 Q76,114 86,106" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <path d="M114,106 Q124,114 134,106" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <circle cx="76" cy="110" r="1" fill="#555"/>
+      <circle cx="124" cy="110" r="1" fill="#555"/>
     `,
     surprised: `
-      <ellipse cx="76" cy="108" rx="12" ry="13" fill="white"/>
+      <ellipse cx="76" cy="108" rx="12" ry="14" fill="white"/>
       <circle cx="76" cy="110" r="8" fill="${color}"/>
       <circle cx="76" cy="110" r="4" fill="#111"/>
       <circle cx="79" cy="107" r="2" fill="white"/>
-      <ellipse cx="124" cy="108" rx="12" ry="13" fill="white"/>
+      <ellipse cx="124" cy="108" rx="12" ry="14" fill="white"/>
       <circle cx="124" cy="110" r="8" fill="${color}"/>
       <circle cx="124" cy="110" r="4" fill="#111"/>
       <circle cx="127" cy="107" r="2" fill="white"/>
+    `,
+    starstruck: `
+      <ellipse cx="74" cy="107" rx="10" ry="11" fill="white"/>
+      <circle cx="74" cy="109" r="7" fill="${color}"/>
+      <circle cx="74" cy="109" r="3.5" fill="#111"/>
+      <text x="66" y="104" font-size="8" fill="#FFD700">★</text>
+      <ellipse cx="126" cy="107" rx="10" ry="11" fill="white"/>
+      <circle cx="126" cy="109" r="7" fill="${color}"/>
+      <circle cx="126" cy="109" r="3.5" fill="#111"/>
+      <text x="118" y="104" font-size="8" fill="#FFD700">★</text>
     `,
   };
   return eyes[style] || eyes.normal;
@@ -159,16 +204,30 @@ const getEyesSVG = (style, color) => {
 
 const getMouthSVG = style => {
   const mouths = {
-    smile:
-      '<path d="M82,138 Q100,152 118,138" stroke="#c0605a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
-    big_smile: `<path d="M78,136 Q100,158 122,136" stroke="#c0605a" stroke-width="2.5" fill="#e8a09d" stroke-linecap="round"/>
-                <path d="M83,136 Q100,148 117,136" fill="#c0605a"/>`,
-    neutral:
-      '<line x1="86" y1="142" x2="114" y2="142" stroke="#c0605a" stroke-width="2.5" stroke-linecap="round"/>',
-    smirk:
-      '<path d="M86,142 Q104,138 114,134" stroke="#c0605a" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
-    open: `<ellipse cx="100" cy="142" rx="14" ry="9" fill="#c0605a"/>
-                <ellipse cx="100" cy="144" rx="10" ry="6" fill="#8b3a3a"/>`,
+    smile: `
+      <path d="M82,138 Q100,154 118,138" stroke="#c0605a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <circle cx="78" cy="134" r="1.5" fill="#c0605a" opacity="0.5"/>
+      <circle cx="122" cy="134" r="1.5" fill="#c0605a" opacity="0.5"/>
+    `,
+    big_smile: `
+      <path d="M76,136 Q100,162 124,136" stroke="#c0605a" stroke-width="2.5" fill="#e8a09d" stroke-linecap="round"/>
+      <path d="M82,138 Q100,152 118,136" fill="#c0605a"/>
+    `,
+    neutral: `
+      <line x1="86" y1="142" x2="114" y2="142" stroke="#c0605a" stroke-width="2.5" stroke-linecap="round"/>
+    `,
+    smirk: `
+      <path d="M86,142 Q104,136 116,132" stroke="#c0605a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <path d="M76,140 Q80,138 84,140" stroke="#c0605a" stroke-width="1.5" fill="none"/>
+    `,
+    open: `
+      <ellipse cx="100" cy="142" rx="14" ry="10" fill="#c0605a"/>
+      <ellipse cx="100" cy="144" rx="10" ry="7" fill="#8b3a3a"/>
+    `,
+    tongue: `
+      <ellipse cx="100" cy="142" rx="12" ry="9" fill="#c0605a"/>
+      <ellipse cx="100" cy="146" rx="7" ry="5" fill="#e8a09d"/>
+    `,
   };
   return mouths[style] || mouths.smile;
 };
@@ -177,32 +236,41 @@ const getGlassesSVG = style => {
   const glasses = {
     none: '',
     round: `
-      <circle cx="76" cy="108" r="15" fill="none" stroke="#555" stroke-width="2.5"/>
-      <circle cx="124" cy="108" r="15" fill="none" stroke="#555" stroke-width="2.5"/>
-      <line x1="91" y1="108" x2="109" y2="108" stroke="#555" stroke-width="2"/>
-      <line x1="42" y1="104" x2="61" y2="104" stroke="#555" stroke-width="2"/>
-      <line x1="139" y1="104" x2="158" y2="104" stroke="#555" stroke-width="2"/>
+      <circle cx="76" cy="108" r="16" fill="none" stroke="#555" stroke-width="2.5"/>
+      <circle cx="124" cy="108" r="16" fill="none" stroke="#555" stroke-width="2.5"/>
+      <line x1="92" y1="108" x2="108" y2="108" stroke="#555" stroke-width="2"/>
+      <line x1="42" y1="104" x2="60" y2="104" stroke="#555" stroke-width="2"/>
+      <line x1="140" y1="104" x2="158" y2="104" stroke="#555" stroke-width="2"/>
     `,
     square: `
-      <rect x="60" y="94" width="32" height="24" rx="3" fill="none" stroke="#555" stroke-width="2.5"/>
-      <rect x="108" y="94" width="32" height="24" rx="3" fill="none" stroke="#555" stroke-width="2.5"/>
+      <rect x="60" y="94" width="32" height="24" rx="4" fill="none" stroke="#555" stroke-width="2.5"/>
+      <rect x="108" y="94" width="32" height="24" rx="4" fill="none" stroke="#555" stroke-width="2.5"/>
       <line x1="92" y1="106" x2="108" y2="106" stroke="#555" stroke-width="2"/>
       <line x1="42" y1="102" x2="60" y2="102" stroke="#555" stroke-width="2"/>
       <line x1="140" y1="102" x2="158" y2="102" stroke="#555" stroke-width="2"/>
     `,
     cat_eye: `
-      <path d="M58,112 Q68,94 92,96 Q96,118 76,118 Z" fill="none" stroke="#c0392b" stroke-width="2.5"/>
-      <path d="M106,112 Q116,94 140,96 Q146,118 124,118 Z" fill="none" stroke="#c0392b" stroke-width="2.5"/>
-      <line x1="92" y1="107" x2="106" y2="107" stroke="#c0392b" stroke-width="2"/>
-      <line x1="42" y1="103" x2="58" y2="107" stroke="#c0392b" stroke-width="2"/>
-      <line x1="140" y1="107" x2="158" y2="103" stroke="#c0392b" stroke-width="2"/>
+      <path d="M56,112 Q68,92 92,96 Q96,118 76,118 Z" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+      <path d="M108,112 Q120,92 144,96 Q148,118 124,118 Z" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+      <line x1="92" y1="107" x2="108" y2="107" stroke="#c0392b" stroke-width="2"/>
+      <line x1="40" y1="103" x2="56" y2="107" stroke="#c0392b" stroke-width="2"/>
+      <line x1="144" y1="107" x2="160" y2="103" stroke="#c0392b" stroke-width="2"/>
     `,
     sunglasses: `
-      <rect x="58" y="98" width="38" height="20" rx="10" fill="rgba(30,30,30,0.85)"/>
-      <rect x="104" y="98" width="38" height="20" rx="10" fill="rgba(30,30,30,0.85)"/>
-      <line x1="96" y1="108" x2="104" y2="108" stroke="#555" stroke-width="2"/>
-      <line x1="42" y1="104" x2="58" y2="106" stroke="#555" stroke-width="2"/>
-      <line x1="142" y1="106" x2="158" y2="104" stroke="#555" stroke-width="2"/>
+      <rect x="58" y="96" width="40" height="22" rx="10" fill="rgba(30,30,30,0.88)"/>
+      <rect x="102" y="96" width="40" height="22" rx="10" fill="rgba(30,30,30,0.88)"/>
+      <line x1="98" y1="107" x2="102" y2="107" stroke="#444" stroke-width="2"/>
+      <line x1="42" y1="104" x2="58" y2="106" stroke="#444" stroke-width="2"/>
+      <line x1="142" y1="106" x2="158" y2="104" stroke="#444" stroke-width="2"/>
+      <rect x="62" y="100" width="32" height="14" rx="5" fill="rgba(0,0,0,0.3)"/>
+      <rect x="106" y="100" width="32" height="14" rx="5" fill="rgba(0,0,0,0.3)"/>
+    `,
+    heart_glasses: `
+      <path d="M60,106 L70,96 L80,106 L70,116 Z" fill="none" stroke="#e84393" stroke-width="2" stroke-linejoin="round"/>
+      <path d="M120,106 L130,96 L140,106 L130,116 Z" fill="none" stroke="#e84393" stroke-width="2" stroke-linejoin="round"/>
+      <line x1="80" y1="106" x2="120" y2="106" stroke="#e84393" stroke-width="2"/>
+      <line x1="42" y1="103" x2="60" y2="105" stroke="#e84393" stroke-width="2"/>
+      <line x1="140" y1="105" x2="158" y2="103" stroke="#e84393" stroke-width="2"/>
     `,
   };
   return glasses[style] || '';
@@ -212,31 +280,52 @@ const getAccessorySVG = (style, gender) => {
   const accessories = {
     none: '',
     earrings: `
-      <circle cx="38" cy="122" r="4" fill="#FFD700"/>
-      <circle cx="162" cy="122" r="4" fill="#FFD700"/>
-      <circle cx="38" cy="132" r="3" fill="#FFD700"/>
-      <circle cx="162" cy="132" r="3" fill="#FFD700"/>
+      <circle cx="38" cy="122" r="4.5" fill="#FFD700"/>
+      <circle cx="162" cy="122" r="4.5" fill="#FFD700"/>
+      <circle cx="38" cy="133" r="3" fill="#FFD700"/>
+      <circle cx="162" cy="133" r="3" fill="#FFD700"/>
+      <circle cx="38" cy="128" r="1.5" fill="#FFF"/>
+      <circle cx="162" cy="128" r="1.5" fill="#FFF"/>
     `,
     necklace: `
-      <path d="M65,180 Q100,195 135,180" stroke="#FFD700" stroke-width="2.5" fill="none"/>
-      <circle cx="100" cy="196" r="5" fill="#FFD700"/>
+      <path d="M65,180 Q100,198 135,180" stroke="#FFD700" stroke-width="2.5" fill="none"/>
+      <circle cx="100" cy="198" r="6" fill="#FFD700"/>
+      <circle cx="100" cy="196" r="3" fill="#fff"/>
+      <path d="M68,178 Q70,182 72,178" stroke="#FFD700" stroke-width="1.5" fill="none"/>
     `,
     bow: `
-      <path d="M82,62 Q90,54 100,60 Q110,54 118,62 Q110,68 100,64 Q90,68 82,62 Z" fill="#FF6B9D"/>
-      <circle cx="100" cy="62" r="5" fill="#FF3D7F"/>
+      <path d="M80,60 Q90,52 100,58 Q110,52 120,60 Q110,68 100,64 Q90,68 80,60 Z" fill="#FF6B9D"/>
+      <circle cx="100" cy="61" r="5.5" fill="#FF3D7F"/>
+      <path d="M78,56 L82,64 M122,56 L118,64" stroke="#FF6B9D" stroke-width="2" fill="none"/>
     `,
     headband: `
-      <path d="M40,78 Q100,60 160,78" stroke="#9B59B6" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M38,76 Q100,56 162,76" stroke="#9B59B6" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M38,76 Q100,56 162,76" stroke="#C39BD3" stroke-width="4" fill="none" stroke-linecap="round"/>
     `,
     cap: `
-      <path d="M35,78 Q100,40 165,78 Q160,72 152,68 Q130,55 100,52 Q70,55 48,68 Q40,72 35,78 Z" fill="#3498DB"/>
-      <rect x="25" y="74" width="34" height="8" rx="4" fill="#2980B9"/>
+      <path d="M30,78 Q100,36 170,78 Q162,70 152,64 Q130,52 100,48 Q70,52 48,64 Q38,70 30,78 Z" fill="#3498DB"/>
+      <rect x="20" y="74" width="38" height="8" rx="4" fill="#2980B9"/>
+      <path d="M80,48 Q100,42 120,48" stroke="#2980B9" stroke-width="2" fill="none"/>
+    `,
+    flower_crown: `
+      <circle cx="70" cy="58" r="8" fill="#FF69B4"/>
+      <circle cx="90" cy="52" r="9" fill="#FFB6C1"/>
+      <circle cx="110" cy="52" r="9" fill="#FF69B4"/>
+      <circle cx="130" cy="58" r="8" fill="#FFB6C1"/>
+      <circle cx="80" cy="55" r="4" fill="#FFD700"/>
+      <circle cx="100" cy="50" r="4" fill="#FFD700"/>
+      <circle cx="120" cy="55" r="4" fill="#FFD700"/>
+    `,
+    tie: `
+      <path d="M90,178 L100,210 L110,178 Z" fill="#2c3e50"/>
+      <path d="M88,172 L112,172 L110,178 L90,178 Z" fill="#34495e"/>
+      <circle cx="100" cy="186" r="3" fill="#ECF0F1"/>
     `,
   };
   return accessories[style] || '';
 };
 
-// â”€â”€â”€ Main SVG Builder â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Main SVG Builder ────────────────────────────────────────────────────────
 
 const buildAvatarSVG = config => {
   const {
@@ -253,9 +342,10 @@ const buildAvatarSVG = config => {
   } = config;
 
   const hairDark = darkenHex(hairColor, 30);
+  const hairLight = lightenHex(hairColor, 40);
 
-  const hairSVG = getHairPath(hairStyle, gender)
-    .replace(/fill="HAIR_LIGHT"/g, `fill="${lightenHex(hairColor, 40)}"`)
+  let hairSVG = getHairPath(hairStyle, gender)
+    .replace(/fill="HAIR_LIGHT"/g, `fill="${hairLight}"`)
     .replace(/fill="HAIR_DARK"/g, `fill="${hairDark}"`)
     .replace(/fill="HAIR"/g, `fill="${hairColor}"`);
 
@@ -265,46 +355,65 @@ const buildAvatarSVG = config => {
   <circle cx="100" cy="140" r="100" fill="${bgColor}"/>
 
   <!-- Neck -->
-  <rect x="88" y="168" width="24" height="30" rx="8" fill="${skinTone}"/>
+  <rect x="88" y="168" width="24" height="32" rx="8" fill="${skinTone}"/>
+  <rect x="86" y="196" width="28" height="8" rx="3" fill="${darkenHex(skinTone, 10)}" opacity="0.3"/>
 
   <!-- Shoulders / Body -->
-  ${
-    gender === 'girl'
-      ? '<path d="M30,250 Q50,195 100,188 Q150,195 170,250 Q145,260 100,262 Q55,260 30,250 Z" fill="#E91E8C"/>'
-      : '<path d="M28,250 Q48,192 100,186 Q152,192 172,250 Q148,262 100,264 Q52,262 28,250 Z" fill="#3498DB"/>'
-  }
+  ${gender === 'girl'
+    ? '<path d="M28,250 Q48,192 100,186 Q152,192 172,250 Q148,262 100,265 Q52,262 28,250 Z" fill="#E91E8C"/>'
+    : '<path d="M26,250 Q46,190 100,184 Q154,190 174,250 Q148,264 100,266 Q52,264 26,250 Z" fill="#3498DB"/>'}
+
+  <!-- Body detail - collar -->
+  <path d="M80,210 Q100,225 120,210" stroke="rgba(0,0,0,0.1)" stroke-width="2" fill="none"/>
 
   <!-- Head -->
-  <ellipse cx="100" cy="115" rx="65" ry="70" fill="${skinTone}"/>
+  <ellipse cx="100" cy="115" rx="66" ry="72" fill="${skinTone}"/>
 
-  <!-- Hair (behind ears layer) -->
+  <!-- Head shadow for depth -->
+  <ellipse cx="100" cy="115" rx="66" ry="72" fill="none" stroke="${darkenHex(skinTone, 15)}" stroke-width="1" opacity="0.3"/>
+
+  <!-- Hair (back layer) -->
   ${hairSVG}
 
   <!-- Ears -->
-  <ellipse cx="36" cy="118" rx="9" ry="11" fill="${skinTone}"/>
-  <ellipse cx="164" cy="118" rx="9" ry="11" fill="${skinTone}"/>
-  <ellipse cx="36" cy="118" rx="5" ry="7" fill="${darkenHex(skinTone, 15)}"/>
-  <ellipse cx="164" cy="118" rx="5" ry="7" fill="${darkenHex(skinTone, 15)}"/>
+  <ellipse cx="35" cy="118" rx="9" ry="12" fill="${skinTone}"/>
+  <ellipse cx="165" cy="118" rx="9" ry="12" fill="${skinTone}"/>
+  <ellipse cx="35" cy="118" rx="5" ry="7" fill="${darkenHex(skinTone, 15)}"/>
+  <ellipse cx="165" cy="118" rx="5" ry="7" fill="${darkenHex(skinTone, 15)}"/>
 
   <!-- Eyebrows -->
-  <path d="M63,95 Q76,88 89,93" stroke="${hairColor}" stroke-width="3" fill="none" stroke-linecap="round"/>
-  <path d="M111,93 Q124,88 137,95" stroke="${hairColor}" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M62,95 Q76,86 90,93" stroke="${hairColor}" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M110,93 Q124,86 138,95" stroke="${hairColor}" stroke-width="3" fill="none" stroke-linecap="round"/>
 
   <!-- Eyes -->
   ${getEyesSVG(eyeStyle, eyeColor)}
 
   <!-- Nose -->
-  <path d="M97,118 Q95,130 100,134 Q105,130 103,118" stroke="${darkenHex(
-    skinTone,
-    25,
-  )}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <path d="M97,118 Q95,132 100,136 Q105,132 103,118" stroke="${darkenHex(skinTone, 25)}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
 
   <!-- Cheek blush -->
-  <ellipse cx="62" cy="128" rx="11" ry="7" fill="rgba(255,150,150,0.3)"/>
-  <ellipse cx="138" cy="128" rx="11" ry="7" fill="rgba(255,150,150,0.3)"/>
+  <ellipse cx="62" cy="128" rx="12" ry="7" fill="rgba(255,150,150,0.35)"/>
+  <ellipse cx="138" cy="128" rx="12" ry="7" fill="rgba(255,150,150,0.35)"/>
 
   <!-- Mouth -->
   ${getMouthSVG(mouthStyle)}
+
+  <!-- Freckles (optional subtle detail) -->
+  <circle cx="70" cy="122" r="1" fill="${darkenHex(skinTone, 25)}" opacity="0.4"/>
+  <circle cx="76" cy="125" r="1" fill="${darkenHex(skinTone, 25)}" opacity="0.4"/>
+  <circle cx="124" cy="125" r="1" fill="${darkenHex(skinTone, 25)}" opacity="0.4"/>
+  <circle cx="130" cy="122" r="1" fill="${darkenHex(skinTone, 25)}" opacity="0.4"/>
+
+  <!-- Hair (front layer - for bangs/front hair) -->
+  <g id="front-hair">
+    ${hairStyle === 'short_bob' ? `
+      <path d="M35,78 Q40,22 100,18 Q160,22 165,78 Q168,95 160,100 Q150,108 140,105 Q130,100 125,95 Q120,88 110,90 Q100,92 90,90 Q80,88 75,95 Q70,100 60,105 Q50,108 40,100 Q32,95 35,78 Z" fill="${hairColor}" opacity="0.6"/>
+    ` : ''}
+    ${hairStyle === 'messy' ? `
+      <path d="M50,60 Q45,45 55,38 Q52,48 58,55 Z" fill="${hairColor}"/>
+      <path d="M140,60 Q145,45 145,38 Q148,48 142,55 Z" fill="${hairColor}"/>
+    ` : ''}
+  </g>
 
   <!-- Glasses -->
   ${getGlassesSVG(glasses)}
@@ -315,7 +424,7 @@ const buildAvatarSVG = config => {
   `.trim();
 };
 
-// â”€â”€â”€ Color Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Color Helpers ───────────────────────────────────────────────────────────
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '');
@@ -345,7 +454,7 @@ function darkenHex(hex, amount = 30) {
   return rgbToHex(r - amount, g - amount, b - amount);
 }
 
-// â”€â”€â”€ Option Renderer Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Option Renderer Helpers ─────────────────────────────────────────────────
 
 const ColorSwatch = ({color, selected, onPress}) => (
   <TouchableOpacity
@@ -373,7 +482,7 @@ const OptionChip = ({label, selected, onPress}) => (
   </TouchableOpacity>
 );
 
-// â”€â”€â”€ AvatarBuilder Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── AvatarBuilder Component ─────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = {
   gender: 'girl',
@@ -389,20 +498,21 @@ const DEFAULT_CONFIG = {
 };
 
 const SECTIONS = [
-  {key: 'gender', label: 'Gender', type: 'chip'},
-  {key: 'skinTone', label: 'Skin Tone', type: 'color'},
-  {key: 'hairStyle', label: 'Hair Style', type: 'chip_dynamic'},
-  {key: 'hairColor', label: 'Hair Color', type: 'color'},
-  {key: 'eyeStyle', label: 'Eyes', type: 'chip'},
-  {key: 'eyeColor', label: 'Eye Color', type: 'color'},
-  {key: 'mouthStyle', label: 'Mouth', type: 'chip'},
-  {key: 'glasses', label: 'Glasses', type: 'chip'},
-  {key: 'accessories', label: 'Accessories', type: 'chip'},
-  {key: 'bgColor', label: 'Background', type: 'color'},
+  {key: 'gender', label: 'Gender', type: 'chip', icon: '👤'},
+  {key: 'skinTone', label: 'Skin Tone', type: 'color', icon: '🎨'},
+  {key: 'hairStyle', label: 'Hair Style', type: 'chip_dynamic', icon: '💇'},
+  {key: 'hairColor', label: 'Hair Color', type: 'color', icon: '🎨'},
+  {key: 'eyeStyle', label: 'Eyes', type: 'chip', icon: '👁️'},
+  {key: 'eyeColor', label: 'Eye Color', type: 'color', icon: '🎨'},
+  {key: 'mouthStyle', label: 'Mouth', type: 'chip', icon: '😊'},
+  {key: 'glasses', label: 'Glasses', type: 'chip', icon: '👓'},
+  {key: 'accessories', label: 'Accessories', type: 'chip', icon: '💎'},
+  {key: 'bgColor', label: 'Background', type: 'color', icon: '🖼️'},
 ];
 
 const AvatarBuilder = ({visible, onClose, onSave}) => {
   const [config, setConfig] = useState({...DEFAULT_CONFIG});
+  const [activeSection, setActiveSection] = useState(null);
 
   const update = useCallback((key, value) => {
     setConfig(prev => {
@@ -418,49 +528,103 @@ const AvatarBuilder = ({visible, onClose, onSave}) => {
 
   const avatarSVG = buildAvatarSVG(config);
 
+  const randomizeAvatar = useCallback(() => {
+    const g = Math.random() > 0.5 ? 'girl' : 'boy';
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    setConfig({
+      gender: g,
+      skinTone: pick(AVATAR_OPTIONS.skinTone),
+      hairStyle: pick(AVATAR_OPTIONS.hairStyle[g]),
+      hairColor: pick(AVATAR_OPTIONS.hairColor),
+      eyeStyle: pick(AVATAR_OPTIONS.eyeStyle),
+      eyeColor: pick(AVATAR_OPTIONS.eyeColor),
+      mouthStyle: pick(AVATAR_OPTIONS.mouthStyle),
+      glasses: pick(AVATAR_OPTIONS.glasses),
+      accessories: pick(AVATAR_OPTIONS.accessories),
+      bgColor: pick(AVATAR_OPTIONS.bgColor),
+    });
+  }, []);
+
   const renderSection = section => {
-    const {key, label, type} = section;
+    const {key, label, type, icon} = section;
+    const isActive = activeSection === key;
+    const currentValue = config[key];
 
     if (type === 'color') {
       const colors = AVATAR_OPTIONS[key];
       return (
         <View key={key} style={styles.section}>
-          <Text style={styles.sectionLabel}>{label}</Text>
-          <View style={styles.swatchRow}>
-            {colors.map(color => (
-              <ColorSwatch
-                key={color}
-                color={color}
-                selected={config[key] === color}
-                onPress={v => update(key, v)}
-              />
-            ))}
-          </View>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setActiveSection(isActive ? null : key)}
+            activeOpacity={0.7}>
+            <View style={styles.sectionHeaderLeft}>
+              <Text style={styles.sectionIcon}>{icon}</Text>
+              <Text style={styles.sectionLabel}>{label}</Text>
+            </View>
+            <View style={styles.currentValuePreview}>
+              {colors.slice(0, 3).map(c => (
+                <View key={c} style={[styles.previewDot, {backgroundColor: c}]} />
+              ))}
+              <Text style={styles.sectionChevron}>{isActive ? '▲' : '▼'}</Text>
+            </View>
+          </TouchableOpacity>
+          
+          {isActive && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.swatchScroll}>
+              <View style={styles.swatchRow}>
+                {colors.map(color => (
+                  <ColorSwatch
+                    key={color}
+                    color={color}
+                    selected={config[key] === color}
+                    onPress={v => update(key, v)}
+                  />
+                ))}
+              </View>
+            </ScrollView>
+          )}
         </View>
       );
     }
 
     if (type === 'chip' || type === 'chip_dynamic') {
-      const options =
-        type === 'chip_dynamic'
-          ? AVATAR_OPTIONS[key][config.gender]
-          : AVATAR_OPTIONS[key];
+      const options = type === 'chip_dynamic'
+        ? AVATAR_OPTIONS[key][config.gender]
+        : AVATAR_OPTIONS[key];
 
       return (
         <View key={key} style={styles.section}>
-          <Text style={styles.sectionLabel}>{label}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.chipRow}>
-              {options.map(opt => (
-                <OptionChip
-                  key={opt}
-                  label={opt}
-                  selected={config[key] === opt}
-                  onPress={() => update(key, opt)}
-                />
-              ))}
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setActiveSection(isActive ? null : key)}
+            activeOpacity={0.7}>
+            <View style={styles.sectionHeaderLeft}>
+              <Text style={styles.sectionIcon}>{icon}</Text>
+              <Text style={styles.sectionLabel}>{label}</Text>
             </View>
-          </ScrollView>
+            <View style={styles.currentValuePreview}>
+              <Text style={styles.currentValueText}>
+                {formatOptionLabel(currentValue)}
+              </Text>
+              <Text style={styles.sectionChevron}>{isActive ? '▲' : '▼'}</Text>
+            </View>
+          </TouchableOpacity>
+          
+          {isActive && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+              <View style={styles.chipRow}>
+                {options.map(opt => (
+                  <OptionChip
+                    key={opt}
+                    label={opt}
+                    selected={config[key] === opt}
+                    onPress={() => update(key, opt)}
+                  />
+                ))}
+              </View>
+            </ScrollView>
+          )}
         </View>
       );
     }
@@ -478,9 +642,11 @@ const AvatarBuilder = ({visible, onClose, onSave}) => {
             activeOpacity={0.8}>
             <Text style={styles.headerBtnText}>Close</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Build Avatar</Text>
+          
+          <Text style={styles.headerTitle}>Customize Avatar</Text>
+          
           <TouchableOpacity
-            onPress={() => onSave && onSave(config, avatarSVG)}
+            onPress={() => onSave && onSave(config)}
             style={[styles.headerBtn, styles.saveBtn]}
             activeOpacity={0.8}>
             <Text style={[styles.headerBtnText, styles.saveBtnText]}>Save</Text>
@@ -490,47 +656,34 @@ const AvatarBuilder = ({visible, onClose, onSave}) => {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
+          
           {/* Avatar Preview */}
-          <View
-            style={[
-              styles.previewContainer,
-              {backgroundColor: config.bgColor},
-            ]}>
-            <SvgXml xml={avatarSVG} width={200} height={200} />
+          <View style={styles.previewSection}>
+            <View style={[styles.previewContainer, {backgroundColor: config.bgColor}]}>
+              <SvgXml xml={avatarSVG} width={200} height={200} />
+            </View>
+            
+            {/* Randomize Button */}
+            <TouchableOpacity
+              style={styles.randomBtn}
+              onPress={randomizeAvatar}
+              activeOpacity={0.8}>
+              <Text style={styles.randomBtnText}>🎲 Randomize Avatar</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Randomize Button */}
-          <TouchableOpacity
-            style={styles.randomBtn}
-            onPress={() => {
-              const g = Math.random() > 0.5 ? 'girl' : 'boy';
-              const pick = arr => arr[Math.floor(Math.random() * arr.length)];
-              setConfig({
-                gender: g,
-                skinTone: pick(AVATAR_OPTIONS.skinTone),
-                hairStyle: pick(AVATAR_OPTIONS.hairStyle[g]),
-                hairColor: pick(AVATAR_OPTIONS.hairColor),
-                eyeStyle: pick(AVATAR_OPTIONS.eyeStyle),
-                eyeColor: pick(AVATAR_OPTIONS.eyeColor),
-                mouthStyle: pick(AVATAR_OPTIONS.mouthStyle),
-                glasses: pick(AVATAR_OPTIONS.glasses),
-                accessories: pick(AVATAR_OPTIONS.accessories),
-                bgColor: pick(AVATAR_OPTIONS.bgColor),
-              });
-            }}
-            activeOpacity={0.8}>
-            <Text style={styles.randomBtnText}>Randomize</Text>
-          </TouchableOpacity>
-
           {/* Option Sections */}
-          {SECTIONS.map(renderSection)}
+          <View style={styles.optionsContainer}>
+            <Text style={styles.optionsTitle}>Customize Features</Text>
+            {SECTIONS.map(renderSection)}
+          </View>
         </ScrollView>
       </SafeAreaView>
     </Modal>
   );
 };
 
-// â”€â”€â”€ AvatarDisplay (small widget shown in app) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── AvatarDisplay (small widget shown in app) ───────────────────────────────
 
 export const AvatarDisplay = ({config, size = 60, onPress}) => {
   const svg = config ? buildAvatarSVG(config) : buildAvatarSVG(DEFAULT_CONFIG);
@@ -555,7 +708,7 @@ export const AvatarDisplay = ({config, size = 60, onPress}) => {
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#f8f9fa',
   },
   header: {
     flexDirection: 'row',
@@ -563,23 +716,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingTop:
-      Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#f0f0f0',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   headerTitle: {
     flex: 1,
     fontSize: 18,
-    fontWeight: '700',
-    color: '#222',
+    fontWeight: '800',
+    color: '#1a1a2e',
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
   headerBtn: {
-    minWidth: 76,
+    minWidth: 68,
     alignItems: 'center',
-    paddingVertical: 9,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
     backgroundColor: '#f0f0f0',
@@ -590,84 +748,164 @@ const styles = StyleSheet.create({
   headerBtnText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#444',
+    color: '#555',
   },
   saveBtnText: {
     color: '#fff',
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 48,
+    paddingBottom: 40,
+  },
+  previewSection: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
   previewContainer: {
-    alignSelf: 'center',
-    width: 210,
-    height: 210,
-    borderRadius: 105,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
+    elevation: 8,
+    shadowColor: '#6c5ce7',
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowRadius: 16,
+    borderWidth: 3,
+    borderColor: '#fff',
   },
   randomBtn: {
-    alignSelf: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#6c5ce7',
-    borderRadius: 24,
+    marginTop: 20,
+    backgroundColor: '#6c5ce7',
+    borderRadius: 28,
     paddingVertical: 10,
-    paddingHorizontal: 32,
-    marginBottom: 28,
+    paddingHorizontal: 28,
+    elevation: 3,
+    shadowColor: '#6c5ce7',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
   randomBtnText: {
-    color: '#6c5ce7',
+    color: '#fff',
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: 14,
+    letterSpacing: 0.3,
+  },
+  optionsContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+  },
+  optionsTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#999',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 16,
+    marginLeft: 4,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#fff',
+  },
+  sectionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sectionIcon: {
+    fontSize: 20,
   },
   sectionLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#444',
-    marginBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#2d3436',
+  },
+  currentValuePreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  currentValueText: {
+    fontSize: 13,
+    color: '#6c5ce7',
+    fontWeight: '500',
+    textTransform: 'capitalize',
+  },
+  previewDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#eee',
+  },
+  sectionChevron: {
+    fontSize: 12,
+    color: '#bbb',
+    marginLeft: 8,
+  },
+  swatchScroll: {
+    flexGrow: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#f5f5f5',
+    paddingVertical: 12,
   },
   swatchRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+    paddingHorizontal: 16,
+    gap: 12,
   },
   swatch: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2.5,
     borderColor: 'transparent',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   swatchSelected: {
     borderColor: '#6c5ce7',
-    transform: [{scale: 1.15}],
+    transform: [{scale: 1.05}],
+    elevation: 4,
+  },
+  chipScroll: {
+    flexGrow: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#f5f5f5',
+    paddingVertical: 12,
   },
   chipRow: {
     flexDirection: 'row',
-    gap: 8,
-    paddingBottom: 4,
+    paddingHorizontal: 16,
+    gap: 10,
   },
   chip: {
     paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    backgroundColor: '#f8f9fa',
     borderWidth: 1.5,
-    borderColor: '#ddd',
+    borderColor: '#e8e8e8',
   },
   chipSelected: {
     backgroundColor: '#6c5ce7',
@@ -677,6 +915,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#555',
+    textTransform: 'capitalize',
   },
   chipTextSelected: {
     color: '#fff',
@@ -685,8 +924,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#6c5ce7',
+    elevation: 4,
+    shadowColor: '#6c5ce7',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
   },
 });
 
