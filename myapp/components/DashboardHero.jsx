@@ -1,9 +1,10 @@
 import React from 'react';
 import {Animated, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-
 import {AvatarDisplay} from './AvatarBuilder';
 import {getContrastColor} from '../utils/colors';
+
+const ACCENT = '#7c6ff7';
 
 const DashboardHero = ({
   appBgColor,
@@ -15,245 +16,191 @@ const DashboardHero = ({
   onOpenHistory,
   userName,
 }) => {
-  const iconColor = getContrastColor(appBgColor);
-  const styles = createStyles(appBgColor, iconColor);
+  const isDark = getContrastColor(appBgColor) === '#ffffff';
 
   const getTimeMetadata = () => {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12)
-      return {greeting: 'Good morning', question: 'How are you starting your day?', emoji: '☀️'};
-    if (hour >= 12 && hour < 17)
-      return {greeting: 'Good afternoon', question: 'How has your afternoon been?', emoji: '🌤️'};
-    if (hour >= 17 && hour < 21)
-      return {greeting: 'Good evening', question: 'Ready to reflect on your day?', emoji: '🌆'};
-    return {greeting: 'Late night', question: "What's on your mind tonight?", emoji: '🌙'};
+    const h = new Date().getHours();
+    if (h >= 5 && h < 12) return {greeting: 'Good morning', emoji: '☀️', sub: 'Ready to start your day?'};
+    if (h >= 12 && h < 17) return {greeting: 'Good afternoon', emoji: '🌤️', sub: 'How has your day been?'};
+    if (h >= 17 && h < 21) return {greeting: 'Good evening', emoji: '🌆', sub: 'Time to reflect on your day'};
+    return {greeting: 'Late night', emoji: '🌙', sub: "What's on your mind tonight?"};
   };
 
-  const timeMetadata = getTimeMetadata();
+  const {greeting, emoji, sub} = getTimeMetadata();
+  const textColor = isDark ? '#fff' : '#1a1a2e';
+  const mutedColor = isDark ? 'rgba(255,255,255,0.55)' : '#6b7280';
+  const cardBg = isDark ? 'rgba(255,255,255,0.08)' : '#fff';
+  const borderColor = isDark ? 'rgba(255,255,255,0.12)' : '#ede9fe';
+  const btnBg = isDark ? 'rgba(255,255,255,0.1)' : '#f5f3ff';
+  const btnBorder = isDark ? 'rgba(255,255,255,0.15)' : '#ede9fe';
 
   return (
-    <View style={styles.card}>
-
-      {/* ── Top bar: app label + action buttons ── */}
+    <View style={[styles.card, {backgroundColor: cardBg, borderColor}]}>
+      {/* Top bar */}
       <View style={styles.topBar}>
-        <View style={styles.appBadge}>
-          <View style={styles.appBadgeDot} />
-          <Text style={styles.appBadgeText}>Scene Vibe</Text>
+        <View style={styles.brandRow}>
+          <View style={styles.brandDot} />
+          <Text style={[styles.brandText, {color: mutedColor}]}>MOODVOICE</Text>
         </View>
-
-        <View style={styles.topActions}>
-          <TouchableOpacity style={styles.iconBtn} onPress={onOpenHistory} activeOpacity={0.7}>
-            <Icon name="history" size={18} color={iconColor} />
+        <View style={styles.actions}>
+          <TouchableOpacity style={[styles.actionBtn, {backgroundColor: btnBg, borderColor: btnBorder}]} onPress={onOpenHistory} activeOpacity={0.7}>
+            <Icon name="book-heart-outline" size={16} color={isDark ? 'rgba(255,255,255,0.7)' : ACCENT} />
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.7}>
-            <Icon name="logout-variant" size={14} color={iconColor} />
-            <Text style={styles.logoutText}>Sign out</Text>
+          <TouchableOpacity style={[styles.actionBtn, styles.logoutBtn, {backgroundColor: btnBg, borderColor: btnBorder}]} onPress={onLogout} activeOpacity={0.7}>
+            <Icon name="logout-variant" size={14} color={isDark ? 'rgba(255,255,255,0.6)' : '#6b7280'} />
+            <Text style={[styles.logoutText, {color: isDark ? 'rgba(255,255,255,0.6)' : '#6b7280'}]}>Sign out</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* ── Divider ── */}
-      <View style={styles.divider} />
+      {/* Divider */}
+      <View style={[styles.divider, {backgroundColor: borderColor}]} />
 
-      {/* ── Main content: greeting text + avatar ── */}
+      {/* Main content */}
       <View style={styles.contentRow}>
-
-        {/* Left: greeting */}
         <View style={styles.textBlock}>
-          <Text style={styles.greetingLine}>
-            {isLoginFlow ? 'Welcome back 👋' : `${timeMetadata.greeting} ${timeMetadata.emoji}`}
-          </Text>
-          <Text style={styles.userName} numberOfLines={1}>
+          <View style={styles.greetingRow}>
+            <Text style={styles.greetingEmoji}>{isLoginFlow ? '👋' : emoji}</Text>
+            <Text style={[styles.greetingText, {color: mutedColor}]}>
+              {isLoginFlow ? 'Welcome back' : greeting}
+            </Text>
+          </View>
+          <Text style={[styles.userName, {color: textColor}]} numberOfLines={1}>
             {userName || 'Explorer'}
           </Text>
-          <Text style={styles.question}>{timeMetadata.question}</Text>
+          <Text style={[styles.subText, {color: mutedColor}]}>{sub}</Text>
+
+          {/* Quick stats row */}
+          <View style={styles.quickStats}>
+            <View style={[styles.quickStatPill, {backgroundColor: ACCENT + '15', borderColor: ACCENT + '25'}]}>
+              <Icon name="microphone-outline" size={11} color={ACCENT} />
+              <Text style={[styles.quickStatText, {color: ACCENT}]}>Voice Log</Text>
+            </View>
+            <View style={[styles.quickStatPill, {backgroundColor: '#10b98115', borderColor: '#10b98125'}]}>
+              <Icon name="emoticon-happy-outline" size={11} color="#10b981" />
+              <Text style={[styles.quickStatText, {color: '#10b981'}]}>Mood Track</Text>
+            </View>
+          </View>
         </View>
 
-        {/* Right: avatar */}
+        {/* Avatar */}
         <Animated.View
           style={[
             styles.avatarWrap,
             {
+              borderColor: isDark ? 'rgba(255,255,255,0.2)' : ACCENT + '30',
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : ACCENT + '08',
+            },
+            {
               opacity: avatarAnim,
               transform: [
-                {
-                  scale: avatarAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.75, 1],
-                  }),
-                },
-                {
-                  translateY: avatarAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [16, 0],
-                  }),
-                },
+                {scale: avatarAnim.interpolate({inputRange: [0, 1], outputRange: [0.7, 1]})},
+                {translateY: avatarAnim.interpolate({inputRange: [0, 1], outputRange: [20, 0]})},
               ],
             },
           ]}>
-          <AvatarDisplay config={avatarConfig} size={88} onPress={onEditAvatar} />
-          <TouchableOpacity style={styles.editBadge} onPress={onEditAvatar} activeOpacity={0.8}>
-            <Icon name="pencil" size={12} color="#fff" />
+          <AvatarDisplay config={avatarConfig} size={86} onPress={onEditAvatar} />
+          <TouchableOpacity style={[styles.editBadge, {borderColor: appBgColor}]} onPress={onEditAvatar} activeOpacity={0.8}>
+            <Icon name="pencil" size={11} color="#fff" />
           </TouchableOpacity>
         </Animated.View>
-
       </View>
     </View>
   );
 };
 
-const createStyles = (appBgColor, contrastColor) => {
-  const isDark = contrastColor === '#ffffff';
-  const subtleWhite = 'rgba(255,255,255,0.12)';
-  const subtleDark = 'rgba(0,0,0,0.06)';
-  const border = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)';
-
-  return StyleSheet.create({
-    card: {
-      width: '100%',
-      backgroundColor: isDark ? subtleWhite : '#ffffff',
-      borderRadius: 24,
-      paddingHorizontal: 18,
-      paddingTop: 14,
-      paddingBottom: 18,
-      marginBottom: 20,
-      borderWidth: 1,
-      borderColor: border,
-      elevation: 3,
-      shadowColor: '#000',
-      shadowOffset: {width: 0, height: 6},
-      shadowOpacity: 0.08,
-      shadowRadius: 14,
-    },
-
-    // ── Top bar ──
-    topBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 12,
-    },
-    appBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    appBadgeDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 4,
-      backgroundColor: '#6c5ce7',
-    },
-    appBadgeText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: contrastColor,
-      opacity: 0.5,
-      letterSpacing: 1.2,
-      textTransform: 'uppercase',
-    },
-    topActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    iconBtn: {
-      width: 34,
-      height: 34,
-      borderRadius: 10,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: border,
-    },
-    logoutBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      height: 34,
-      paddingHorizontal: 12,
-      borderRadius: 10,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)',
-      borderWidth: 1,
-      borderColor: border,
-    },
-    logoutText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: contrastColor,
-      opacity: 0.75,
-    },
-
-    // ── Divider ──
-    divider: {
-      height: 1,
-      backgroundColor: border,
-      marginBottom: 16,
-    },
-
-    // ── Content row ──
-    contentRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 12,
-    },
-    textBlock: {
-      flex: 1,
-    },
-    greetingLine: {
-      fontSize: 13,
-      fontWeight: '500',
-      color: contrastColor,
-      opacity: 0.6,
-      marginBottom: 2,
-    },
-    userName: {
-      fontSize: 30,
-      fontWeight: '800',
-      color: contrastColor,
-      letterSpacing: -0.8,
-      lineHeight: 34,
-      marginBottom: 5,
-    },
-    question: {
-      fontSize: 13,
-      fontWeight: '500',
-      color: contrastColor,
-      opacity: 0.65,
-      lineHeight: 18,
-    },
-
-    // ── Avatar ──
-    avatarWrap: {
-      position: 'relative',
-      padding: 3,
-      borderRadius: 52,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(108,92,231,0.07)',
-      borderWidth: 1.5,
-      borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(108,92,231,0.18)',
-    },
-    editBadge: {
-      position: 'absolute',
-      bottom: -1,
-      right: -1,
-      width: 26,
-      height: 26,
-      borderRadius: 13,
-      backgroundColor: '#6c5ce7',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 2,
-      borderColor: appBgColor,
-      elevation: 6,
-      shadowColor: '#6c5ce7',
-      shadowOffset: {width: 0, height: 2},
-      shadowOpacity: 0.4,
-      shadowRadius: 4,
-    },
-  });
-};
+const styles = StyleSheet.create({
+  card: {
+    width: '100%',
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
+    borderWidth: 1,
+    elevation: 4,
+    shadowColor: ACCENT,
+    shadowOffset: {width: 0, height: 8},
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  brandRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
+  brandDot: {width: 7, height: 7, borderRadius: 4, backgroundColor: ACCENT},
+  brandText: {fontSize: 11, fontWeight: '800', letterSpacing: 1.5},
+  actions: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  actionBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  logoutBtn: {
+    flexDirection: 'row',
+    width: 'auto',
+    paddingHorizontal: 12,
+    gap: 5,
+  },
+  logoutText: {fontSize: 12, fontWeight: '600'},
+  divider: {height: 1, marginBottom: 16},
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  textBlock: {flex: 1},
+  greetingRow: {flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 3},
+  greetingEmoji: {fontSize: 14},
+  greetingText: {fontSize: 12, fontWeight: '600'},
+  userName: {
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+    lineHeight: 32,
+    marginBottom: 4,
+  },
+  subText: {fontSize: 12, fontWeight: '500', lineHeight: 17, marginBottom: 12},
+  quickStats: {flexDirection: 'row', gap: 8},
+  quickStatPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  quickStatText: {fontSize: 11, fontWeight: '700'},
+  avatarWrap: {
+    position: 'relative',
+    padding: 4,
+    borderRadius: 52,
+    borderWidth: 1.5,
+  },
+  editBadge: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: ACCENT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    elevation: 4,
+    shadowColor: ACCENT,
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+  },
+});
 
 export default DashboardHero;

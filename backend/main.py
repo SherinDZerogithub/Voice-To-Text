@@ -2,6 +2,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
 import asyncio
+import numpy as np
 from fastapi import FastAPI, HTTPException, File, UploadFile, Body, Form, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -110,6 +111,9 @@ def ensure_sqlite_schema():
         if "prosody_analysis" not in columns:
             conn.execute(text("ALTER TABLE mood_logs ADD COLUMN prosody_analysis TEXT"))
             print("Added missing prosody_analysis column to mood_logs table")
+        if "embedding" not in columns:
+            conn.execute(text("ALTER TABLE mood_logs ADD COLUMN embedding TEXT"))
+            print("Added missing embedding column to mood_logs table")
 
 
 ensure_sqlite_schema()
@@ -481,6 +485,7 @@ def serialize_mood_log(log: models.MoodLog):
         "reflection": log.reflection,
         "doodles": log.doodles,
         "gentle_reminder": log.gentle_reminder,
+        # never expose raw embedding vector to client
     }
 
 
@@ -1860,6 +1865,316 @@ async def therapist_chat(
     except Exception as e:
         print(f"[Chat error] {e}")
         raise HTTPException(status_code=500, detail="Chat failed")
+
+
+
+
+# ─── Semantic Search ──────────────────────────────────────────────────────────
+
+@app.post("/semantic-search")
+async def semantic_search(
+    request: schemas.SemanticSearchRequest,
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    """Natural-language search over mood history using sentence embeddings."""
+    if not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    logs = (
+        db.query(models.MoodLog)
+        .filter(models.MoodLog.user_id == db_user.id)
+        .order_by(models.MoodLog.timestamp.desc())
+        .limit(200)
+        .all()
+    )
+    if not logs:
+        return {"results": [], "query": request.query}
+
+    model = get_vibe_model()
+    query_vec = model.encode(request.query, convert_to_numpy=True)
+
+    scored = []
+    for log in logs:
+        text_parts = [log.vibe or "", log.short_caption or "", log.reflection or "", log.description or ""]
+        entry_text = " ".join(p for p in text_parts if p).strip()
+        if not entry_text:
+            continue
+        if log.embedding:
+            try:
+                entry_vec = np.array(json.loads(log.embedding), dtype=np.float32)
+            except Exception:
+                entry_vec = model.encode(entry_text, convert_to_numpy=True)
+                log.embedding = json.dumps(entry_vec.tolist())
+        else:
+            entry_vec = model.encode(entry_text, convert_to_numpy=True)
+            log.embedding = json.dumps(entry_vec.tolist())
+
+        norm_q = np.linalg.norm(query_vec)
+        norm_e = np.linalg.norm(entry_vec)
+        if norm_q == 0 or norm_e == 0:
+            continue
+        score = float(np.dot(query_vec, entry_vec) / (norm_q * norm_e))
+        scored.append((score, log))
+
+    db.commit()
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = scored[: request.top_k]
+
+    return {
+        "results": [
+            {**serialize_mood_log(log), "similarity": round(score, 4)}
+            for score, log in top
+            if score > 0.25
+        ],
+        "query": request.query,
+    }
+
+
+# ─── Trigger & Coping Theme Extraction ───────────────────────────────────────
+
+@app.get("/trigger-analysis")
+async def trigger_analysis(
+    days: int = Query(30, ge=7, le=365),
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    """NLP extraction of recurring emotional triggers and coping themes."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    logs = (
+        db.query(models.MoodLog)
+        .filter(
+            models.MoodLog.user_id == db_user.id,
+            models.MoodLog.timestamp >= since,
+            models.MoodLog.reflection.isnot(None),
+        )
+        .order_by(models.MoodLog.timestamp.desc())
+        .all()
+    )
+
+    reflections = [log.reflection for log in logs if log.reflection and log.reflection.strip()]
+    captions = [log.short_caption for log in logs if log.short_caption]
+
+    if not reflections and not captions:
+        return {"triggers": [], "coping_themes": [], "source": "no_data",
+                "entry_count": len(logs), "days": days}
+
+    if gemini_model and reflections:
+        try:
+            combined = "\n---\n".join(reflections[:20])
+            prompt = f"""You are an expert emotional pattern analyst. Analyze these journal reflections from a single person over the past {days} days:
+
+{combined[:3000]}
+
+Identify:
+1. TRIGGERS: Recurring situations, people, thoughts, or events that seem to cause negative emotions (max 6, be specific)
+2. COPING_THEMES: Positive strategies, activities, or mindsets the person uses or mentions to feel better (max 6)
+
+Return ONLY valid JSON:
+{{"triggers": ["trigger1", "trigger2"], "coping_themes": ["theme1", "theme2"]}}"""
+
+            response = await asyncio.to_thread(gemini_model.generate_content, prompt)
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            result = json.loads(raw.strip())
+            return {
+                "triggers": result.get("triggers", [])[:6],
+                "coping_themes": result.get("coping_themes", [])[:6],
+                "source": "ai",
+                "entry_count": len(logs),
+                "days": days,
+            }
+        except Exception as e:
+            print(f"[Trigger Analysis Gemini Error] {e}")
+
+    TRIGGER_KEYWORDS = ["stress", "work", "tired", "overwhelm", "anxious", "worry",
+                        "alone", "conflict", "deadline", "sleep", "pain", "fear",
+                        "pressure", "rejection", "failure", "money", "health"]
+    COPING_KEYWORDS = ["walk", "music", "friend", "rest", "breathe", "journal",
+                       "exercise", "meditat", "read", "cook", "outside", "nature",
+                       "gratitude", "creative", "art", "yoga", "calm"]
+    all_text = " ".join(reflections + captions).lower()
+    return {
+        "triggers": [kw for kw in TRIGGER_KEYWORDS if kw in all_text][:6],
+        "coping_themes": [kw for kw in COPING_KEYWORDS if kw in all_text][:6],
+        "source": "keyword_fallback",
+        "entry_count": len(logs),
+        "days": days,
+    }
+
+
+# ─── Mood Forecast ────────────────────────────────────────────────────────────
+
+@app.get("/mood-forecast")
+async def mood_forecast(
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    """Predicts likely mood for the rest of today based on trajectory and time-of-day patterns."""
+    logs = (
+        db.query(models.MoodLog)
+        .filter(models.MoodLog.user_id == db_user.id)
+        .order_by(models.MoodLog.timestamp.desc())
+        .limit(30)
+        .all()
+    )
+
+    if len(logs) < 3:
+        return {
+            "predicted_vibe": "unknown",
+            "confidence": 0.0,
+            "reasoning": "Not enough data yet. Log a few more moods to unlock forecasting.",
+            "suggested_actions": ["Keep logging your moods daily"],
+            "source": "insufficient_data",
+        }
+
+    current_hour = datetime.now().hour
+    time_slot = ("morning" if current_hour < 12 else
+                 "afternoon" if current_hour < 17 else
+                 "evening" if current_hour < 21 else "night")
+
+    recent_vibes = [log.vibe for log in logs[:7]]
+    tod_counts: Counter = Counter()
+    for log in logs:
+        if log.timestamp is None:
+            continue
+        h = log.timestamp.hour
+        slot = ("morning" if h < 12 else "afternoon" if h < 17 else
+                "evening" if h < 21 else "night")
+        if slot == time_slot:
+            tod_counts[log.vibe] += 1
+
+    tod_top = tod_counts.most_common(1)[0][0] if tod_counts else recent_vibes[0]
+
+    if gemini_model:
+        try:
+            prompt = f"""You are an emotional intelligence forecasting engine. Based on this user's data:
+
+- Recent mood sequence (newest first): {", ".join(recent_vibes)}
+- Historical {time_slot} mood pattern: {dict(tod_counts.most_common(5))}
+- Current time of day: {time_slot}
+- Valid mood labels: {", ".join(VIBE_LABELS)}
+
+Predict their most likely emotional state for the rest of today.
+
+Return ONLY valid JSON:
+{{"predicted_vibe": "<label>", "confidence": <0.0-1.0>, "reasoning": "<2 sentences>", "suggested_actions": ["<action1>", "<action2>", "<action3>"]}}"""
+            response = await asyncio.to_thread(gemini_model.generate_content, prompt)
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            result = json.loads(raw.strip())
+            predicted = result.get("predicted_vibe", "")
+            if predicted not in VIBE_LABELS:
+                predicted = tod_top
+            return {
+                "predicted_vibe": predicted,
+                "confidence": float(result.get("confidence", 0.5)),
+                "reasoning": result.get("reasoning", ""),
+                "suggested_actions": result.get("suggested_actions", [])[:3],
+                "source": "ai",
+                "emoji": VIBE_META.get(predicted, {}).get("emoji", "🌈"),
+                "color": VIBE_META.get(predicted, {}).get("color", "#6c5ce7"),
+            }
+        except Exception as e:
+            print(f"[Mood Forecast Gemini Error] {e}")
+
+    predicted = tod_top if tod_counts else Counter(recent_vibes).most_common(1)[0][0]
+    total = sum(tod_counts.values()) or 1
+    return {
+        "predicted_vibe": predicted,
+        "confidence": round(tod_counts.get(predicted, 1) / total, 2),
+        "reasoning": f"Based on your past {time_slot} entries, {predicted} is your most common state at this time.",
+        "suggested_actions": ["Log your current mood", "Take a short mindful break"],
+        "source": "statistical",
+        "emoji": VIBE_META.get(predicted, {}).get("emoji", "🌈"),
+        "color": VIBE_META.get(predicted, {}).get("color", "#6c5ce7"),
+    }
+
+
+# ─── Weekly Mood Summary ──────────────────────────────────────────────────────
+
+@app.get("/mood-summary/weekly")
+async def weekly_mood_summary(
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    """AI-generated weekly mood summary with highlights, patterns, and next steps."""
+    since = datetime.now(timezone.utc) - timedelta(days=7)
+    logs = (
+        db.query(models.MoodLog)
+        .filter(
+            models.MoodLog.user_id == db_user.id,
+            models.MoodLog.timestamp >= since,
+        )
+        .order_by(models.MoodLog.timestamp.asc())
+        .all()
+    )
+
+    if not logs:
+        return {
+            "summary": "No entries this week yet. Start logging to unlock your weekly summary.",
+            "highlights": [], "patterns": [],
+            "next_steps": ["Log your first mood of the week"],
+            "dominant_vibe": None, "entry_count": 0, "source": "no_data",
+        }
+
+    vibe_counts = Counter(log.vibe for log in logs)
+    dominant = vibe_counts.most_common(1)[0][0]
+    vibes_str = ", ".join(log.vibe for log in logs)
+    reflections = [log.reflection for log in logs if log.reflection and log.reflection.strip()]
+
+    if gemini_model:
+        try:
+            reflection_block = ("\n".join(reflections[:8])[:1500]) if reflections else "No journal entries this week."
+            prompt = f"""You are a compassionate emotional wellness coach. Here is a user's week in data:
+
+- Mood sequence (oldest to newest): {vibes_str}
+- Total entries: {len(logs)}
+- Dominant mood: {dominant}
+- Journal excerpts: {reflection_block}
+
+Write a warm, personal weekly summary. Return ONLY valid JSON:
+{{"summary": "<2-3 sentence narrative in second person>", "highlights": ["<highlight1>", "<highlight2>"], "patterns": ["<pattern1>", "<pattern2>"], "next_steps": ["<suggestion1>", "<suggestion2>"]}}"""
+            response = await asyncio.to_thread(gemini_model.generate_content, prompt)
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            result = json.loads(raw.strip())
+            return {
+                "summary": result.get("summary", ""),
+                "highlights": result.get("highlights", [])[:3],
+                "patterns": result.get("patterns", [])[:3],
+                "next_steps": result.get("next_steps", [])[:3],
+                "dominant_vibe": dominant,
+                "entry_count": len(logs),
+                "emoji": VIBE_META.get(dominant, {}).get("emoji", "🌈"),
+                "color": VIBE_META.get(dominant, {}).get("color", "#6c5ce7"),
+                "source": "ai",
+            }
+        except Exception as e:
+            print(f"[Weekly Summary Gemini Error] {e}")
+
+    top3 = [v for v, _ in vibe_counts.most_common(3)]
+    unique_days = len(set(log.timestamp.date() for log in logs if log.timestamp))
+    return {
+        "summary": f"This week you logged {len(logs)} entries. Your dominant state was {dominant}, with {top3} appearing most often.",
+        "highlights": [f"Most frequent mood: {dominant} ({vibe_counts[dominant]}x)"],
+        "patterns": [f"You logged moods on {unique_days} different days this week"],
+        "next_steps": ["Keep up your daily check-ins", "Try journaling about your most frequent mood"],
+        "dominant_vibe": dominant,
+        "entry_count": len(logs),
+        "emoji": VIBE_META.get(dominant, {}).get("emoji", "🌈"),
+        "color": VIBE_META.get(dominant, {}).get("color", "#6c5ce7"),
+        "source": "statistical",
+    }
 
 
 @app.get("/")

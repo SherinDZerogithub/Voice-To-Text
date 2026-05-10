@@ -24,6 +24,7 @@ import {getContrastColor} from '../utils/colors';
 import GoalCompletionModal, {COMPLETION_THRESHOLD} from './GoalCompletionModal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import VibeRadarChart from './VibeRadarChart';
+import TriggerInsightsCard from './TriggerInsightsCard';
 
 const ANALYTICS_HORIZONTAL_PADDING = 20;
 const CHART_HEIGHT = 180;
@@ -846,6 +847,8 @@ const AnalyticsDisplay = ({
   moodGoal,
   onUpdateGoal,
   moodHistory,
+  token,
+  backendUrl,
 }) => {
   const contrastColor = getContrastColor(appBgColor);
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -981,13 +984,19 @@ const AnalyticsDisplay = ({
             },
           ],
         }}>
-        <Text style={[styles.pageTitle, {color: contrastColor}]}>
-          Emotional Journey
-        </Text>
-        <Text
-          style={[styles.pageSubtitle, {color: contrastColor, opacity: 0.5}]}>
-          Last 30 days · {totalLogs} {totalLogs === 1 ? 'entry' : 'entries'}
-        </Text>
+        <View style={styles.pageHeader}>
+          <View>
+            <Text style={[styles.pageTitle, {color: contrastColor}]}>
+              Emotional Journey
+            </Text>
+            <Text style={[styles.pageSubtitle, {color: contrastColor, opacity: 0.5}]}>
+              Last 30 days · {totalLogs} {totalLogs === 1 ? 'entry' : 'entries'}
+            </Text>
+          </View>
+          <View style={styles.pageHeaderBadge}>
+            <Icon name="chart-areaspline" size={22} color="#7c6ff7" />
+          </View>
+        </View>
       </Animated.View>
 
       {/* Stat cards */}
@@ -1287,6 +1296,9 @@ const AnalyticsDisplay = ({
         </SectionCard>
       )}
 
+      {/* Trigger & Coping Insights */}
+      <TriggerInsightsCard token={token} backendUrl={backendUrl} days={30} />
+
       {/* Refresh */}
       {onRefresh && (
         <TouchableOpacity style={styles.fullRefreshButton} onPress={onRefresh}>
@@ -1324,17 +1336,32 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   refreshButtonText: {color: '#fff', fontWeight: '700'},
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  pageHeaderBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    backgroundColor: '#7c6ff715',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#7c6ff725',
+  },
   pageTitle: {
     fontSize: 28,
     fontWeight: '900',
     letterSpacing: -0.5,
-    marginTop: 8,
   },
   pageSubtitle: {
     fontSize: 13,
     fontWeight: '600',
     marginTop: 2,
-    marginBottom: 20,
   },
 
   statsGrid: {

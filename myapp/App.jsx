@@ -29,9 +29,11 @@ import MoodPatternWarning from './components/MoodPatternWarning';
 import JournalPrompts from './components/JournalPrompts';
 import AffirmationBanner from './components/AffirmationBanner';
 import {SAMPLE_IMAGES} from './constants/sampleImages';
-import {getContrastColor} from './utils/colors';
+import {getContrastColor, DESIGN_TOKENS} from './utils/colors';
 import StreakBadges from './components/StreakBadges';
 import MoodCompanion from './components/MoodCompanion';
+import WeeklySummaryCard from './components/WeeklySummaryCard';
+import MoodForecastCard from './components/MoodForecastCard';
 
 // RN 0.71+ expects native event modules to expose listener stubs.
 // We stub common module names used by voice libraries to prevent NativeEventEmitter warnings.
@@ -1061,95 +1063,133 @@ const App = () => {
     content: {
       paddingVertical: 40,
       alignItems: 'center',
-      paddingBottom: 100, // Extra space at bottom to account for the tab bar
+      paddingBottom: 110,
     },
     statusText: {
       marginTop: 10,
       color: isListening
-        ? '#ff4d4d'
+        ? '#f87171'
         : getContrastColor(appBgColor) === '#ffffff'
-        ? 'rgba(255,255,255,0.7)'
-        : '#666',
-      fontWeight: 'bold',
+        ? 'rgba(255,255,255,0.6)'
+        : '#9ca3af',
+      fontWeight: '600',
+      fontSize: 13,
     },
     error: {
-      marginTop: 20,
-      color: '#d9534f',
+      marginTop: 12,
+      color: '#ef4444',
       textAlign: 'center',
       fontWeight: '500',
+      fontSize: 13,
     },
     backButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 12,
-      marginBottom: 10,
-      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      marginBottom: 12,
+      borderRadius: 14,
       alignSelf: 'flex-start',
       gap: 6,
+      backgroundColor: `${DESIGN_TOKENS.primary}15`,
+      borderWidth: 1,
+      borderColor: `${DESIGN_TOKENS.primary}25`,
     },
     backButtonText: {
-      fontSize: 15,
-      fontWeight: '600',
+      fontSize: 14,
+      fontWeight: '700',
+      color: DESIGN_TOKENS.primary,
     },
     heroWrapper: {
       width: '100%',
-      marginBottom: 35,
-      paddingHorizontal: 4,
+      marginBottom: 28,
+      paddingHorizontal: 2,
     },
     tabBar: {
       flexDirection: 'row',
-      backgroundColor: '#fff',
+      backgroundColor: DESIGN_TOKENS.surface,
       borderTopWidth: 1,
-      borderTopColor: '#eee',
-      paddingBottom: Platform.OS === 'ios' ? 20 : 10,
+      borderTopColor: DESIGN_TOKENS.border,
+      paddingBottom: Platform.OS === 'ios' ? 24 : 12,
       paddingTop: 10,
+      paddingHorizontal: 8,
       justifyContent: 'space-around',
-      elevation: 10,
-      shadowColor: '#000',
-      shadowOffset: {width: 0, height: -2},
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
+      elevation: 20,
+      shadowColor: DESIGN_TOKENS.shadow,
+      shadowOffset: {width: 0, height: -4},
+      shadowOpacity: 0.08,
+      shadowRadius: 16,
     },
     tabItem: {
       alignItems: 'center',
       justifyContent: 'center',
       flex: 1,
+      paddingVertical: 4,
+    },
+    tabIconWrap: {
+      width: 44,
+      height: 32,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    tabIconWrapActive: {
+      backgroundColor: `${DESIGN_TOKENS.primary}15`,
     },
     tabText: {
-      fontSize: 12,
-      marginTop: 4,
-      fontWeight: '600',
+      fontSize: 10,
+      marginTop: 3,
+      fontWeight: '700',
+      letterSpacing: 0.2,
     },
     checkInBanner: {
       width: '100%',
-      backgroundColor: '#fff',
-      borderRadius: 24,
-      padding: 20,
-      marginBottom: 30,
+      backgroundColor: DESIGN_TOKENS.surface,
+      borderRadius: 20,
+      padding: 18,
+      marginBottom: 20,
       flexDirection: 'row',
       alignItems: 'center',
-      elevation: 6,
-      shadowColor: '#6c5ce7',
+      elevation: 4,
+      shadowColor: DESIGN_TOKENS.shadow,
       shadowOffset: {width: 0, height: 4},
-      shadowOpacity: 0.15,
-      shadowRadius: 10,
-      borderLeftWidth: 6,
-      borderLeftColor: '#6c5ce7',
+      shadowOpacity: 0.1,
+      shadowRadius: 12,
+      borderWidth: 1,
+      borderColor: '#ede9fe',
+      overflow: 'hidden',
+    },
+    checkInAccent: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 4,
+      backgroundColor: DESIGN_TOKENS.primary,
+      borderTopLeftRadius: 20,
+      borderBottomLeftRadius: 20,
     },
     checkInIconContainer: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: '#6c5ce715',
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      backgroundColor: `${DESIGN_TOKENS.primary}15`,
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 12,
+      marginLeft: 8,
     },
     checkInText: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: '#2d3436',
+      fontSize: 15,
+      fontWeight: '800',
+      color: DESIGN_TOKENS.textPrimary,
       flex: 1,
+    },
+    checkInSub: {
+      fontSize: 12,
+      color: DESIGN_TOKENS.textSecondary,
+      fontWeight: '500',
+      marginTop: 2,
     },
   });
 
@@ -1278,6 +1318,8 @@ const App = () => {
           moodGoal={moodGoal}
           onUpdateGoal={updateMoodGoal}
           moodHistory={moodHistory}
+          token={token}
+          backendUrl={BACKEND_URL}
         />
       );
     } else if (activeTab === 'history') {
@@ -1286,20 +1328,10 @@ const App = () => {
           <>
             <TouchableOpacity
               onPress={handleClearSelection}
-              style={[styles.backButton, {backgroundColor: appBgColor}]}
+              style={styles.backButton}
               activeOpacity={0.7}>
-              <Icon
-                name="arrow-left"
-                size={20}
-                color={getContrastColor(appBgColor)}
-              />
-              <Text
-                style={[
-                  styles.backButtonText,
-                  {color: getContrastColor(appBgColor)},
-                ]}>
-                Back to List
-              </Text>
+              <Icon name="arrow-left" size={18} color={DESIGN_TOKENS.primary} />
+              <Text style={styles.backButtonText}>Back to Journal</Text>
             </TouchableOpacity>
             <MoodResult
               moodData={selectedHistoryItem}
@@ -1325,6 +1357,12 @@ const App = () => {
      } else {
        return (
          <>
+           {/* Weekly AI Summary */}
+           <WeeklySummaryCard token={token} backendUrl={BACKEND_URL} />
+
+           {/* Mood Forecast */}
+           <MoodForecastCard token={token} backendUrl={BACKEND_URL} />
+
            {/* Streak & Badges Overview */}
            <StreakBadges
              moodHistory={moodHistory}
@@ -1345,10 +1383,14 @@ const App = () => {
 
            {!hasLoggedToday && (
              <View style={styles.checkInBanner}>
+               <View style={styles.checkInAccent} />
                <View style={styles.checkInIconContainer}>
-                 <Icon name="star" size={20} color="#6c5ce7" />
+                 <Icon name="star-shooting" size={20} color={DESIGN_TOKENS.primary} />
                </View>
-               <Text style={styles.checkInText}>How are you feeling today?</Text>
+               <View style={{flex: 1}}>
+                 <Text style={styles.checkInText}>How are you feeling today?</Text>
+                 <Text style={styles.checkInSub}>Tap the mic to start your check-in</Text>
+               </View>
              </View>
            )}
            <MoodPatternWarning
@@ -1492,70 +1534,28 @@ const App = () => {
       )}
 
       <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('home')}>
-          <Icon
-            name="home"
-            size={24}
-            color={activeTab === 'home' ? '#6c5ce7' : '#999'}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              {color: activeTab === 'home' ? '#6c5ce7' : '#999'},
-            ]}>
-            Home
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('chat')}>
-          <Icon
-            name="chat-outline"
-            size={24}
-            color={activeTab === 'chat' ? '#6c5ce7' : '#999'}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              {color: activeTab === 'chat' ? '#6c5ce7' : '#999'},
-            ]}>
-            Chat
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('history')}>
-          <Icon
-            name="history"
-            size={24}
-            color={activeTab === 'history' ? '#6c5ce7' : '#999'}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              {color: activeTab === 'history' ? '#6c5ce7' : '#999'},
-            ]}>
-            History
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('analytics')}>
-          <Icon
-            name="chart-bar"
-            size={24}
-            color={activeTab === 'analytics' ? '#6c5ce7' : '#999'}
-          />
-          <Text
-            style={[
-              styles.tabText,
-              {color: activeTab === 'analytics' ? '#6c5ce7' : '#999'},
-            ]}>
-            Analytics
-          </Text>
-        </TouchableOpacity>
+        {[
+          {id: 'home', icon: 'home-variant', label: 'Home'},
+          {id: 'chat', icon: 'chat-processing-outline', label: 'Chat'},
+          {id: 'history', icon: 'book-heart-outline', label: 'Journal'},
+          {id: 'analytics', icon: 'chart-areaspline', label: 'Insights'},
+        ].map(tab => {
+          const active = activeTab === tab.id;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={styles.tabItem}
+              onPress={() => setActiveTab(tab.id)}
+              activeOpacity={0.7}>
+              <View style={[styles.tabIconWrap, active && styles.tabIconWrapActive]}>
+                <Icon name={tab.icon} size={22} color={active ? DESIGN_TOKENS.primary : DESIGN_TOKENS.primaryLight} />
+              </View>
+              <Text style={[styles.tabText, {color: active ? DESIGN_TOKENS.primary : DESIGN_TOKENS.primaryLight}]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
