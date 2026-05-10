@@ -3,6 +3,7 @@
  *
  * Handles two states:
  *  - COMPLETE  (goalProgress >= threshold): Animated celebration + AI insight popup + save
+ *  - FAILED    (goalProgress < threshold after 7 days): Reflective goal failed popup
  *  - INCOMPLETE (goalProgress < threshold): Warm, contextual encouragement popup
  *
  * Props:
@@ -15,6 +16,7 @@
  *  moodHistory     array           recent mood log items for context
  *  token           string          JWT for Claude API (passed through)
  *  onSaveInsight   (text) => void  called when user saves the insight
+ *  goalFailed      boolean         true when the 7-day focus ended below target
  *
  * The COMPLETE threshold is >=30% (goal vibe is at least 30% of all logs).
  */
@@ -595,9 +597,24 @@ const getIncompleteMessage = vibe => {
   return INCOMPLETE_MESSAGES[vibe?.toLowerCase()] || INCOMPLETE_MESSAGES.default;
 };
 
-const IncompleteContent = ({ goalVibe, goalCount, totalLogs, goalProgress, onClose }) => {
+const IncompleteContent = ({
+  goalVibe,
+  goalCount,
+  totalLogs,
+  goalProgress,
+  goalFailed,
+  onClose,
+}) => {
   const meta = getMeta(goalVibe);
-  const msg = getIncompleteMessage(goalVibe);
+  const msg = goalFailed
+    ? {
+        headline: 'Goal Failed This Week',
+        body:
+          'The 7-day focus ended before this vibe reached the target. That is useful feedback, not a dead end.',
+        tip: 'Start a fresh weekly focus or choose a vibe that matches what you need next.',
+        icon: 'flag-outline',
+      }
+    : getIncompleteMessage(goalVibe);
   const percent = Math.round(goalProgress * 100);
 
   const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -677,7 +694,9 @@ const IncompleteContent = ({ goalVibe, goalCount, totalLogs, goalProgress, onClo
           style={[incompleteStyles.keepBtn, { backgroundColor: meta.color }]}
           onPress={onClose}
           activeOpacity={0.8}>
-          <Text style={incompleteStyles.keepBtnText}>Keep this goal 💪</Text>
+          <Text style={incompleteStyles.keepBtnText}>
+            {goalFailed ? 'Review this week' : 'Keep this goal 💪'}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={incompleteStyles.dismissBtn}
@@ -793,8 +812,10 @@ const GoalCompletionModal = ({
   totalLogs,
   moodHistory = [],
   onSaveInsight,
+  goalFailed = false,
 }) => {
   const isComplete = goalProgress >= COMPLETION_THRESHOLD;
+  const isFailed = goalFailed && !isComplete;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const cardScale = useRef(new Animated.Value(0.88)).current;
   const cardOpacity = useRef(new Animated.Value(0)).current;
@@ -849,13 +870,21 @@ const GoalCompletionModal = ({
           <View
             style={[
               mainStyles.strip,
-              { backgroundColor: getMeta(goalVibe).color + (isComplete ? 'FF' : '55') },
+              {
+                backgroundColor: isFailed
+                  ? '#d63031'
+                  : getMeta(goalVibe).color + (isComplete ? 'FF' : '55'),
+              },
             ]}>
             <Text style={mainStyles.stripText}>
-              {isComplete ? '🏆 Goal Achieved' : '💪 Keep Going'}
+              {isComplete
+                ? '🏆 Goal Achieved'
+                : isFailed
+                ? 'Goal Failed'
+                : '💪 Keep Going'}
             </Text>
             <TouchableOpacity onPress={handleClose} style={mainStyles.stripClose}>
-              <Icon name="close" size={20} color={isComplete ? '#fff' : '#555'} />
+              <Icon name="close" size={20} color={isComplete || isFailed ? '#fff' : '#555'} />
             </TouchableOpacity>
           </View>
 
@@ -880,6 +909,7 @@ const GoalCompletionModal = ({
                 goalCount={goalCount}
                 totalLogs={totalLogs}
                 goalProgress={goalProgress}
+                goalFailed={isFailed}
                 onClose={handleClose}
               />
             )}

@@ -23,6 +23,9 @@ import io
 import os
 import base64
 import json
+import math
+import re
+import wave
 from typing import Optional
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -58,6 +61,23 @@ def save_user_image(
     return relative_path
 
 
+def save_user_audio(file_bytes: bytes, user_id: int, filename: str = "audio.wav") -> str:
+    """Save raw user audio and return a relative path."""
+    user_dir = os.path.join(UPLOADS_DIR, f"user_{user_id}")
+    os.makedirs(user_dir, exist_ok=True)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")[:-3]
+    file_ext = os.path.splitext(filename)[1] or ".wav"
+    safe_ext = re.sub(r"[^a-zA-Z0-9.]", "", file_ext) or ".wav"
+    saved_filename = f"audio_{timestamp}{safe_ext}"
+
+    filepath = os.path.join(user_dir, saved_filename)
+    with open(filepath, "wb") as audio_file:
+        audio_file.write(file_bytes)
+
+    return os.path.join("uploads", f"user_{user_id}", saved_filename)
+
+
 app = FastAPI(title="Emotion Mood Analytics Server")
 
 models.Base.metadata.create_all(bind=database.engine)
@@ -84,6 +104,12 @@ def ensure_sqlite_schema():
         if "gentle_reminder" not in columns:
             conn.execute(text("ALTER TABLE mood_logs ADD COLUMN gentle_reminder TEXT"))
             print("Added missing gentle_reminder column to mood_logs table")
+        if "audio_path" not in columns:
+            conn.execute(text("ALTER TABLE mood_logs ADD COLUMN audio_path TEXT"))
+            print("Added missing audio_path column to mood_logs table")
+        if "prosody_analysis" not in columns:
+            conn.execute(text("ALTER TABLE mood_logs ADD COLUMN prosody_analysis TEXT"))
+            print("Added missing prosody_analysis column to mood_logs table")
 
 
 ensure_sqlite_schema()
@@ -422,6 +448,11 @@ def serialize_mood_log(log: models.MoodLog):
     except json.JSONDecodeError:
         all_scores = []
 
+    try:
+        prosody_analysis = json.loads(log.prosody_analysis or "null")
+    except json.JSONDecodeError:
+        prosody_analysis = None
+
     return {
         "id": log.id,
         "user_id": log.user_id,
@@ -445,8 +476,220 @@ def serialize_mood_log(log: models.MoodLog):
         "secondary_moods": secondary_moods,
         "all_scores": all_scores,
         "image_path": log.image_path,
+        "audio_path": log.audio_path,
+        "prosody_analysis": prosody_analysis if isinstance(prosody_analysis, dict) else None,
         "reflection": log.reflection,
+        "doodles": log.doodles,
         "gentle_reminder": log.gentle_reminder,
+    }
+
+
+def classify_pace(words_per_minute: Optional[float]) -> str:
+    if words_per_minute is None:
+        return "unknown"
+    if words_per_minute < 95:
+        return "slow"
+    if words_per_minute > 165:
+        return "fast"
+    return "steady"
+
+
+def classify_volume(avg_dbfs: Optional[float]) -> str:
+    if avg_dbfs is None:
+        return "unknown"
+    if avg_dbfs < -35:
+        return "quiet"
+    if avg_dbfs > -18:
+        return "loud"
+    return "moderate"
+
+
+def infer_emotional_tone(
+    pace_label: str,
+    volume_label: str,
+    pause_ratio: float,
+    volume_variability: float,
+) -> str:
+    if pace_label == "fast" and volume_label == "loud":
+        return "energized or tense"
+    if pace_label == "fast" and pause_ratio < 0.12:
+        return "urgent or animated"
+    if pace_label == "slow" and pause_ratio > 0.28:
+        return "hesitant or reflective"
+    if volume_label == "quiet" and pace_label == "slow":
+        return "subdued"
+    if volume_variability > 9 and pause_ratio > 0.2:
+        return "emotionally strained"
+    if pace_label == "steady" and volume_label == "moderate":
+        return "balanced"
+    return "mixed"
+
+
+def pcm_sample_to_int(sample: bytes, sample_width: int) -> int:
+    if sample_width == 1:
+        return sample[0] - 128
+    return int.from_bytes(sample, byteorder="little", signed=True)
+
+
+def int_to_pcm_sample(value: int, sample_width: int) -> bytes:
+    min_value = -(1 << (8 * sample_width - 1))
+    max_value = (1 << (8 * sample_width - 1)) - 1
+    clamped = max(min(value, max_value), min_value)
+    if sample_width == 1:
+        return bytes([clamped + 128])
+    return clamped.to_bytes(sample_width, byteorder="little", signed=True)
+
+
+def pcm_to_mono(frames: bytes, sample_width: int, channels: int) -> bytes:
+    if channels <= 1:
+        return frames
+
+    frame_width = sample_width * channels
+    mono_frames = bytearray()
+
+    for offset in range(0, len(frames) - frame_width + 1, frame_width):
+        frame = frames[offset : offset + frame_width]
+        samples = [
+            pcm_sample_to_int(
+                frame[channel_offset : channel_offset + sample_width],
+                sample_width,
+            )
+            for channel_offset in range(0, frame_width, sample_width)
+        ]
+        mono_sample = round(sum(samples) / channels)
+        mono_frames.extend(int_to_pcm_sample(mono_sample, sample_width))
+
+    return bytes(mono_frames)
+
+
+def pcm_rms(frames: bytes, sample_width: int) -> int:
+    sample_count = len(frames) // sample_width
+    if sample_count == 0:
+        return 0
+
+    square_sum = 0
+    for offset in range(0, sample_count * sample_width, sample_width):
+        sample = frames[offset : offset + sample_width]
+        value = pcm_sample_to_int(sample, sample_width)
+        square_sum += value * value
+
+    return int(math.sqrt(square_sum / sample_count))
+
+
+def analyze_wav_prosody(file_bytes: bytes, transcript: Optional[str] = None) -> dict:
+    """
+    Lightweight local prosody analysis for PCM WAV audio.
+    Pace needs a transcript or word count, while pauses/volume come from audio energy.
+    """
+    with wave.open(io.BytesIO(file_bytes), "rb") as wav_file:
+        channels = wav_file.getnchannels()
+        sample_width = wav_file.getsampwidth()
+        frame_rate = wav_file.getframerate()
+        frame_count = wav_file.getnframes()
+        frames = wav_file.readframes(frame_count)
+
+    if sample_width not in (1, 2, 3, 4):
+        raise ValueError("Unsupported WAV sample width")
+
+    if channels > 1:
+        frames = pcm_to_mono(frames, sample_width, channels)
+
+    duration_seconds = frame_count / frame_rate if frame_rate else 0
+    if duration_seconds <= 0:
+        raise ValueError("Audio duration is empty")
+
+    window_ms = 50
+    window_bytes = max(sample_width, int(frame_rate * window_ms / 1000) * sample_width)
+    rms_values = []
+
+    for offset in range(0, len(frames), window_bytes):
+        chunk = frames[offset : offset + window_bytes]
+        if len(chunk) >= sample_width:
+            rms_values.append(pcm_rms(chunk, sample_width))
+
+    if not rms_values:
+        raise ValueError("Audio did not contain readable samples")
+
+    max_possible = float(1 << (8 * sample_width - 1))
+    avg_rms = sum(rms_values) / len(rms_values)
+    peak_rms = max(rms_values)
+    avg_dbfs = 20 * math.log10(max(avg_rms, 1) / max_possible)
+    peak_dbfs = 20 * math.log10(max(peak_rms, 1) / max_possible)
+
+    mean_rms = avg_rms
+    variance = sum((value - mean_rms) ** 2 for value in rms_values) / len(rms_values)
+    std_rms = math.sqrt(variance)
+    volume_variability_db = 20 * math.log10((mean_rms + std_rms + 1) / (mean_rms + 1))
+
+    silence_threshold = max(80, peak_rms * 0.06, avg_rms * 0.35)
+    silent_windows = [value <= silence_threshold for value in rms_values]
+    pause_segments = []
+    current_start = None
+
+    for index, is_silent in enumerate(silent_windows):
+        if is_silent and current_start is None:
+            current_start = index
+        elif not is_silent and current_start is not None:
+            pause_seconds = (index - current_start) * window_ms / 1000
+            if pause_seconds >= 0.35:
+                pause_segments.append(
+                    {
+                        "start_seconds": round(current_start * window_ms / 1000, 2),
+                        "duration_seconds": round(pause_seconds, 2),
+                    }
+                )
+            current_start = None
+
+    if current_start is not None:
+        pause_seconds = (len(silent_windows) - current_start) * window_ms / 1000
+        if pause_seconds >= 0.35:
+            pause_segments.append(
+                {
+                    "start_seconds": round(current_start * window_ms / 1000, 2),
+                    "duration_seconds": round(pause_seconds, 2),
+                }
+            )
+
+    pause_total = sum(item["duration_seconds"] for item in pause_segments)
+    pause_ratio = min(1.0, pause_total / duration_seconds)
+    words = re.findall(r"\b[\w']+\b", transcript or "")
+    word_count = len(words)
+    words_per_minute = (
+        round(word_count / duration_seconds * 60, 1)
+        if word_count > 0 and duration_seconds > 0
+        else None
+    )
+    pace_label = classify_pace(words_per_minute)
+    volume_label = classify_volume(avg_dbfs)
+
+    return {
+        "duration_seconds": round(duration_seconds, 2),
+        "pace": {
+            "words_per_minute": words_per_minute,
+            "label": pace_label,
+            "word_count": word_count,
+            "note": "Pace uses transcript word count when provided.",
+        },
+        "pauses": {
+            "count": len(pause_segments),
+            "total_seconds": round(pause_total, 2),
+            "pause_ratio": round(pause_ratio, 2),
+            "segments": pause_segments[:12],
+        },
+        "volume": {
+            "average_dbfs": round(avg_dbfs, 1),
+            "peak_dbfs": round(peak_dbfs, 1),
+            "variability_db": round(volume_variability_db, 1),
+            "label": volume_label,
+        },
+        "emotional_tone": {
+            "label": infer_emotional_tone(
+                pace_label, volume_label, pause_ratio, volume_variability_db
+            ),
+            "confidence": "low",
+            "note": "Estimated from pace, pause density, and volume. It is not a clinical assessment.",
+        },
+        "source": "local_wav_energy_analysis",
     }
 
 
@@ -616,6 +859,48 @@ async def analyze_mood(
 # ─────────────────────────────────────────────────────────
 # ADVANCED Multi-Stage Gemini Narrative Expansion
 # ─────────────────────────────────────────────────────────
+
+@app.post("/analyze-audio-prosody")
+async def analyze_audio_prosody(
+    file: UploadFile = File(...),
+    transcript: Optional[str] = Form(None),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    """
+    Save raw audio and return local prosody metrics.
+    Currently supports PCM WAV without external dependencies.
+    """
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Audio file cannot be empty")
+
+    filename = file.filename or "audio.wav"
+    audio_path = save_user_audio(file_bytes, db_user.id, filename)
+
+    try:
+        prosody = analyze_wav_prosody(file_bytes, transcript)
+    except wave.Error as exc:
+        return {
+            "audio_path": audio_path,
+            "prosody_analysis": {
+                "supported": False,
+                "source": "saved_audio_only",
+                "error": "Prosody analysis currently supports PCM WAV audio.",
+                "detail": str(exc),
+            },
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        print(f"[Prosody Analysis ERROR] {type(exc).__name__}: {exc}")
+        raise HTTPException(status_code=500, detail="Error analyzing audio prosody")
+
+    prosody["supported"] = True
+    return {
+        "audio_path": audio_path,
+        "prosody_analysis": prosody,
+    }
+
 
 TEXT_STAGE1_PROMPT = """You are an expert cinematic storyteller and emotional architect. Take the following brief input text and expand it into a rich, multi-paragraph narrative (2-3 paragraphs) that captures the deep emotional landscape, the surrounding environment, and the visceral atmosphere of this moment.
 
@@ -1047,6 +1332,7 @@ def create_mood_log(
         color=color,
         scene_tags=json.dumps(scene_tags),
         image_path=mood_log.image_path,
+        audio_path=mood_log.audio_path,
         description=mood_log.description,
         feedback=mood_log.feedback,
         poetic_summary=mood_log.poetic_summary,
@@ -1056,6 +1342,11 @@ def create_mood_log(
         color_palette=json.dumps(mood_log.color_palette),
         secondary_moods=json.dumps(mood_log.secondary_moods),
         all_scores=json.dumps(mood_log.all_scores),
+        prosody_analysis=(
+            json.dumps(mood_log.prosody_analysis)
+            if mood_log.prosody_analysis is not None
+            else None
+        ),
         reflection=mood_log.reflection,
         doodles=mood_log.doodles,
         gentle_reminder=mood_log.gentle_reminder,
@@ -1065,6 +1356,36 @@ def create_mood_log(
     db.refresh(new_log)
 
     return serialize_mood_log(new_log)
+
+
+@app.put("/mood-log/{log_id}/journal", response_model=schemas.MoodLog)
+def update_mood_log_journal(
+    log_id: int,
+    journal: schemas.MoodJournalUpdate,
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    log = (
+        db.query(models.MoodLog)
+        .filter(
+            models.MoodLog.id == log_id,
+            models.MoodLog.user_id == db_user.id,
+        )
+        .first()
+    )
+
+    if not log:
+        raise HTTPException(status_code=404, detail="Mood log not found")
+
+    log.reflection = journal.reflection
+    log.doodles = journal.doodles
+    if journal.gentle_reminder is not None:
+        log.gentle_reminder = journal.gentle_reminder
+
+    db.commit()
+    db.refresh(log)
+
+    return serialize_mood_log(log)
 
 
 @app.delete("/mood-log/{log_id}", status_code=204)

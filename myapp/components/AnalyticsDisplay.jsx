@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Dimensions,
   Animated,
   ActivityIndicator,
   TouchableOpacity,
@@ -26,12 +25,15 @@ import GoalCompletionModal, {COMPLETION_THRESHOLD} from './GoalCompletionModal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import VibeRadarChart from './VibeRadarChart';
 
-const {width: SCREEN_WIDTH} = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - 48;
+const ANALYTICS_HORIZONTAL_PADDING = 20;
 const CHART_HEIGHT = 180;
+const DEFAULT_CONTENT_WIDTH = 320;
+const SECTION_CARD_PADDING = 20;
 const DONUT_SIZE = 200;
 const DONUT_RADIUS = 70;
 const DONUT_STROKE = 28;
+const GOAL_WINDOW_DAYS = 7;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +47,43 @@ const describeArc = (cx, cy, r, startAngle, endAngle) => {
   const end = polarToCartesian(cx, cy, r, startAngle);
   const large = endAngle - startAngle <= 180 ? '0' : '1';
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${large} 0 ${end.x} ${end.y}`;
+};
+
+const getDateOnly = date => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getLastSevenDayBreakdown = dailyBreakdown => {
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - (GOAL_WINDOW_DAYS - 1));
+  const cutoffKey = getDateOnly(cutoff);
+
+  return dailyBreakdown.filter(day => day?.date >= cutoffKey);
+};
+
+const getGoalWindowStatus = moodGoal => {
+  const updatedAt = moodGoal?.updated_at ? new Date(moodGoal.updated_at) : null;
+
+  if (!updatedAt || Number.isNaN(updatedAt.getTime())) {
+    return {
+      daysElapsed: 0,
+      daysRemaining: GOAL_WINDOW_DAYS,
+      isWindowComplete: false,
+    };
+  }
+
+  const elapsedMs = Math.max(0, Date.now() - updatedAt.getTime());
+  const daysElapsed = Math.floor(elapsedMs / MS_PER_DAY);
+
+  return {
+    daysElapsed,
+    daysRemaining: Math.max(0, GOAL_WINDOW_DAYS - daysElapsed),
+    isWindowComplete: elapsedMs >= GOAL_WINDOW_DAYS * MS_PER_DAY,
+  };
 };
 
 // ─── Animated Number ──────────────────────────────────────────────────────────
@@ -122,7 +161,7 @@ const AnimatedProgressBar = ({progress, color}) => {
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
-const StatCard = ({title, value, icon, color, suffix = '', delay = 0}) => {
+const StatCard = ({title, value, icon, color, suffix = '', delay = 0, style}) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
 
@@ -153,6 +192,7 @@ const StatCard = ({title, value, icon, color, suffix = '', delay = 0}) => {
     <Animated.View
       style={[
         styles.statCard,
+        style,
         {opacity: fadeAnim, transform: [{translateY: slideAnim}]},
       ]}>
       <View style={[styles.statIconWrap, {backgroundColor: color + '1A'}]}>
@@ -308,7 +348,7 @@ const DonutChart = ({data, total}) => {
 
 // ─── Line Chart (Daily Trend) ─────────────────────────────────────────────────
 
-const LineChart = ({dailyData}) => {
+const LineChart = ({dailyData, chartWidth}) => {
   const [progress, setProgress] = useState(0);
   const [tooltip, setTooltip] = useState(null);
   const animProgress = useRef(new Animated.Value(0)).current;
@@ -359,7 +399,8 @@ const LineChart = ({dailyData}) => {
   const PAD_R = 16;
   const PAD_T = 16;
   const PAD_B = 30;
-  const W = CHART_WIDTH - PAD_L - PAD_R;
+  const safeChartWidth = Math.max(chartWidth || DEFAULT_CONTENT_WIDTH, 240);
+  const W = Math.max(safeChartWidth - PAD_L - PAD_R, 1);
   const H = CHART_HEIGHT - PAD_T - PAD_B;
 
   const maxVal = Math.max(...dailyData.map(d => d.total_entries), 1);
@@ -414,7 +455,7 @@ const LineChart = ({dailyData}) => {
 
   return (
     <View>
-      <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
+      <Svg width={safeChartWidth} height={CHART_HEIGHT}>
         <Defs>
           <LinearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0%" stopColor="#6c5ce7" stopOpacity="0.25" />
@@ -477,7 +518,10 @@ const LineChart = ({dailyData}) => {
             const ty = toY(tooltip.total_entries);
             const boxW = 70;
             const boxH = 38;
-            const bx = Math.min(tx - boxW / 2, CHART_WIDTH - boxW - 4);
+            const bx = Math.max(
+              4,
+              Math.min(tx - boxW / 2, safeChartWidth - boxW - 4),
+            );
             const by = Math.max(PAD_T, ty - boxH - 10);
             return (
               <G>
@@ -530,12 +574,12 @@ const LineChart = ({dailyData}) => {
 
 // ─── Bar Chart (Mood Frequency) ───────────────────────────────────────────────
 
-const BarChart = ({data, total}) => {
+const BarChart = ({data, total, chartWidth}) => {
   const BAR_H = 36;
   const GAP = 10;
   const PAD_L = 80;
   const PAD_R = 50;
-  const W = CHART_WIDTH - PAD_L - PAD_R;
+  const W = Math.max((chartWidth || DEFAULT_CONTENT_WIDTH) - PAD_L - PAD_R, 1);
 
   // FIX: Rebuild animated values when data *content* changes, not just length.
   // Store as ref keyed by a stable data signature.
@@ -568,7 +612,7 @@ const BarChart = ({data, total}) => {
     const composite = Animated.parallel(animations);
     composite.start();
     return () => composite.stop();
-  }, [dataSignature, total]);
+  }, [dataSignature, total, W]);
 
   const chartH = data.length * (BAR_H + GAP);
 
@@ -607,26 +651,29 @@ const BarChart = ({data, total}) => {
 
 // ─── Heatmap Calendar ─────────────────────────────────────────────────────────
 
-const MoodHeatmap = ({dailyData}) => {
-  if (!dailyData || dailyData.length === 0) return null;
-
+const MoodHeatmap = ({dailyData, chartWidth}) => {
   const last28 = useMemo(() => {
     const result = [];
     const today = new Date();
+    const source = Array.isArray(dailyData) ? dailyData : [];
     for (let i = 27; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       const key = d.toISOString().slice(0, 10);
-      const found = dailyData.find(x => x.date === key);
+      const found = source.find(x => x.date === key);
       result.push({date: key, count: found?.total_entries || 0});
     }
     return result;
   }, [dailyData]);
 
+  if (!dailyData || dailyData.length === 0) return null;
+
   const maxCount = Math.max(...last28.map(d => d.count), 1);
 
-  const CELL = 28;
+  const availableWidth = Math.max(chartWidth || DEFAULT_CONTENT_WIDTH, 220);
   const GAP = 4;
+  const CELL = Math.min(28, Math.floor((availableWidth - GAP * 7) / 7));
+  const gridWidth = 7 * (CELL + GAP);
 
   const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
@@ -656,7 +703,7 @@ const MoodHeatmap = ({dailyData}) => {
         ))}
       </View>
       {/* Grid: rows of 7 */}
-      <View style={styles.heatmapGrid}>
+      <View style={[styles.heatmapGrid, {width: gridWidth}]}>
         {paddedDays.map((day, i) => (
           <View
             key={i}
@@ -805,6 +852,16 @@ const AnalyticsDisplay = ({
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [savedInsights, setSavedInsights] = useState([]);
+  const [contentWidth, setContentWidth] = useState(DEFAULT_CONTENT_WIDTH);
+
+  const handleContentLayout = useCallback(event => {
+    const nextWidth = Math.round(event.nativeEvent.layout.width);
+    if (nextWidth > 0) {
+      setContentWidth(current =>
+        Math.abs(current - nextWidth) > 1 ? nextWidth : current,
+      );
+    }
+  }, []);
   useEffect(() => {
     if (analyticsData) {
       headerAnim.setValue(0);
@@ -877,20 +934,40 @@ const AnalyticsDisplay = ({
     distribution.reduce((a, c) => a + c.count, 0) || total_entries;
   const topMood = analyticsData.most_common || distribution[0]?.label || 'N/A';
 
-  // FIX: Goal — derive progress from vibe_scores if available, else from distribution
+  // Build goal progress from the current 7-day focus window.
+  const weeklyBreakdown = getLastSevenDayBreakdown(daily_breakdown);
+  const weeklyMoodCounts = weeklyBreakdown.reduce((acc, day) => {
+    Object.entries(day.mood_frequency || {}).forEach(([vibe, count]) => {
+      acc[vibe.toLowerCase()] = (acc[vibe.toLowerCase()] || 0) + count;
+    });
+    return acc;
+  }, {});
+  const weeklyTotalLogs =
+    weeklyBreakdown.reduce((sum, day) => sum + (day.total_entries || 0), 0) ||
+    Object.values(weeklyMoodCounts).reduce((sum, count) => sum + count, 0);
+
+  // Weekly goal progress is based on the current 7-day focus window.
   const goalVibe = moodGoal?.vibe;
-  const goalStats = goalVibe
-    ? distribution.find(d => d.label?.toLowerCase() === goalVibe.toLowerCase())
-    : null;
-  const goalCount = goalStats?.count ?? 0;
-  const goalScore = goalVibe ? vibe_scores[goalVibe.toLowerCase()] || 0 : 0;
-  const goalProgress = goalScore; // Already 0-1
+  const goalKey = goalVibe?.toLowerCase();
+  const goalCount = goalKey ? weeklyMoodCounts[goalKey] || 0 : 0;
+  const goalProgress = weeklyTotalLogs > 0 ? goalCount / weeklyTotalLogs : 0;
+  const goalReached = goalProgress >= COMPLETION_THRESHOLD;
+  const goalWindowStatus = getGoalWindowStatus(moodGoal);
+  const goalFailed = goalWindowStatus.isWindowComplete && !goalReached;
+  const goalDaysLabel = goalWindowStatus.isWindowComplete
+    ? '7-day focus ended'
+    : `${goalWindowStatus.daysRemaining} day${
+        goalWindowStatus.daysRemaining === 1 ? '' : 's'
+      } left`;
+  const statCardWidth = Math.max((contentWidth - 10) / 2, 136);
+  const chartWidth = Math.max(contentWidth - SECTION_CARD_PADDING * 2, 220);
 
   return (
     <ScrollView
       style={styles.container}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{paddingBottom: 48}}>
+      <View style={styles.contentSizer} onLayout={handleContentLayout}>
       {/* Header */}
       <Animated.View
         style={{
@@ -921,9 +998,10 @@ const AnalyticsDisplay = ({
           icon="calendar-check"
           color="#6c5ce7"
           delay={0}
+          style={{width: statCardWidth}}
         />
         {/* FIX: Correct top mood display — show it as a text card, not AnimatedNumber */}
-        <View style={styles.statCard}>
+        <View style={[styles.statCard, {width: statCardWidth}]}>
           <Animated.View style={[{opacity: 1}]}>
             <View
               style={[
@@ -971,7 +1049,11 @@ const AnalyticsDisplay = ({
       {/* Vibe Radar Chart */}
       {Object.keys(vibe_scores).length > 0 && (
         <SectionCard title="Vibe Breakdown" icon="radar" iconColor="#6c5ce7">
-          <VibeRadarChart vibeScores={vibe_scores} color="#6c5ce7" />
+          <VibeRadarChart
+            vibeScores={vibe_scores}
+            color="#6c5ce7"
+            size={Math.min(chartWidth, 320)}
+          />
         </SectionCard>
       )}
 
@@ -1002,7 +1084,8 @@ const AnalyticsDisplay = ({
             />
 
             <Text style={styles.goalSubtext}>
-              {goalCount} entries · Average intensity: {Math.round(goalProgress * 100)}%
+              {goalCount}/{weeklyTotalLogs} weekly entries ·{' '}
+              {Math.round(goalProgress * 100)}% reached · {goalDaysLabel}
             </Text>
 
             {/* ── NEW: Check Goal Reaction Button ── */}
@@ -1011,19 +1094,23 @@ const AnalyticsDisplay = ({
                 goalReactionStyles.checkBtn,
                 {
                   backgroundColor:
-                    goalProgress >= COMPLETION_THRESHOLD
+                    goalReached
                       ? getMoodColor(goalVibe) + '22'
+                      : goalFailed
+                      ? '#fff1f0'
                       : '#fff8f3',
                   borderColor:
-                    goalProgress >= COMPLETION_THRESHOLD
+                    goalReached
                       ? getMoodColor(goalVibe)
+                      : goalFailed
+                      ? '#d63031'
                       : '#e17055',
                 },
               ]}
               onPress={() => setShowGoalModal(true)}
               activeOpacity={0.75}>
               <Text style={goalReactionStyles.checkBtnEmoji}>
-                {goalProgress >= COMPLETION_THRESHOLD ? '🏆' : '💪'}
+                {goalReached ? '🏆' : goalFailed ? '⚠️' : '💪'}
               </Text>
               <View style={{flex: 1}}>
                 <Text
@@ -1031,21 +1118,27 @@ const AnalyticsDisplay = ({
                     goalReactionStyles.checkBtnTitle,
                     {
                       color:
-                        goalProgress >= COMPLETION_THRESHOLD
+                        goalReached
                           ? getMoodColor(goalVibe)
+                          : goalFailed
+                          ? '#d63031'
                           : '#e17055',
                     },
                   ]}>
-                  {goalProgress >= COMPLETION_THRESHOLD
+                  {goalReached
                     ? 'Goal Achieved! See Your Insight'
+                    : goalFailed
+                    ? 'Goal Failed - Review This Week'
                     : 'How am I doing with this goal?'}
                 </Text>
                 <Text style={goalReactionStyles.checkBtnSub}>
-                  {goalProgress >= COMPLETION_THRESHOLD
+                  {goalReached
                     ? 'Tap to celebrate & get a personal AI note'
+                    : goalFailed
+                    ? 'The 7-day focus ended before the goal was reached'
                     : `${Math.round(
                         goalProgress * 100,
-                      )}% reached — tap for encouragement`}
+                      )}% reached — ${goalDaysLabel.toLowerCase()}`}
                 </Text>
               </View>
               <Icon name="chevron-right" size={20} color="#ccc" />
@@ -1090,8 +1183,9 @@ const AnalyticsDisplay = ({
         goalVibe={goalVibe}
         goalProgress={goalProgress}
         goalCount={goalCount}
-        totalLogs={totalLogs}
+        totalLogs={weeklyTotalLogs}
         moodHistory={moodHistory} // pass moodHistory prop from parent if available
+        goalFailed={goalFailed}
         onSaveInsight={text => {
           setSavedInsights(prev => [text, ...prev]);
           setShowGoalModal(false);
@@ -1152,7 +1246,7 @@ const AnalyticsDisplay = ({
           icon="chart-line"
           iconColor="#6c5ce7"
           accentColor="#6c5ce7">
-          <LineChart dailyData={daily_breakdown} />
+          <LineChart dailyData={daily_breakdown} chartWidth={chartWidth} />
         </SectionCard>
       )}
 
@@ -1174,7 +1268,11 @@ const AnalyticsDisplay = ({
           icon="format-list-bulleted"
           iconColor="#00b894"
           accentColor="#00b894">
-          <BarChart data={distribution.slice(0, 8)} total={totalLogs} />
+          <BarChart
+            data={distribution.slice(0, 8)}
+            total={totalLogs}
+            chartWidth={chartWidth}
+          />
         </SectionCard>
       )}
 
@@ -1185,7 +1283,7 @@ const AnalyticsDisplay = ({
           icon="calendar-month"
           iconColor="#e17055"
           accentColor="#e17055">
-          <MoodHeatmap dailyData={daily_breakdown} />
+          <MoodHeatmap dailyData={daily_breakdown} chartWidth={chartWidth} />
         </SectionCard>
       )}
 
@@ -1196,6 +1294,7 @@ const AnalyticsDisplay = ({
           <Text style={styles.fullRefreshText}>Sync Latest Data</Text>
         </TouchableOpacity>
       )}
+      </View>
     </ScrollView>
   );
 };
@@ -1203,7 +1302,8 @@ const AnalyticsDisplay = ({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {flex: 1, paddingHorizontal: 20},
+  container: {flex: 1, paddingHorizontal: ANALYTICS_HORIZONTAL_PADDING},
+  contentSizer: {width: '100%'},
   centerContainer: {
     minHeight: 380,
     justifyContent: 'center',
@@ -1244,7 +1344,6 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   statCard: {
-    width: (SCREEN_WIDTH - 58) / 2,
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 16,
@@ -1382,7 +1481,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#aaa',
   },
-  heatmapGrid: {flexDirection: 'row', flexWrap: 'wrap', width: 7 * (28 + 4)},
+  heatmapGrid: {flexDirection: 'row', flexWrap: 'wrap'},
   heatmapCell: {justifyContent: 'center', alignItems: 'center'},
   heatmapCellText: {fontSize: 9, fontWeight: '800', color: '#fff'},
   heatmapLegend: {

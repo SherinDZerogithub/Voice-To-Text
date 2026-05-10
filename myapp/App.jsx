@@ -174,12 +174,6 @@ const App = () => {
     }
   }, [activeTab, token, fetchAnalyticsData, fetchMoodGoal]);
 
-  useEffect(() => {
-    if (activeTab === 'history' && token) {
-      fetchMoodHistory(token);
-    }
-  }, [activeTab, token, fetchMoodHistory]);
-
   // Animation value for the dashboard avatar entry
   const avatarAnim = useRef(new Animated.Value(0)).current;
 
@@ -233,6 +227,8 @@ const App = () => {
       color_palette: item.color_palette || [],
       secondary_moods: item.secondary_moods || [],
       all_scores: item.all_scores || [],
+      audio_path: item.audio_path || null,
+      prosody_analysis: item.prosody_analysis || null,
       reflection: item.reflection || '',
       doodles: item.doodles || '',
       gentle_reminder: item.gentle_reminder || '',
@@ -277,6 +273,79 @@ const App = () => {
     [BACKEND_URL, formatMoodHistoryItem, token],
   );
 
+  const extractJournalPayload = useCallback((journalAnswers = {}) => {
+    const reflectionTexts = Object.entries(journalAnswers)
+      .filter(([key]) => key !== 'doodle_standalone')
+      .map(([, answer]) => answer?.text || '')
+      .filter(answerText => answerText.trim());
+
+    const doodleItems = Object.entries(journalAnswers)
+      .map(([key, answer]) =>
+        answer?.doodle ? {...answer.doodle, source: key} : null,
+      )
+      .filter(Boolean);
+
+    return {
+      reflection:
+        reflectionTexts.length > 0 ? reflectionTexts.join('\n\n') : null,
+      doodles: doodleItems.length > 0 ? JSON.stringify(doodleItems) : null,
+      gentle_reminder: affirmationRef.current?.getAffirmation?.() || null,
+    };
+  }, []);
+
+  const saveJournalForCurrentMood = useCallback(
+    async journalAnswers => {
+      if (!token || !moodData?.id) {
+        return;
+      }
+
+      const payload = extractJournalPayload(journalAnswers);
+
+      try {
+        const response = await fetch(
+          `${BACKEND_URL}/mood-log/${moodData.id}/journal`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+          },
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `Failed to save journal: ${response.status} ${errorText}`,
+          );
+        }
+
+        const updatedLog = await response.json();
+        const formatted = formatMoodHistoryItem(updatedLog);
+        setMoodData(prev => ({...prev, ...formatted}));
+        setMoodHistory(prev =>
+          prev.map(item => (item.id === formatted.id ? formatted : item)),
+        );
+      } catch (error) {
+        console.warn('Journal save failed:', error.message || error);
+      }
+    },
+    [
+      BACKEND_URL,
+      extractJournalPayload,
+      formatMoodHistoryItem,
+      moodData?.id,
+      token,
+    ],
+  );
+
+  useEffect(() => {
+    if (activeTab === 'history' && token) {
+      fetchMoodHistory(token);
+    }
+  }, [activeTab, token, fetchMoodHistory]);
+
   const deleteMoodEntry = useCallback(
     async entryId => {
       if (!token) {
@@ -320,7 +389,7 @@ const App = () => {
       const normalizedVibe = analysis.vibe || analysis.mood || 'unknown';
       const today = new Date().toDateString();
 
-      const hasDuplicateToday = moodHistory.some(item => {
+      const duplicateToday = moodHistory.find(item => {
         const itemDate = item.rawTimestamp ? new Date(item.rawTimestamp) : null;
         return (
           itemDate &&
@@ -330,39 +399,18 @@ const App = () => {
         );
       });
 
-      if (hasDuplicateToday) {
+      if (duplicateToday) {
         console.log(
           'Duplicate mood log skipped: same entry already saved today.',
         );
+        setMoodData(prev => ({...prev, ...duplicateToday}));
         return;
       }
 
       try {
-        // Get journal data from JournalPrompts ref
-        const journalAnswers = journalPromptsRef.current?.getAnswers?.() || {};
-        
-        // Extract reflection and doodles from journal answers
-        let reflection = null;
-        let doodles = null;
-        let gentle_reminder = null;
-        
-        // Combine all reflection text from answers
-        const reflectionTexts = Object.entries(journalAnswers)
-          .filter(([key]) => key !== 'doodle_standalone')
-          .map(([, answer]) => answer?.text || '')
-          .filter(text => text.trim());
-        
-        if (reflectionTexts.length > 0) {
-          reflection = reflectionTexts.join('\n\n');
-        }
-        
-        // Get standalone doodle if it exists
-        if (journalAnswers.doodle_standalone?.doodle) {
-          doodles = JSON.stringify(journalAnswers.doodle_standalone.doodle);
-        }
-        
-        // Get gentle reminder from AffirmationBanner
-        gentle_reminder = affirmationRef.current?.getAffirmation?.() || null;
+        const journalPayload = extractJournalPayload(
+          journalPromptsRef.current?.getAnswers?.() || {},
+        );
         
         const response = await fetch(`${BACKEND_URL}/mood-log`, {
           method: 'POST',
@@ -378,6 +426,7 @@ const App = () => {
             scene_tags: analysis.scene_tags || [],
             timestamp: new Date().toISOString(),
             image_path: analysis.image_path || null,
+            audio_path: analysis.audio_path || null,
             description: analysis.description || '',
             feedback: analysis.feedback || '',
             poetic_summary: analysis.poetic_summary || '',
@@ -391,9 +440,10 @@ const App = () => {
             color_palette: analysis.color_palette || [],
             secondary_moods: analysis.secondary_moods || [],
             all_scores: analysis.all_scores || [],
-            reflection: reflection,
-            doodles: doodles,
-            gentle_reminder: gentle_reminder,
+            prosody_analysis: analysis.prosody_analysis || null,
+            reflection: journalPayload.reflection,
+            doodles: journalPayload.doodles,
+            gentle_reminder: journalPayload.gentle_reminder,
           }),
         });
 
@@ -415,11 +465,12 @@ const App = () => {
           }
           return [formatted, ...prev];
         });
+        setMoodData(prev => ({...prev, ...formatMoodHistoryItem(savedLog)}));
       } catch (error) {
         console.warn('Mood log save failed:', error.message || error);
       }
     },
-    [BACKEND_URL, formatMoodHistoryItem, token, moodHistory],
+    [BACKEND_URL, extractJournalPayload, formatMoodHistoryItem, token, moodHistory],
   );
 
   const onSpeechStart = useCallback(() => {
@@ -1360,6 +1411,7 @@ const App = () => {
              backendUrl={BACKEND_URL}
              savedReflection={moodData?.reflection}
              savedDoodles={moodData?.doodles}
+             onJournalChange={saveJournalForCurrentMood}
            />
 
            <ImageGallery

@@ -573,7 +573,7 @@ const PromptChip = ({text, index, color, onOpenAnswer, hasAnswer}) => {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accentColor, savedReflection, savedDoodles}, ref) => {
+const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accentColor, savedReflection, savedDoodles, onJournalChange}, ref) => {
   const [prompts, setPrompts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [source, setSource] = useState('static');
@@ -588,7 +588,14 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
   const color = accentColor || '#6c5ce7';
 
   // Parse saved doodles if string
-  const parsedSavedDoodles = savedDoodles ? (typeof savedDoodles === 'string' ? JSON.parse(savedDoodles) : savedDoodles) : null;
+  const parsedSavedDoodles = (() => {
+    if (!savedDoodles) return null;
+    try {
+      return typeof savedDoodles === 'string' ? JSON.parse(savedDoodles) : savedDoodles;
+    } catch {
+      return null;
+    }
+  })();
 
   const pointsToPath = points => {
     if (!points || points.length === 0) return '';
@@ -601,6 +608,12 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
     }
     return d;
   };
+
+  const savedDoodleList = Array.isArray(parsedSavedDoodles)
+    ? parsedSavedDoodles
+    : parsedSavedDoodles
+    ? [parsedSavedDoodles]
+    : [];
 
   // Expose answers via ref for parent to access
   useImperativeHandle(ref, () => ({
@@ -658,21 +671,26 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
   const handleSaveAnswer = useCallback(answer => {
     const {index} = answerModal;
     if (index === null) return;
-    setAnswers(prev => ({...prev, [index]: answer}));
+    setAnswers(prev => {
+      const next = {...prev, [index]: answer};
+      onJournalChange && onJournalChange(next);
+      return next;
+    });
     setShowAnswers(true);
-  }, [answerModal]);
+  }, [answerModal, onJournalChange]);
 
   const handleDeleteAnswer = index => {
     setAnswers(prev => {
       const next = {...prev};
       delete next[index];
+      onJournalChange && onJournalChange(next);
       return next;
     });
   };
 
-  if (!vibe || (prompts.length === 0 && !savedReflection && !parsedSavedDoodles)) return null;
+  if (!vibe || (prompts.length === 0 && !savedReflection && savedDoodleList.length === 0)) return null;
 
-  const hasSavedData = savedReflection || parsedSavedDoodles;
+  const hasSavedData = answeredCount === 0 && (savedReflection || savedDoodleList.length > 0);
 
   return (
     <View style={[styles.container, {borderColor: color + '30'}]}>
@@ -702,11 +720,11 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
               <Text style={styles.savedReflectionText}>{savedReflection}</Text>
             </View>
           )}
-          {parsedSavedDoodles && (
-            <View style={styles.savedDoodle}>
+          {savedDoodleList.map((savedDoodle, doodleIndex) => (
+            <View key={doodleIndex} style={styles.savedDoodle}>
               <Svg width="100%" height="120" viewBox="0 0 200 120">
-                <Rect width="200" height="120" fill={parsedSavedDoodles.bgColor || '#fffdf7'} />
-                {parsedSavedDoodles.paths?.map((path, idx) => (
+                <Rect width="200" height="120" fill={savedDoodle.bgColor || '#fffdf7'} />
+                {savedDoodle.paths?.map((path, idx) => (
                   <Path
                     key={idx}
                     d={pointsToPath(path.points)}
@@ -718,9 +736,11 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
                   />
                 ))}
               </Svg>
-              <Text style={styles.doodleLabel}>🎨 Saved Doodle</Text>
+              <Text style={styles.doodleLabel}>
+                Saved Doodle{savedDoodleList.length > 1 ? ` ${doodleIndex + 1}` : ''}
+              </Text>
             </View>
-          )}
+          ))}
         </View>
       )}
 
@@ -799,7 +819,11 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
         onClose={() => setShowDoodleStandalone(false)}
         onSave={doodleData => {
           // Save standalone doodle under a special key
-          setAnswers(prev => ({...prev, doodle_standalone: {text: '', doodle: doodleData}}));
+          setAnswers(prev => {
+            const next = {...prev, doodle_standalone: {text: '', doodle: doodleData}};
+            onJournalChange && onJournalChange(next);
+            return next;
+          });
           setShowAnswers(true);
         }}
         accentColor={color}

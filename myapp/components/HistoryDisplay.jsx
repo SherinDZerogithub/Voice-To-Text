@@ -11,16 +11,58 @@ import {
   Alert,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Svg, {Path, Rect} from 'react-native-svg';
 
 // ─── SwipeableHistoryItem ────────────────────────────────────────────────────
 
 const SWIPE_THRESHOLD = -80;
 const DELETE_ZONE = -100;
 
+const parseDoodles = doodles => {
+  if (!doodles) return [];
+  try {
+    const parsed = typeof doodles === 'string' ? JSON.parse(doodles) : doodles;
+    const doodleList = Array.isArray(parsed) ? parsed : [parsed];
+    return doodleList.filter(doodle => doodle?.paths?.length);
+  } catch {
+    return [];
+  }
+};
+
+const pointsToPath = points => {
+  if (!points || points.length === 0) return '';
+  if (points.length === 1) {
+    return `M ${points[0].x} ${points[0].y} L ${points[0].x + 0.1} ${points[0].y}`;
+  }
+  return points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+    .join(' ');
+};
+
+const DoodlePreview = ({doodle}) => (
+  <View style={styles.doodlePreview}>
+    <Svg width="100%" height={62} viewBox="0 0 360 280">
+      <Rect width="360" height="280" fill={doodle.bgColor || '#fffdf7'} />
+      {(doodle.paths || []).slice(0, 24).map((path, index) => (
+        <Path
+          key={`${path.id || index}`}
+          d={pointsToPath(path.points)}
+          stroke={path.color || '#2d3436'}
+          strokeWidth={path.size || 4}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+      ))}
+    </Svg>
+  </View>
+);
+
 const SwipeableHistoryItem = ({ item, onSelect, onDelete }) => {
   const translateX = useRef(new Animated.Value(0)).current;
   const deleteOpacity = useRef(new Animated.Value(0)).current;
   const isOpen = useRef(false);
+  const doodles = parseDoodles(item.doodles);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -143,7 +185,16 @@ const SwipeableHistoryItem = ({ item, onSelect, onDelete }) => {
                 </Text>
               </View>
             ) : null}
+            {doodles.length > 0 ? (
+              <View style={styles.doodleRow}>
+                <Icon name="draw" size={12} color="#6c5ce7" />
+                <Text style={styles.extraText}>
+                  {doodles.length} saved doodle{doodles.length !== 1 ? 's' : ''}
+                </Text>
+              </View>
+            ) : null}
           </View>
+          {doodles.length > 0 ? <DoodlePreview doodle={doodles[0]} /> : null}
           <Icon name="chevron-right" size={18} color="#ccc" style={{ marginLeft: 6 }} />
         </TouchableOpacity>
       </Animated.View>
@@ -165,6 +216,7 @@ const HistoryDisplay = ({ moodHistory, appBgColor, onSelect, onDelete }) => {
         (item.caption && item.caption.toLowerCase().includes(q)) ||
         (item.emoji && item.emoji.includes(q)) ||
         (item.reflection && item.reflection.toLowerCase().includes(q)) ||
+        (item.doodles && 'doodle'.includes(q)) ||
         (item.gentle_reminder && item.gentle_reminder.toLowerCase().includes(q)),
     );
   }, [moodHistory, searchQuery])();
@@ -390,6 +442,22 @@ const styles = StyleSheet.create({
      color: '#888',
      lineHeight: 14,
      flex: 1,
+   },
+   doodleRow: {
+     flexDirection: 'row',
+     alignItems: 'center',
+     marginTop: 5,
+     gap: 4,
+   },
+   doodlePreview: {
+     width: 86,
+     height: 62,
+     borderRadius: 8,
+     overflow: 'hidden',
+     borderWidth: 1,
+     borderColor: '#eee',
+     backgroundColor: '#fffdf7',
+     marginLeft: 8,
    },
  });
 

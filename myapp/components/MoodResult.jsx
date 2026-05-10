@@ -116,6 +116,13 @@ const buildLineMetadata = (description, lines) => {
   });
 };
 
+const formatMetric = value => {
+  if (value === null || value === undefined || value === '') {
+    return 'N/A';
+  }
+  return String(value);
+};
+
 const MoodResult = ({
   moodData,
   token,
@@ -343,6 +350,81 @@ const MoodResult = ({
             >
               <Text style={[styles.cardLabel, secondaryTextStyle]}>Environment Type</Text>
               <Text style={[styles.environmentText, textStyle]}>{moodData.environment_type}</Text>
+            </View>
+          )}
+
+          {moodData.prosody_analysis && (
+            <View style={[styles.prosodyCard, cardStyle]}>
+              <View style={styles.prosodyHeader}>
+                <View style={styles.prosodyTitleRow}>
+                  <Icon
+                    name="waveform"
+                    size={20}
+                    color={moodData.color || '#6c5ce7'}
+                    style={styles.prosodyIcon}
+                  />
+                  <Text style={[styles.breakdownTitle, styles.prosodyTitle, textStyle]}>
+                    Voice Prosody
+                  </Text>
+                </View>
+                {moodData.audio_path ? (
+                  <Text style={[styles.prosodySource, secondaryTextStyle]}>Raw audio saved</Text>
+                ) : null}
+              </View>
+
+              {moodData.prosody_analysis.supported === false ? (
+                <Text style={[styles.moodFeedback, textStyle]}>
+                  {moodData.prosody_analysis.error || 'Prosody analysis is not available for this audio format.'}
+                </Text>
+              ) : (
+                <>
+                  <View style={styles.prosodyGrid}>
+                    <View style={styles.prosodyMetric}>
+                      <Text style={[styles.cardLabel, secondaryTextStyle]}>Pace</Text>
+                      <Text style={[styles.prosodyValue, textStyle]}>
+                        {formatMetric(moodData.prosody_analysis.pace?.label)}
+                      </Text>
+                      <Text style={[styles.prosodyDetail, secondaryTextStyle]}>
+                        {moodData.prosody_analysis.pace?.words_per_minute
+                          ? `${moodData.prosody_analysis.pace.words_per_minute} wpm`
+                          : 'Transcript needed'}
+                      </Text>
+                    </View>
+                    <View style={styles.prosodyMetric}>
+                      <Text style={[styles.cardLabel, secondaryTextStyle]}>Pauses</Text>
+                      <Text style={[styles.prosodyValue, textStyle]}>
+                        {formatMetric(moodData.prosody_analysis.pauses?.count)}
+                      </Text>
+                      <Text style={[styles.prosodyDetail, secondaryTextStyle]}>
+                        {formatMetric(moodData.prosody_analysis.pauses?.total_seconds)} sec
+                      </Text>
+                    </View>
+                    <View style={styles.prosodyMetric}>
+                      <Text style={[styles.cardLabel, secondaryTextStyle]}>Volume</Text>
+                      <Text style={[styles.prosodyValue, textStyle]}>
+                        {formatMetric(moodData.prosody_analysis.volume?.label)}
+                      </Text>
+                      <Text style={[styles.prosodyDetail, secondaryTextStyle]}>
+                        {formatMetric(moodData.prosody_analysis.volume?.average_dbfs)} dBFS
+                      </Text>
+                    </View>
+                  </View>
+                  <View
+                    style={[
+                      styles.toneStrip,
+                      { backgroundColor: `${moodData.color || '#6c5ce7'}22` },
+                    ]}
+                  >
+                    <Text style={[styles.toneLabel, secondaryTextStyle]}>Emotional tone</Text>
+                    <Text style={[styles.toneValue, textStyle]}>
+                      {formatMetric(moodData.prosody_analysis.emotional_tone?.label)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.prosodyNote, secondaryTextStyle]}>
+                    {moodData.prosody_analysis.emotional_tone?.note}
+                  </Text>
+                </>
+              )}
             </View>
           )}
 
@@ -733,6 +815,85 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2c3e50',
     letterSpacing: 0.3,
+  },
+  prosodyCard: {
+    width: '100%',
+    padding: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    backgroundColor: '#fff',
+  },
+  prosodyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 14,
+  },
+  prosodyTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  prosodyIcon: {
+    marginRight: 8,
+  },
+  prosodySource: {
+    fontSize: 11,
+    color: '#888',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  prosodyTitle: {
+    marginBottom: 0,
+  },
+  prosodyGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  prosodyMetric: {
+    flex: 1,
+    minHeight: 82,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(108,92,231,0.08)',
+  },
+  prosodyValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#2d3436',
+    textTransform: 'capitalize',
+  },
+  prosodyDetail: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#777',
+  },
+  toneStrip: {
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 2,
+  },
+  toneLabel: {
+    fontSize: 11,
+    color: '#777',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  toneValue: {
+    fontSize: 15,
+    color: '#2d3436',
+    fontWeight: '800',
+    textTransform: 'capitalize',
+  },
+  prosodyNote: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#777',
   },
   cardLabel: {
     fontSize: 13,
