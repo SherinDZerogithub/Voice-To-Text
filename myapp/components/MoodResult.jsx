@@ -116,6 +116,72 @@ const buildLineMetadata = (description, lines) => {
   });
 };
 
+const EMPATHETIC_REPLIES = {
+  sad: [
+    "I'm sorry things feel heavy right now. Your feelings are valid and I'm here for you.",
+    "It's okay to not be okay. Allow yourself to feel, and know that this cloud will eventually pass.",
+    "Sending you a virtual hug. You've navigated difficult days before, and you have that same strength today."
+  ],
+  anxious: [
+    "Breathe. You are safe in this moment. Try to focus on just the next small step.",
+    "Anxiety is a heavy burden, but you don't have to carry it all at once. What's one thing you can let go of?",
+    "Your mind is working hard to protect you, but it's okay to tell it to take a break. You are capable."
+  ],
+  lonely: [
+    "Even in solitude, your presence has value. I'm glad you're sharing this with me.",
+    "Loneliness can be a quiet ache. Remember that you are worthy of connection and community.",
+    "It's okay to crave connection. Is there a small way you can reach out to someone today?"
+  ],
+  angry: [
+    "It makes sense to feel frustrated when things aren't right. Your anger is a signal worth listening to.",
+    "Take a deep breath. Anger is intense, but it doesn't have to be the only thing you feel.",
+    "How can you honor this feeling without letting it consume you? You deserve peace."
+  ],
+  gloomy: [
+    "Gray days are part of the landscape too. Be as gentle with yourself as you would a dear friend.",
+    "It's okay to move a bit slower today. Small acts of kindness toward yourself matter.",
+    "The light is still there, even if it's hidden for a while. Hang in there."
+  ],
+  tense: [
+    "Your body is holding a lot. Can you take a moment to drop your shoulders and just be?",
+    "The pressure is high, but you are more resilient than the stress you're feeling.",
+    "Try to find one small moment of release—a stretch, a deep breath, or a glass of water."
+  ],
+  chaotic: [
+    "Everything is loud right now, but you can find a quiet center. Let's find one still point.",
+    "It's okay to feel overwhelmed by the noise. What is the most important thing for you right now?",
+    "One thing at a time. You don't have to solve the whole puzzle today."
+  ],
+  default: [
+    "I hear you. Thank you for being honest about your journey today.",
+    "Whatever you're carrying, you don't have to carry it perfectly. You're doing enough.",
+    "I'm here to listen. Sharing your thoughts is a powerful way to care for yourself."
+  ]
+};
+
+const getEmpatheticReply = (vibe, text = "") => {
+  const v = vibe?.toLowerCase();
+  const input = text.toLowerCase();
+
+  // NLP Feature: Keyword-based contextual overrides
+  if (input.includes("work") || input.includes("job") || input.includes("boss")) {
+    return "Work stress can be so all-consuming. Remember that you are so much more than your productivity.";
+  }
+  if (input.includes("tired") || input.includes("sleep") || input.includes("exhausted")) {
+    return "It sounds like you're running on empty. Please give yourself permission to truly rest and recharge.";
+  }
+  if (input.includes("fail") || input.includes("mistake") || input.includes("wrong")) {
+    return "We all stumble. One mistake doesn't define you—it's just part of the learning process.";
+  }
+  if (input.includes("health") || input.includes("sick") || input.includes("pain")) {
+    return "Physical or health struggles are taxing. Be patient and kind to your body today.";
+  }
+
+  const replies = EMPATHETIC_REPLIES[v] || EMPATHETIC_REPLIES.default;
+  const index = (text.length || 0) % replies.length; 
+  return replies[index];
+};
+
 const formatMetric = value => {
   if (value === null || value === undefined || value === '') {
     return 'N/A';
@@ -144,6 +210,22 @@ const MoodResult = ({
   const activeLineIndexRef = React.useRef(-1);
   const contrastColor = getContrastColor(appBgColor);
   const isDarkBg = contrastColor === '#ffffff';
+
+  // Determine if a "Cheer Up" note should be shown based on valence
+  const showSupportiveNote = React.useMemo(() => {
+    if (!moodData) return false;
+    const negativeVibes = [
+      'sad', 'lonely', 'pensive', 'gloomy', 'anxious', 
+      'chaotic', 'intense', 'gritty', 'tense', 
+      'melancholic', 'solitary', 'industrial'
+    ];
+    return negativeVibes.includes(moodData.mood?.toLowerCase() || moodData.vibe?.toLowerCase());
+  }, [moodData]);
+
+  const empatheticReply = React.useMemo(() => {
+    if (!showSupportiveNote || !moodData) return null;
+    return getEmpatheticReply(moodData.mood || moodData.vibe, moodData.description || "");
+  }, [showSupportiveNote, moodData]);
 
   const resetHighlight = React.useCallback(() => {
     setActiveLineIndex(-1);
@@ -339,6 +421,24 @@ const MoodResult = ({
               <Text style={[styles.moodFeedback, textStyle]}>{moodData.feedback}</Text>
             )}
           </View>
+
+          {empatheticReply && (
+            <View style={[styles.supportCard, { backgroundColor: `${moodData.color}10`, borderColor: `${moodData.color}40` }]}>
+              <View style={styles.supportHeader}>
+                <View style={[styles.supportIconWrap, { backgroundColor: moodData.color }]}>
+                  <Text style={{ fontSize: 12 }}>🌿</Text>
+                </View>
+                <Text style={[styles.supportTitle, { color: moodData.color }]}>Sage's Support</Text>
+              </View>
+              <Text style={[styles.supportText, textStyle]}>
+                {empatheticReply}
+              </Text>
+              <View style={styles.supportFooter}>
+                <Icon name="creation" size={11} color={moodData.color} />
+                <Text style={[styles.supportFooterText, { color: moodData.color }]}>Context-aware reply</Text>
+              </View>
+            </View>
+          )}
 
           {moodData.environment_type && (
             <View
@@ -980,6 +1080,47 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#444',
     marginBottom: 14,
+  },
+  supportCard: {
+    width: '100%',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    gap: 10,
+  },
+  supportHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  supportIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  supportTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  supportText: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '600',
+    fontStyle: 'italic',
+  },
+  supportFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  supportFooterText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   emotionRow: {
     marginBottom: 12,

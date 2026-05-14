@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Svg, {Path, Circle, Rect, Line} from 'react-native-svg';
+import Svg, {Path, Rect, SvgXml} from 'react-native-svg';
 
 const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
 
@@ -105,12 +105,68 @@ const getStaticPrompts = vibe => {
 
 // ─── Doodle Canvas ───────────────────────────────────────────────────────────
 
-const BRUSH_SIZES = [2, 4, 8, 14];
+const BRUSH_SIZES = [2, 4, 8, 14, 20];
 const BRUSH_COLORS = [
-  '#2d3436', '#6c5ce7', '#e84393', '#e17055',
-  '#fdcb6e', '#00b894', '#0984e3', '#fd79a8',
-  '#a29bfe', '#55efc4', '#ffffff',
+  '#2d3436', '#1A1A2E', '#34495E',
+  '#FF6B9D', '#FF8E72', '#FFC75F', '#FF9671',
+  '#6C5CE7', '#A55EEA', '#D65DB1', '#845EC2',
+  '#00C9A7', '#00D9C0', '#4DC9E6', '#45B7D1',
+  '#2ECC71', '#9EE493', '#A8E6CF',
+  '#FFD93D', '#F9F871', '#FFE699',
+  '#FF6B6B', '#EE5A52', '#FF85A2',
+  '#ffffff', '#F5F6FA',
 ];
+
+const DOODLE_PROMPTS = [
+  "Draw how your breath feels right now",
+  "Doodle a symbol for your biggest hope",
+  "What does 'peace' look like in lines?",
+  "Sketch a small gift for your future self",
+  "Draw your mood as a weather pattern",
+  "Doodle a safe space for your thoughts",
+  "Trace a pattern that feels grounding",
+  "Draw a messy scribble and turn it into a flower",
+  "Illustrate one thing you're grateful for",
+  "Create a visual mantra for today",
+];
+
+// ─── Sticker SVGs ────────────────────────────────────────────────────────────
+
+const STICKERS = [
+  { id: 'heart', name: 'Heart', svg: `<path d="M100,86 C92,78 78,78 70,86 C62,94 62,106 70,114 L100,140 L130,114 C138,106 138,94 130,86 C122,78 108,78 100,86 Z" fill="STROKE"/>` },
+  { id: 'star', name: 'Star', svg: `<path d="M100,70 L108,92 L132,92 L114,106 L120,128 L100,116 L80,128 L86,106 L68,92 L92,92 Z" fill="STROKE"/>` },
+  { id: 'sun', name: 'Sun', svg: `<circle cx="100" cy="100" r="20" fill="STROKE"/><line x1="100" y1="68" x2="100" y2="52" stroke="STROKE" stroke-width="4" stroke-linecap="round"/><line x1="100" y1="132" x2="100" y2="148" stroke="STROKE" stroke-width="4" stroke-linecap="round"/><line x1="68" y1="100" x2="52" y2="100" stroke="STROKE" stroke-width="4" stroke-linecap="round"/><line x1="132" y1="100" x2="148" y2="100" stroke="STROKE" stroke-width="4" stroke-linecap="round"/><line x1="78" y1="78" x2="66" y2="66" stroke="STROKE" stroke-width="4" stroke-linecap="round"/><line x1="122" y1="122" x2="134" y2="134" stroke="STROKE" stroke-width="4" stroke-linecap="round"/><line x1="78" y1="122" x2="66" y2="134" stroke="STROKE" stroke-width="4" stroke-linecap="round"/><line x1="122" y1="78" x2="134" y2="66" stroke="STROKE" stroke-width="4" stroke-linecap="round"/>` },
+  { id: 'moon', name: 'Moon', svg: `<path d="M110,65 C85,68 68,88 68,110 C68,135 88,155 115,155 C125,155 135,150 142,142 C130,148 115,148 102,138 C88,126 85,105 92,88 C96,78 104,70 110,65 Z" fill="STROKE"/>` },
+  { id: 'flower', name: 'Flower', svg: `<circle cx="100" cy="100" r="16" fill="STROKE"/><circle cx="100" cy="72" r="14" fill="STROKE" opacity="0.7"/><circle cx="124" cy="86" r="14" fill="STROKE" opacity="0.7"/><circle cx="118" cy="114" r="14" fill="STROKE" opacity="0.7"/><circle cx="82" cy="114" r="14" fill="STROKE" opacity="0.7"/><circle cx="76" cy="86" r="14" fill="STROKE" opacity="0.7"/>` },
+  { id: 'sparkle', name: 'Sparkle', svg: `<path d="M100,60 L103,90 L132,100 L103,110 L100,140 L97,110 L68,100 L97,90 Z" fill="STROKE"/>` },
+  { id: 'cloud', name: 'Cloud', svg: `<ellipse cx="85" cy="105" rx="28" ry="22" fill="STROKE"/><ellipse cx="115" cy="105" rx="28" ry="22" fill="STROKE"/><ellipse cx="100" cy="90" rx="22" ry="18" fill="STROKE"/>` },
+  { id: 'rainbow', name: 'Rainbow', svg: `<path d="M45,120 Q100,50 155,120" stroke="#FF6B6B" stroke-width="8" fill="none" stroke-linecap="round"/><path d="M55,120 Q100,60 145,120" stroke="#FFD93D" stroke-width="8" fill="none" stroke-linecap="round"/><path d="M65,120 Q100,70 135,120" stroke="#9EE493" stroke-width="8" fill="none" stroke-linecap="round"/><path d="M75,120 Q100,80 125,120" stroke="#45B7D1" stroke-width="8" fill="none" stroke-linecap="round"/><path d="M85,120 Q100,90 115,120" stroke="#A55EEA" stroke-width="8" fill="none" stroke-linecap="round"/>` },
+  { id: 'butterfly', name: 'Butterfly', svg: `<ellipse cx="75" cy="85" rx="22" ry="28" fill="STROKE"/><ellipse cx="125" cy="85" rx="22" ry="28" fill="STROKE"/><ellipse cx="80" cy="115" rx="16" ry="20" fill="STROKE" opacity="0.7"/><ellipse cx="120" cy="115" rx="16" ry="20" fill="STROKE" opacity="0.7"/><ellipse cx="100" cy="100" rx="6" ry="30" fill="#2d3436"/><line x1="96" y1="68" x2="90" y2="55" stroke="#2d3436" stroke-width="3" stroke-linecap="round"/><line x1="104" y1="68" x2="110" y2="55" stroke="#2d3436" stroke-width="3" stroke-linecap="round"/>` },
+  { id: 'music', name: 'Music', svg: `<ellipse cx="82" cy="125" rx="14" ry="10" fill="STROKE"/><ellipse cx="130" cy="115" rx="14" ry="10" fill="STROKE"/><line x1="96" y1="125" x2="96" y2="60" stroke="STROKE" stroke-width="5"/><line x1="144" y1="115" x2="144" y2="50" stroke="STROKE" stroke-width="5"/><path d="M96,60 Q120,50 144,50" stroke="STROKE" stroke-width="5" fill="none"/>` },
+  { id: 'leaf', name: 'Leaf', svg: `<path d="M100,145 Q60,120 70,80 Q80,50 100,55 Q120,50 130,80 Q140,120 100,145 Z" fill="STROKE"/><path d="M100,145 Q100,100 100,55" stroke="STROKE" opacity="0.4" stroke-width="3" fill="none"/><path d="M85,90 Q100,85 115,90" stroke="STROKE" opacity="0.4" stroke-width="2" fill="none"/><path d="M80,105 Q100,100 120,105" stroke="STROKE" opacity="0.4" stroke-width="2" fill="none"/>` },
+  { id: 'wave', name: 'Wave', svg: `<path d="M50,100 Q70,70 90,100 Q110,130 130,100 Q150,70 170,100" stroke="STROKE" stroke-width="8" fill="none" stroke-linecap="round"/>` },
+  { id: 'lightning', name: 'Bolt', svg: `<path d="M110,50 L85,95 L105,95 L90,150 L130,90 L110,90 L125,50 Z" fill="STROKE"/>` },
+  { id: 'droplet', name: 'Drop', svg: `<path d="M100,55 C100,55 65,95 65,115 C65,135 80,150 100,150 C120,150 135,135 135,115 C135,95 100,55 100,55 Z" fill="STROKE"/>` },
+  { id: 'diamond', name: 'Diamond', svg: `<path d="M100,55 L140,100 L100,145 L60,100 Z" fill="STROKE"/><path d="M100,55 L140,100 L100,100 Z" fill="STROKE" opacity="0.5"/>` },
+];
+
+const getStickerXml = (svgContent, color) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">${svgContent.replace(
+    /STROKE/g,
+    color,
+  )}</svg>`;
+
+const pointsToPath = points => {
+  if (!points || points.length === 0) return '';
+  if (points.length === 1) {
+    return `M ${points[0].x} ${points[0].y} L ${points[0].x + 0.1} ${points[0].y}`;
+  }
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    d += ` L ${points[i].x} ${points[i].y}`;
+  }
+  return d;
+};
 
 const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
   const [paths, setPaths] = useState([]);
@@ -118,13 +174,20 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
   const [brushColor, setBrushColor] = useState('#2d3436');
   const [brushSize, setBrushSize] = useState(4);
   const [isEraser, setIsEraser] = useState(false);
+  const [isMirror, setIsMirror] = useState(false);
   const [bgColor, setBgColor] = useState('#fffdf7');
+  const [prompt, setPrompt] = useState(DOODLE_PROMPTS[0]);
+  const [canvasWidth, setCanvasWidth] = useState(0);
+  const [stickers, setStickers] = useState([]); // [{id, x, y, scale, stickerId}]
+  const [activeSticker, setActiveSticker] = useState(null);
+  const [showStickerPanel, setShowStickerPanel] = useState(false);
   const canvasRef = useRef(null);
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
+      setPrompt(DOODLE_PROMPTS[Math.floor(Math.random() * DOODLE_PROMPTS.length)]);
       Animated.parallel([
         Animated.spring(scaleAnim, {toValue: 1, tension: 60, friction: 10, useNativeDriver: true}),
         Animated.timing(opacityAnim, {toValue: 1, duration: 250, useNativeDriver: true}),
@@ -146,6 +209,8 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
           color: isEraser ? bgColor : brushColor,
           size: isEraser ? brushSize * 3 : brushSize,
           id: Date.now(),
+          mirrored: isMirror,
+          mirrorX: canvasWidth / 2,
         };
         setCurrentPath(newPath);
       },
@@ -167,29 +232,50 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
     }),
   ).current;
 
-  const pointsToPath = points => {
-    if (!points || points.length === 0) return '';
-    if (points.length === 1) {
-      return `M ${points[0].x} ${points[0].y} L ${points[0].x + 0.1} ${points[0].y}`;
+  const shufflePrompt = () => setPrompt(DOODLE_PROMPTS[Math.floor(Math.random() * DOODLE_PROMPTS.length)]);
+
+  const handleUndo = () => {
+    if (stickers.length > 0 && paths.length === 0) {
+      setStickers(prev => prev.slice(0, -1));
+    } else {
+      setPaths(prev => prev.slice(0, -1));
     }
-    let d = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
-      d += ` L ${points[i].x} ${points[i].y}`;
-    }
-    return d;
+  };
+  const handleClear = () => {
+    setPaths([]);
+    setStickers([]);
   };
 
-  const handleUndo = () => setPaths(prev => prev.slice(0, -1));
-  const handleClear = () => setPaths([]);
-
   const handleSave = () => {
-    // Serialize path data for saving
-    const doodleData = {paths, bgColor, timestamp: Date.now()};
+    const doodleData = {paths, bgColor, stickers, timestamp: Date.now()};
     onSave && onSave(doodleData);
     onClose();
   };
 
-  const BG_COLORS = ['#fffdf7', '#f0eeff', '#e8f5e9', '#fce4ec', '#e3f2fd', '#1a1a2e'];
+  const handleAddSticker = stickerId => {
+    const newSticker = {
+      id: Date.now(),
+      stickerId,
+      x: canvasWidth / 2 - 40,
+      y: 140,
+      scale: 1,
+      color: brushColor,
+    };
+    setStickers(prev => [...prev, newSticker]);
+    setActiveSticker(newSticker.id);
+    setShowStickerPanel(false);
+  };
+
+  const handleUpdateSticker = (id, updates) => {
+    setStickers(prev => prev.map(s => s.id === id ? {...s, ...updates} : s));
+  };
+
+  const handleDeleteSticker = id => {
+    setStickers(prev => prev.filter(s => s.id !== id));
+    setActiveSticker(null);
+  };
+
+  const BG_COLORS = ['#fffdf7', '#f8f0ff', '#e8fff8', '#fff0f5', '#f0f8ff', '#fffbf0', '#f0fff4', '#1a1a2e', '#2C3E50', '#E8E8F5'];
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -204,8 +290,10 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
                 <Icon name="draw" size={16} color={accentColor || '#6c5ce7'} />
               </View>
               <View>
-                <Text style={doodleStyles.headerTitle}>Doodle Space</Text>
-                <Text style={doodleStyles.headerSub}>Express what words can't</Text>
+                <Text style={doodleStyles.headerTitle}>{prompt}</Text>
+                <TouchableOpacity onPress={shufflePrompt}>
+                  <Text style={doodleStyles.headerSub}>Tap to shuffle • Express what words can't</Text>
+                </TouchableOpacity>
               </View>
             </View>
             <TouchableOpacity onPress={onClose} style={doodleStyles.closeBtn}>
@@ -250,7 +338,37 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
                 style={[doodleStyles.sizeBtn, isEraser && doodleStyles.activeTool]}>
                 <Icon name="eraser" size={16} color={isEraser ? '#6c5ce7' : '#888'} />
               </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setIsMirror(m => !m)}
+                style={[doodleStyles.sizeBtn, isMirror && doodleStyles.activeTool]}>
+                <Icon name="reflect-vertical" size={16} color={isMirror ? '#6c5ce7' : '#888'} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowStickerPanel(s => !s)}
+                style={[doodleStyles.sizeBtn, showStickerPanel && doodleStyles.activeTool]}>
+                <Icon name="sticker-emoji" size={18} color={showStickerPanel ? '#6c5ce7' : '#888'} />
+              </TouchableOpacity>
             </View>
+
+            {/* Sticker panel */}
+            {showStickerPanel && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={doodleStyles.stickerScroll}>
+                <View style={doodleStyles.stickerRow}>
+                  {STICKERS.map(sticker => (
+                    <TouchableOpacity
+                      key={sticker.id}
+                      onPress={() => handleAddSticker(sticker.id)}
+                      style={doodleStyles.stickerBtn}>
+                      <SvgXml
+                        xml={getStickerXml(sticker.svg, '#666')}
+                        width={32}
+                        height={32}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
           </View>
 
           {/* Background color picker */}
@@ -271,12 +389,13 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
           {/* Canvas */}
           <View
             style={[doodleStyles.canvas, {backgroundColor: bgColor}]}
+            onLayout={(e) => setCanvasWidth(e.nativeEvent.layout.width)}
             {...panResponder.panHandlers}
             ref={canvasRef}>
             <Svg style={StyleSheet.absoluteFill}>
               {paths.map(path => (
+                <React.Fragment key={path.id}>
                 <Path
-                  key={path.id}
                   d={pointsToPath(path.points)}
                   stroke={path.color}
                   strokeWidth={path.size}
@@ -284,8 +403,20 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
                   strokeLinejoin="round"
                   fill="none"
                 />
+                {path.mirrored && (
+                  <Path
+                    d={pointsToPath(path.points.map(p => ({x: (path.mirrorX || 0) * 2 - p.x, y: p.y})))}
+                    stroke={path.color}
+                    strokeWidth={path.size}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                )}
+                </React.Fragment>
               ))}
               {currentPath && (
+                <React.Fragment>
                 <Path
                   d={pointsToPath(currentPath.points)}
                   stroke={currentPath.color}
@@ -294,12 +425,52 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
                   strokeLinejoin="round"
                   fill="none"
                 />
+                {currentPath.mirrored && (
+                  <Path
+                    d={pointsToPath(currentPath.points.map(p => ({x: (currentPath.mirrorX || 0) * 2 - p.x, y: p.y})))}
+                    stroke={currentPath.color}
+                    strokeWidth={currentPath.size}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                )}
+                </React.Fragment>
               )}
             </Svg>
-            {paths.length === 0 && !currentPath && (
+            {/* Stickers */}
+            {stickers.map(sticker => {
+              const stickerData = STICKERS.find(s => s.id === sticker.stickerId);
+              if (!stickerData) return null;
+              return (
+                <View
+                  key={sticker.id}
+                  style={[
+                    doodleStyles.stickerWrapper,
+                    {left: sticker.x, top: sticker.y},
+                    activeSticker === sticker.id && doodleStyles.stickerActive,
+                  ]}
+                  onTouchStart={() => setActiveSticker(sticker.id)}
+                >
+                  <SvgXml
+                    xml={getStickerXml(stickerData.svg, sticker.color)}
+                    width={60}
+                    height={60}
+                  />
+                  {activeSticker === sticker.id && (
+                    <TouchableOpacity
+                      style={doodleStyles.stickerDelete}
+                      onPress={() => handleDeleteSticker(sticker.id)}>
+                      <Icon name="close-circle" size={18} color="#e74c3c" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+            {paths.length === 0 && !currentPath && stickers.length === 0 && (
               <View style={doodleStyles.canvasHint}>
                 <Icon name="gesture-swipe" size={28} color="#ccc" />
-                <Text style={doodleStyles.canvasHintText}>Draw anything…</Text>
+                <Text style={doodleStyles.canvasHintText}>Draw or add stickers…</Text>
               </View>
             )}
           </View>
@@ -485,19 +656,29 @@ const SavedAnswerCard = ({prompt, answer, index, color, onEdit, onDelete}) => {
           {answer.doodle && (
             <View style={savedStyles.doodlePreview}>
               <Svg width="100%" height={80} style={{backgroundColor: answer.doodle.bgColor || '#fffdf7', borderRadius: 8}}>
-                {(answer.doodle.paths || []).slice(0, 30).map(path => {
+                {(answer.doodle.paths || []).slice(0, 50).map(path => {
                   if (!path.points || path.points.length < 2) return null;
                   // Scale down paths to fit preview
                   const scaleX = (SCREEN_WIDTH - 80) / (SCREEN_WIDTH - 32);
                   const scaleY = 80 / 280;
                   const scaledPoints = path.points.map(p => ({x: p.x * scaleX, y: p.y * scaleY}));
-                  let d = `M ${scaledPoints[0].x} ${scaledPoints[0].y}`;
-                  for (let i = 1; i < scaledPoints.length; i++) {
-                    d += ` L ${scaledPoints[i].x} ${scaledPoints[i].y}`;
-                  }
+                  const d = pointsToPath(scaledPoints);
+
+                  const d_mirrored = path.mirrored ? (() => {
+                    const scaledMirrorX = (path.mirrorX || 0) * scaleX;
+                    const mirroredScaledPoints = scaledPoints.map(p => ({x: scaledMirrorX * 2 - p.x, y: p.y}));
+                    return pointsToPath(mirroredScaledPoints);
+                  })() : null;
+
                   return (
-                    <Path key={path.id} d={d} stroke={path.color} strokeWidth={path.size * 0.5}
-                      strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    <React.Fragment key={path.id}>
+                      <Path d={d} stroke={path.color} strokeWidth={path.size * 0.5}
+                        strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                      {d_mirrored && (
+                        <Path d={d_mirrored} stroke={path.color} strokeWidth={path.size * 0.5}
+                          strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </Svg>
@@ -724,17 +905,32 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
             <View key={doodleIndex} style={styles.savedDoodle}>
               <Svg width="100%" height="120" viewBox="0 0 200 120">
                 <Rect width="200" height="120" fill={savedDoodle.bgColor || '#fffdf7'} />
-                {savedDoodle.paths?.map((path, idx) => (
-                  <Path
-                    key={idx}
-                    d={pointsToPath(path.points)}
-                    stroke={path.color}
-                    strokeWidth={path.size}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                  />
-                ))}
+                {savedDoodle.paths?.map((path, idx) => {
+                  const d = pointsToPath(path.points);
+                  const d_mirrored = path.mirrored ? pointsToPath(path.points.map(p => ({x: (path.mirrorX || 0) * 2 - p.x, y: p.y}))) : null;
+                  return (
+                    <React.Fragment key={idx}>
+                      <Path
+                        d={d}
+                        stroke={path.color}
+                        strokeWidth={path.size}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        fill="none"
+                      />
+                      {d_mirrored && (
+                        <Path
+                          d={d_mirrored}
+                          stroke={path.color}
+                          strokeWidth={path.size}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          fill="none"
+                        />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </Svg>
               <Text style={styles.doodleLabel}>
                 Saved Doodle{savedDoodleList.length > 1 ? ` ${doodleIndex + 1}` : ''}
@@ -1162,6 +1358,42 @@ const doodleStyles = StyleSheet.create({
     paddingVertical: 10,
   },
   saveBtnText: {color: '#fff', fontSize: 14, fontWeight: '700'},
+  stickerScroll: {
+    maxHeight: 60,
+    paddingVertical: 4,
+  },
+  stickerRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    gap: 8,
+  },
+  stickerBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#f8f8ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e8e8f0',
+  },
+  stickerWrapper: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+  },
+  stickerActive: {
+    borderWidth: 2,
+    borderColor: '#6c5ce7',
+    borderRadius: 8,
+  },
+  stickerDelete: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+  },
 });
 
 const savedStyles = StyleSheet.create({

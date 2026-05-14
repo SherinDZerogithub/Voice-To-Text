@@ -34,6 +34,8 @@ import StreakBadges from './components/StreakBadges';
 import MoodCompanion from './components/MoodCompanion';
 import WeeklySummaryCard from './components/WeeklySummaryCard';
 import MoodForecastCard from './components/MoodForecastCard';
+import HabitRecommendations from './components/HabitRecommendations';
+import TriggerInsightsCard from './components/TriggerInsightsCard';
 
 // RN 0.71+ expects native event modules to expose listener stubs.
 // We stub common module names used by voice libraries to prevent NativeEventEmitter warnings.
@@ -73,6 +75,7 @@ const App = () => {
   const [appBgColor, setAppBgColor] = useState('#f5f5f5');
   const [moodGoal, setMoodGoal] = useState(null); // { vibe: string }
   const [analyticsData, setAnalyticsData] = useState(null); // New state for analytics
+  const [crisisAlert, setCrisisAlert] = useState(null);
 
   const [activeTab, setActiveTab] = useState('home'); // 'home', 'history', 'analytics'
 
@@ -801,6 +804,16 @@ const App = () => {
       return;
     }
 
+    // Crisis check runs in parallel — non-blocking
+    fetch(`${BACKEND_URL}/crisis-check`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+      body: JSON.stringify({text: transcript}),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.is_crisis) setCrisisAlert(d); })
+      .catch(() => {});
+
     setIsAnalyzing(true);
     setErrorMessage('');
     try {
@@ -1191,6 +1204,40 @@ const App = () => {
       fontWeight: '500',
       marginTop: 2,
     },
+    crisisBanner: {
+      width: '100%',
+      backgroundColor: '#fff5f5',
+      borderRadius: 16,
+      padding: 16,
+      marginTop: 8,
+      borderWidth: 1.5,
+      borderColor: '#fca5a5',
+      gap: 6,
+    },
+    crisisBannerText: {
+      fontSize: 14,
+      color: '#b91c1c',
+      fontWeight: '600',
+      lineHeight: 20,
+    },
+    crisisResource: {
+      fontSize: 12,
+      color: '#dc2626',
+      fontWeight: '500',
+    },
+    crisisDismiss: {
+      alignSelf: 'flex-end',
+      marginTop: 4,
+      paddingVertical: 4,
+      paddingHorizontal: 10,
+      backgroundColor: '#fee2e2',
+      borderRadius: 8,
+    },
+    crisisDismissText: {
+      fontSize: 12,
+      color: '#b91c1c',
+      fontWeight: '700',
+    },
   });
 
   const handleAuth = async (
@@ -1363,6 +1410,21 @@ const App = () => {
            {/* Mood Forecast */}
            <MoodForecastCard token={token} backendUrl={BACKEND_URL} />
 
+           {/* Habit Recommendations */}
+           <HabitRecommendations
+             token={token}
+             backendUrl={BACKEND_URL}
+             moodHistory={moodHistory}
+             moodGoal={moodGoal}
+           />
+
+           {/* Trigger Insights */}
+           <TriggerInsightsCard
+             token={token}
+             backendUrl={BACKEND_URL}
+             days={30}
+           />
+
            {/* Streak & Badges Overview */}
            <StreakBadges
              moodHistory={moodHistory}
@@ -1424,6 +1486,18 @@ const App = () => {
                : 'Speech recognition unavailable'}
            </Text>
            {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+
+           {!!crisisAlert && (
+             <View style={styles.crisisBanner}>
+               <Text style={styles.crisisBannerText}>{crisisAlert.message}</Text>
+               {crisisAlert.resources?.map((r, i) => (
+                 <Text key={i} style={styles.crisisResource}>• {r.name}: {r.contact}</Text>
+               ))}
+               <TouchableOpacity onPress={() => setCrisisAlert(null)} style={styles.crisisDismiss}>
+                 <Text style={styles.crisisDismissText}>Dismiss</Text>
+               </TouchableOpacity>
+             </View>
+           )}
 
            <MoodResult
              moodData={moodData}
@@ -1537,7 +1611,7 @@ const App = () => {
         {[
           {id: 'home', icon: 'home-variant', label: 'Home'},
           {id: 'chat', icon: 'chat-processing-outline', label: 'Chat'},
-          {id: 'history', icon: 'book-heart-outline', label: 'Journal'},
+          {id: 'history', icon: 'book-heart', label: 'Journal'},
           {id: 'analytics', icon: 'chart-areaspline', label: 'Insights'},
         ].map(tab => {
           const active = activeTab === tab.id;

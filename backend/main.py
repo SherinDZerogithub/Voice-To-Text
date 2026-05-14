@@ -2188,3 +2188,175 @@ async def health_check():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# ─── Cognitive Reframe ────────────────────────────────────────────────────────
+
+@app.post("/reframe")
+async def reframe_thought(
+    request: schemas.ReframeRequest,
+    current_user: str = Depends(auth.get_current_user),
+):
+    """Gemini-powered cognitive reframe of a negative or distorted thought."""
+    if not request.thought.strip():
+        raise HTTPException(status_code=400, detail="Thought cannot be empty")
+
+    if gemini_model:
+        try:
+            vibe_context = f" Their current mood vibe is '{request.vibe}'." if request.vibe else ""
+            prompt = f"""You are a compassionate cognitive behavioral therapist. A person is experiencing this thought:
+
+"{request.thought}"{vibe_context}
+
+Provide a gentle cognitive reframe that:
+1. Validates their feeling without dismissing it
+2. Offers an alternative, more balanced perspective
+3. Ends with a grounding question or affirmation
+
+Rules:
+- Write 2-3 sentences in second person ("you")
+- Be warm, not clinical
+- Don't use therapy jargon
+- Return ONLY the reframe text, nothing else"""
+            response = await asyncio.to_thread(gemini_model.generate_content, prompt)
+            reframe = response.text.strip().strip('"')
+            return {"reframe": reframe, "source": "ai"}
+        except Exception as e:
+            print(f"[Reframe Gemini Error] {e}")
+
+    return {
+        "reframe": "That thought is real, and it's okay to feel it. What if there's another way to see this situation — one that's kinder to yourself?",
+        "source": "fallback",
+    }
+
+
+# ─── Crisis Phrase Detection ──────────────────────────────────────────────────
+
+CRISIS_KEYWORDS = [
+    "kill myself", "end it all", "no reason to live", "better off dead",
+    "suicide", "self-harm", "hurt myself", "can't go on", "want to die",
+    "no point living", "give up on life", "hopeless", "worthless", "i'm a burden",
+]
+
+
+@app.post("/crisis-check")
+async def crisis_check(
+    request: schemas.CrisisCheckRequest,
+    current_user: str = Depends(auth.get_current_user),
+):
+    """Detects crisis-risk phrases and returns a supportive escalation response."""
+    text_lower = request.text.lower()
+    detected = any(phrase in text_lower for phrase in CRISIS_KEYWORDS)
+
+    if detected:
+        return {
+            "is_crisis": True,
+            "message": "I hear that you're in a lot of pain right now. You don't have to face this alone — please reach out to a crisis counselor who can support you.",
+            "resources": [
+                {"name": "988 Suicide & Crisis Lifeline (US)", "contact": "Call or text 988"},
+                {"name": "Crisis Text Line (US)", "contact": "Text HOME to 741741"},
+                {"name": "International Association for Suicide Prevention", "contact": "https://www.iasp.info/resources/Crisis_Centres/"},
+            ],
+            "source": "keyword_detection",
+        }
+
+    return {"is_crisis": False, "message": None, "resources": [], "source": "safe"}
+
+
+# ─── Habit Recommendations ────────────────────────────────────────────────────
+
+@app.post("/habit-recommendations")
+async def habit_recommendations(
+    request: schemas.HabitRecommendationsRequest,
+    current_user: str = Depends(auth.get_current_user),
+):
+    """Gemini maps mood patterns to small, trackable habit suggestions."""
+    if not request.recent_vibes:
+        return {"habits": [], "source": "no_data"}
+
+    vibes_str = ", ".join(request.recent_vibes[:10])
+    goal_context = f" Their mood goal is '{request.mood_goal}'." if request.mood_goal else ""
+
+    if gemini_model:
+        try:
+            prompt = f"""You are a habit formation coach. Based on this person's recent mood pattern:
+
+Recent vibes (newest first): {vibes_str}{goal_context}
+
+Suggest exactly 3 small, trackable daily habits that could help them feel better or reach their goal.
+Rules:
+- Each habit should be 1 sentence, specific, and actionable
+- Focus on evidence-based wellness (movement, sleep, connection, mindfulness, creativity)
+- Make them realistic and non-overwhelming
+- Return ONLY a JSON array of 3 strings, no other text"""
+            response = await asyncio.to_thread(gemini_model.generate_content, prompt)
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            habits = json.loads(raw.strip())
+            if isinstance(habits, list) and len(habits) >= 2:
+                return {"habits": habits[:3], "source": "ai"}
+        except Exception as e:
+            print(f"[Habit Recommendations Gemini Error] {e}")
+
+    return {
+        "habits": [
+            "Take 3 deep breaths when you feel overwhelmed",
+            "Write down one thing you're grateful for each morning",
+            "Step outside for 5 minutes of fresh air daily",
+        ],
+        "source": "static",
+    }
+
+
+# ─── Mood Streak ──────────────────────────────────────────────────────────────
+
+@app.get("/mood-streak")
+async def mood_streak(
+    db: Session = Depends(database.get_db),
+    db_user: models.User = Depends(get_current_db_user),
+):
+    """Calculate current streak, longest streak, and total days logged."""
+    logs = (
+        db.query(models.MoodLog)
+        .filter(models.MoodLog.user_id == db_user.id)
+        .order_by(models.MoodLog.timestamp.desc())
+        .all()
+    )
+
+    if not logs:
+        return {"current_streak": 0, "longest_streak": 0, "total_days": 0, "last_log_date": None}
+
+    unique_dates = sorted(
+        set(log.timestamp.date() for log in logs if log.timestamp),
+        reverse=True,
+    )
+
+    if not unique_dates:
+        return {"current_streak": 0, "longest_streak": 0, "total_days": 0, "last_log_date": None}
+
+    today = datetime.now(timezone.utc).date()
+    current_streak = 0
+    for i, date in enumerate(unique_dates):
+        if date == today - timedelta(days=i):
+            current_streak += 1
+        else:
+            break
+
+    longest_streak = 1
+    temp = 1
+    for i in range(1, len(unique_dates)):
+        if unique_dates[i] == unique_dates[i - 1] - timedelta(days=1):
+            temp += 1
+            longest_streak = max(longest_streak, temp)
+        else:
+            temp = 1
+
+    return {
+        "current_streak": current_streak,
+        "longest_streak": longest_streak,
+        "total_days": len(unique_dates),
+        "last_log_date": unique_dates[0].isoformat(),
+    }

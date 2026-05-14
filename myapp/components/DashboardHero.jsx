@@ -44,7 +44,7 @@ const DashboardHero = ({
         </View>
         <View style={styles.actions}>
           <TouchableOpacity style={[styles.actionBtn, {backgroundColor: btnBg, borderColor: btnBorder}]} onPress={onOpenHistory} activeOpacity={0.7}>
-            <Icon name="book-heart-outline" size={16} color={isDark ? 'rgba(255,255,255,0.7)' : ACCENT} />
+            <Icon name="book-heart" size={16} color={isDark ? 'rgba(255,255,255,0.7)' : ACCENT} />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, styles.logoutBtn, {backgroundColor: btnBg, borderColor: btnBorder}]} onPress={onLogout} activeOpacity={0.7}>
             <Icon name="logout-variant" size={14} color={isDark ? 'rgba(255,255,255,0.6)' : '#6b7280'} />

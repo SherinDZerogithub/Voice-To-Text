@@ -17,25 +17,41 @@ import {SvgXml} from 'react-native-svg';
 const AVATAR_OPTIONS = {
   gender: ['girl', 'boy'],
 
-  skinTone: ['#FDDBB4', '#F1A97A', '#C68642', '#8D5524', '#4A2912'],
+  skinTone: ['#FFE4C9', '#FDD9B5', '#F1C27D', '#E0AC69', '#C68642', '#8D5524', '#5C3317', '#3B2219', '#FDEBE0', '#D4A574'],
 
   hairStyle: {
     girl: ['long_straight', 'long_wavy', 'bun', 'ponytail', 'short_bob', 'space_buns', 'braid'],
     boy: ['short_side', 'short_curly', 'buzz', 'messy', 'slick', 'fade', 'mohawk'],
+    girl: ['long_straight', 'long_wavy', 'bun', 'ponytail', 'short_bob', 'space_buns', 'braid', 'shag', 'pixie', 'box_braids'],
+    boy: ['short_side', 'short_curly', 'buzz', 'messy', 'slick', 'fade', 'mohawk', 'undercut', 'man_bun', 'top_knot'],
   },
 
   hairColor: [
-    '#1a0a00',
-    '#4B3621',
-    '#8B5E3C',
-    '#D4A04A',
-    '#F5C5A3',
-    '#C0392B',
-    '#8E44AD',
-    '#2980B9',
-    '#E67E22',
-    '#2ECC71',
+    '#090806',
+    '#2C222B',
+    '#3B3024',
+    '#5A3825',
+    '#8B4513',
+    '#B55239',
+    '#D6C4C2',
+    '#E5C8A8',
+    '#DEBC99',
+    '#B89778',
+    '#A55728',
+    '#B89778',
+    '#C31331',
+    '#9C2542',
+    '#8B3A62',
+    '#6B4E71',
+    '#4169E1',
+    '#20B2AA',
+    '#FF6B9D',
+    '#FFD700',
+    '#7B68EE',
+    '#00CED1',
   ],
+
+  facialHair: ['none', 'stubble', 'beard', 'goatee', 'mustache'],
 
   eyeStyle: ['normal', 'happy', 'wink', 'sleepy', 'surprised', 'starstruck'],
 
@@ -46,18 +62,19 @@ const AVATAR_OPTIONS = {
   glasses: ['none', 'round', 'square', 'cat_eye', 'sunglasses', 'heart_glasses'],
 
   accessories: ['none', 'earrings', 'necklace', 'bow', 'headband', 'cap', 'flower_crown', 'tie'],
+  accessories: ['none', 'earrings', 'necklace', 'bow', 'headband', 'cap', 'flower_crown', 'tie', 'headphones', 'beanie', 'hijab'],
+
+  clothingColor: [
+    '#FF6B9D', '#FF8E72', '#FFC75F', '#9EE493', '#45B7D1', '#845EC2',
+    '#D65DB1', '#2C73D2', '#0089BA', '#008E9B', '#008F7A', '#00C9A7',
+    '#4D8076', '#4B4453', '#2C3E50', '#34495E', '#757575', '#1A1A2E',
+    '#F5F6FA', '#FFFFFF', '#F9F871', '#FF9671', '#FFC75F', '#C34A36',
+  ],
 
   bgColor: [
-    '#f5e6ff',
-    '#e6f5ff',
-    '#fff5e6',
-    '#e6ffe6',
-    '#ffe6e6',
-    '#e6e6ff',
-    '#fff0e6',
-    '#f0f0f0',
-    '#ffecf3',
-    '#e8f8f5',
+    '#FFE8F6', '#FFF0E8', '#FFFDE8', '#E8FFF3', '#E8F4FF', '#F0E8FF',
+    '#FFE8E8', '#E8FFFF', '#FFF8E8', '#F8E8FF', '#F5F5F5', '#E8E8F5',
+    '#FFD6E8', '#FFEBD6', '#D6FFEB', '#D6EBFF', '#EBD6FF', '#EBFFD6',
   ],
 };
 
@@ -104,6 +121,20 @@ const getHairPath = (style, gender) => {
       <path d="M85,40 Q80,80 78,130 Q76,170 80,210 Q78,230 82,250 L88,250 Q84,230 86,210 Q82,170 84,130 Q86,80 92,45 Z" fill="HAIR"/>
       <path d="M80,60 L86,58 M82,80 L88,78 M80,100 L86,98 M82,120 L88,118 M80,140 L86,138 M82,160 L88,158" stroke="HAIR_DARK" stroke-width="2" fill="none"/>
     `,
+    shag: `
+      <path d="M38,75 Q48,22 100,18 Q152,22 162,75 Q167,52 158,38 Q138,0 100,-2 Q62,0 42,38 Q33,52 38,75 Z" fill="HAIR"/>
+      <path d="M42,85 Q30,95 32,130 Q34,160 25,180 L35,180 Q40,150 42,120 Z" fill="HAIR"/>
+      <path d="M158,85 Q170,95 168,130 Q166,160 175,180 L165,180 Q160,150 158,120 Z" fill="HAIR"/>
+    `,
+    pixie: `
+      <path d="M38,75 Q48,22 100,18 Q152,22 162,75 Q167,52 158,38 Q138,0 100,-2 Q62,0 42,38 Q33,52 38,75 Z" fill="HAIR"/>
+      <path d="M40,78 Q45,60 55,55 Q50,70 48,82 Z" fill="HAIR"/>
+      <path d="M160,78 Q155,60 145,55 Q150,70 152,82 Z" fill="HAIR"/>
+    `,
+    box_braids: `
+      <path d="M38,75 Q48,22 100,18 Q152,22 162,75 Q167,52 158,38 Q138,0 100,-2 Q62,0 42,38 Q33,52 38,75 Z" fill="HAIR"/>
+      <path d="M45,90 L40,250 M55,95 L50,250 M65,98 L60,250 M135,98 L140,250 M145,95 L150,250 M155,90 L160,250" stroke="HAIR" stroke-width="6" stroke-linecap="round"/>
+    `,
     // Boy styles
     short_side: `
       <path d="M35,78 Q40,22 100,18 Q160,22 165,78 Q165,58 156,46 Q132,32 100,30 Q68,32 44,46 Q35,58 35,78 Z" fill="HAIR"/>
@@ -143,6 +174,19 @@ const getHairPath = (style, gender) => {
       <path d="M50,78 Q52,20 100,14 Q148,20 150,78 Q148,55 140,42 Q130,32 100,30 Q70,32 60,42 Q52,55 50,78 Z" fill="HAIR"/>
       <path d="M90,18 Q94,0 100,-4 Q106,0 110,18 Z" fill="HAIR"/>
     `,
+    undercut: `
+      <path d="M50,78 Q52,20 100,14 Q148,20 150,78 Q148,55 140,42 Q130,32 100,30 Q70,32 60,42 Q52,55 50,78 Z" fill="HAIR"/>
+      <rect x="50" y="60" width="100" height="20" fill="HAIR" opacity="0.3"/>
+    `,
+    man_bun: `
+      <path d="M35,78 Q42,28 100,24 Q158,28 165,78 Q165,56 155,44 Q132,32 100,30 Q68,32 45,44 Q35,56 35,78 Z" fill="HAIR"/>
+      <circle cx="100" cy="20" r="14" fill="HAIR"/>
+      <path d="M90,30 Q100,25 110,30" stroke="HAIR_LIGHT" stroke-width="1.5" fill="none"/>
+    `,
+    top_knot: `
+      <path d="M50,78 Q52,20 100,14 Q148,20 150,78 Q148,55 140,42 Q130,32 100,30 Q70,32 60,42 Q52,55 50,78 Z" fill="HAIR"/>
+      <circle cx="100" cy="8" r="12" fill="HAIR"/>
+    `,
   };
   return hairPaths[style] || hairPaths.short_side;
 };
@@ -150,14 +194,16 @@ const getHairPath = (style, gender) => {
 const getEyesSVG = (style, color) => {
   const eyes = {
     normal: `
-      <ellipse cx="76" cy="108" rx="10" ry="11" fill="white"/>
-      <circle cx="76" cy="110" r="7" fill="${color}"/>
-      <circle cx="76" cy="110" r="3.5" fill="#111"/>
-      <circle cx="79" cy="107" r="1.5" fill="white"/>
-      <ellipse cx="124" cy="108" rx="10" ry="11" fill="white"/>
-      <circle cx="124" cy="110" r="7" fill="${color}"/>
-      <circle cx="124" cy="110" r="3.5" fill="#111"/>
-      <circle cx="127" cy="107" r="1.5" fill="white"/>
+      <ellipse cx="76" cy="108" rx="12" ry="13" fill="white"/>
+      <ellipse cx="76" cy="109" rx="8" ry="9" fill="${color}"/>
+      <circle cx="76" cy="109" r="4" fill="#111"/>
+      <circle cx="79" cy="106" r="2" fill="white"/>
+      <ellipse cx="74" cy="103" rx="4" ry="2" fill="rgba(255,255,255,0.4)"/>
+      <ellipse cx="124" cy="108" rx="12" ry="13" fill="white"/>
+      <ellipse cx="124" cy="109" rx="8" ry="9" fill="${color}"/>
+      <circle cx="124" cy="109" r="4" fill="#111"/>
+      <circle cx="127" cy="106" r="2" fill="white"/>
+      <ellipse cx="122" cy="103" rx="4" ry="2" fill="rgba(255,255,255,0.4)"/>
     `,
     happy: `
       <path d="M66,108 Q76,98 86,108" stroke="#333" stroke-width="2.5" fill="none" stroke-linecap="round"/>
@@ -179,14 +225,16 @@ const getEyesSVG = (style, color) => {
       <circle cx="124" cy="110" r="1" fill="#555"/>
     `,
     surprised: `
-      <ellipse cx="76" cy="108" rx="12" ry="14" fill="white"/>
-      <circle cx="76" cy="110" r="8" fill="${color}"/>
-      <circle cx="76" cy="110" r="4" fill="#111"/>
-      <circle cx="79" cy="107" r="2" fill="white"/>
-      <ellipse cx="124" cy="108" rx="12" ry="14" fill="white"/>
-      <circle cx="124" cy="110" r="8" fill="${color}"/>
-      <circle cx="124" cy="110" r="4" fill="#111"/>
-      <circle cx="127" cy="107" r="2" fill="white"/>
+      <ellipse cx="76" cy="106" rx="14" ry="16" fill="white"/>
+      <ellipse cx="76" cy="107" rx="10" ry="11" fill="${color}"/>
+      <circle cx="76" cy="107" r="5" fill="#111"/>
+      <circle cx="80" cy="103" r="2.5" fill="white"/>
+      <ellipse cx="73" cy="100" rx="5" ry="3" fill="rgba(255,255,255,0.5)"/>
+      <ellipse cx="124" cy="106" rx="14" ry="16" fill="white"/>
+      <ellipse cx="124" cy="107" rx="10" ry="11" fill="${color}"/>
+      <circle cx="124" cy="107" r="5" fill="#111"/>
+      <circle cx="128" cy="103" r="2.5" fill="white"/>
+      <ellipse cx="121" cy="100" rx="5" ry="3" fill="rgba(255,255,255,0.5)"/>
     `,
     starstruck: `
       <ellipse cx="74" cy="107" rx="10" ry="11" fill="white"/>
@@ -205,13 +253,15 @@ const getEyesSVG = (style, color) => {
 const getMouthSVG = style => {
   const mouths = {
     smile: `
-      <path d="M82,138 Q100,154 118,138" stroke="#c0605a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-      <circle cx="78" cy="134" r="1.5" fill="#c0605a" opacity="0.5"/>
-      <circle cx="122" cy="134" r="1.5" fill="#c0605a" opacity="0.5"/>
+      <path d="M84,140 Q100,156 116,140" stroke="#E57373" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M88,142 Q100,152 112,140" fill="#FFCDD2" opacity="0.6"/>
+      <circle cx="80" cy="136" r="2" fill="#FFCDD2" opacity="0.7"/>
+      <circle cx="120" cy="136" r="2" fill="#FFCDD2" opacity="0.7"/>
     `,
     big_smile: `
-      <path d="M76,136 Q100,162 124,136" stroke="#c0605a" stroke-width="2.5" fill="#e8a09d" stroke-linecap="round"/>
-      <path d="M82,138 Q100,152 118,136" fill="#c0605a"/>
+      <path d="M78,138 Q100,166 122,138" stroke="#E57373" stroke-width="3" fill="#FFEBEE" stroke-linecap="round"/>
+      <path d="M84,142 Q100,158 116,138" fill="#EF9A9A"/>
+      <path d="M88,145 Q100,155 112,145" stroke="#F8BBD9" stroke-width="2" fill="none" opacity="0.5"/>
     `,
     neutral: `
       <line x1="86" y1="142" x2="114" y2="142" stroke="#c0605a" stroke-width="2.5" stroke-linecap="round"/>
@@ -221,33 +271,60 @@ const getMouthSVG = style => {
       <path d="M76,140 Q80,138 84,140" stroke="#c0605a" stroke-width="1.5" fill="none"/>
     `,
     open: `
-      <ellipse cx="100" cy="142" rx="14" ry="10" fill="#c0605a"/>
-      <ellipse cx="100" cy="144" rx="10" ry="7" fill="#8b3a3a"/>
+      <ellipse cx="100" cy="142" rx="14" ry="11" fill="#E57373"/>
+      <ellipse cx="100" cy="144" rx="11" ry="8" fill="#C62828"/>
+      <ellipse cx="100" cy="142" rx="8" ry="5" fill="#D32F2F" opacity="0.5"/>
+      <ellipse cx="100" cy="139" rx="6" ry="3" fill="white" opacity="0.3"/>
     `,
     tongue: `
-      <ellipse cx="100" cy="142" rx="12" ry="9" fill="#c0605a"/>
-      <ellipse cx="100" cy="146" rx="7" ry="5" fill="#e8a09d"/>
+      <ellipse cx="100" cy="142" rx="13" ry="10" fill="#E57373"/>
+      <ellipse cx="100" cy="148" rx="8" ry="7" fill="#F8BBD9"/>
+      <ellipse cx="100" cy="146" rx="6" ry="5" fill="#F48FB1"/>
+      <line x1="100" y1="142" x2="100" y2="150" stroke="#E91E63" stroke-width="1.5" opacity="0.4"/>
     `,
   };
   return mouths[style] || mouths.smile;
+};
+
+const getFacialHairSVG = (style, color) => {
+  const styles = {
+    none: '',
+    stubble: `
+      <path d="M70,145 Q100,165 130,145" stroke="${color}" stroke-width="10" stroke-dasharray="1 3" opacity="0.3" fill="none"/>
+    `,
+    beard: `
+      <path d="M60,135 Q100,185 140,135 Q145,150 140,165 Q100,205 60,165 Q55,150 60,135 Z" fill="${color}"/>
+    `,
+    goatee: `
+      <path d="M90,148 Q100,175 110,148 Q110,160 105,168 Q100,172 95,168 Q90,160 90,148 Z" fill="${color}"/>
+    `,
+    mustache: `
+      <path d="M80,142 Q90,138 100,142 Q110,138 120,142 Q115,148 100,146 Q85,148 80,142 Z" fill="${color}"/>
+    `,
+  };
+  return styles[style] || '';
 };
 
 const getGlassesSVG = style => {
   const glasses = {
     none: '',
     round: `
-      <circle cx="76" cy="108" r="16" fill="none" stroke="#555" stroke-width="2.5"/>
-      <circle cx="124" cy="108" r="16" fill="none" stroke="#555" stroke-width="2.5"/>
-      <line x1="92" y1="108" x2="108" y2="108" stroke="#555" stroke-width="2"/>
-      <line x1="42" y1="104" x2="60" y2="104" stroke="#555" stroke-width="2"/>
-      <line x1="140" y1="104" x2="158" y2="104" stroke="#555" stroke-width="2"/>
+      <circle cx="76" cy="108" r="18" fill="none" stroke="#333" stroke-width="2.5"/>
+      <circle cx="76" cy="108" r="16" fill="rgba(200,220,255,0.15)"/>
+      <circle cx="124" cy="108" r="18" fill="none" stroke="#333" stroke-width="2.5"/>
+      <circle cx="124" cy="108" r="16" fill="rgba(200,220,255,0.15)"/>
+      <line x1="94" y1="108" x2="106" y2="108" stroke="#333" stroke-width="2"/>
+      <line x1="40" y1="104" x2="58" y2="106" stroke="#333" stroke-width="2"/>
+      <line x1="142" y1="106" x2="160" y2="104" stroke="#333" stroke-width="2"/>
     `,
     square: `
-      <rect x="60" y="94" width="32" height="24" rx="4" fill="none" stroke="#555" stroke-width="2.5"/>
-      <rect x="108" y="94" width="32" height="24" rx="4" fill="none" stroke="#555" stroke-width="2.5"/>
-      <line x1="92" y1="106" x2="108" y2="106" stroke="#555" stroke-width="2"/>
-      <line x1="42" y1="102" x2="60" y2="102" stroke="#555" stroke-width="2"/>
-      <line x1="140" y1="102" x2="158" y2="102" stroke="#555" stroke-width="2"/>
+      <rect x="56" y="92" width="36" height="28" rx="6" fill="rgba(200,220,255,0.15)"/>
+      <rect x="56" y="92" width="36" height="28" rx="6" fill="none" stroke="#333" stroke-width="2.5"/>
+      <rect x="108" y="92" width="36" height="28" rx="6" fill="rgba(200,220,255,0.15)"/>
+      <rect x="108" y="92" width="36" height="28" rx="6" fill="none" stroke="#333" stroke-width="2.5"/>
+      <line x1="92" y1="106" x2="108" y2="106" stroke="#333" stroke-width="2"/>
+      <line x1="40" y1="102" x2="56" y2="102" stroke="#333" stroke-width="2"/>
+      <line x1="144" y1="102" x2="160" y2="102" stroke="#333" stroke-width="2"/>
     `,
     cat_eye: `
       <path d="M56,112 Q68,92 92,96 Q96,118 76,118 Z" fill="none" stroke="#c0392b" stroke-width="2.5"/>
@@ -257,20 +334,22 @@ const getGlassesSVG = style => {
       <line x1="144" y1="107" x2="160" y2="103" stroke="#c0392b" stroke-width="2"/>
     `,
     sunglasses: `
-      <rect x="58" y="96" width="40" height="22" rx="10" fill="rgba(30,30,30,0.88)"/>
-      <rect x="102" y="96" width="40" height="22" rx="10" fill="rgba(30,30,30,0.88)"/>
-      <line x1="98" y1="107" x2="102" y2="107" stroke="#444" stroke-width="2"/>
-      <line x1="42" y1="104" x2="58" y2="106" stroke="#444" stroke-width="2"/>
-      <line x1="142" y1="106" x2="158" y2="104" stroke="#444" stroke-width="2"/>
-      <rect x="62" y="100" width="32" height="14" rx="5" fill="rgba(0,0,0,0.3)"/>
-      <rect x="106" y="100" width="32" height="14" rx="5" fill="rgba(0,0,0,0.3)"/>
+      <rect x="54" y="94" width="44" height="26" rx="12" fill="rgba(20,20,30,0.92)"/>
+      <rect x="58" y="98" width="36" height="18" rx="8" fill="rgba(80,80,100,0.4)"/>
+      <rect x="102" y="94" width="44" height="26" rx="12" fill="rgba(20,20,30,0.92)"/>
+      <rect x="106" y="98" width="36" height="18" rx="8" fill="rgba(80,80,100,0.4)"/>
+      <line x1="98" y1="107" x2="102" y2="107" stroke="#333" stroke-width="3"/>
+      <line x1="40" y1="104" x2="54" y2="106" stroke="#333" stroke-width="2.5"/>
+      <line x1="146" y1="106" x2="160" y2="104" stroke="#333" stroke-width="2.5"/>
     `,
     heart_glasses: `
-      <path d="M60,106 L70,96 L80,106 L70,116 Z" fill="none" stroke="#e84393" stroke-width="2" stroke-linejoin="round"/>
-      <path d="M120,106 L130,96 L140,106 L130,116 Z" fill="none" stroke="#e84393" stroke-width="2" stroke-linejoin="round"/>
-      <line x1="80" y1="106" x2="120" y2="106" stroke="#e84393" stroke-width="2"/>
-      <line x1="42" y1="103" x2="60" y2="105" stroke="#e84393" stroke-width="2"/>
-      <line x1="140" y1="105" x2="158" y2="103" stroke="#e84393" stroke-width="2"/>
+      <path d="M60,108 Q60,90 76,92 Q88,94 88,108 Q88,120 74,122 Q60,120 60,108 Z" fill="rgba(236,72,153,0.3)" stroke="#EC4899" stroke-width="2"/>
+      <path d="M112,108 Q112,90 128,92 Q140,94 140,108 Q140,120 126,122 Q112,120 112,108 Z" fill="rgba(236,72,153,0.3)" stroke="#EC4899" stroke-width="2"/>
+      <circle cx="70" cy="105" r="3" fill="rgba(255,255,255,0.5)"/>
+      <circle cx="122" cy="105" r="3" fill="rgba(255,255,255,0.5)"/>
+      <line x1="88" y1="107" x2="112" y2="107" stroke="#EC4899" stroke-width="2"/>
+      <line x1="40" y1="103" x2="60" y2="106" stroke="#EC4899" stroke-width="2"/>
+      <line x1="140" y1="106" x2="160" y2="103" stroke="#EC4899" stroke-width="2"/>
     `,
   };
   return glasses[style] || '';
@@ -280,46 +359,77 @@ const getAccessorySVG = (style, gender) => {
   const accessories = {
     none: '',
     earrings: `
-      <circle cx="38" cy="122" r="4.5" fill="#FFD700"/>
-      <circle cx="162" cy="122" r="4.5" fill="#FFD700"/>
-      <circle cx="38" cy="133" r="3" fill="#FFD700"/>
-      <circle cx="162" cy="133" r="3" fill="#FFD700"/>
-      <circle cx="38" cy="128" r="1.5" fill="#FFF"/>
-      <circle cx="162" cy="128" r="1.5" fill="#FFF"/>
+      <circle cx="38" cy="120" r="5" fill="#FFD700"/>
+      <circle cx="38" cy="120" r="3" fill="#FFF8DC"/>
+      <circle cx="38" cy="132" r="4" fill="#FFD700"/>
+      <circle cx="38" cy="132" r="2" fill="#FFF8DC"/>
+      <circle cx="162" cy="120" r="5" fill="#FFD700"/>
+      <circle cx="162" cy="120" r="3" fill="#FFF8DC"/>
+      <circle cx="162" cy="132" r="4" fill="#FFD700"/>
+      <circle cx="162" cy="132" r="2" fill="#FFF8DC"/>
     `,
     necklace: `
-      <path d="M65,180 Q100,198 135,180" stroke="#FFD700" stroke-width="2.5" fill="none"/>
-      <circle cx="100" cy="198" r="6" fill="#FFD700"/>
-      <circle cx="100" cy="196" r="3" fill="#fff"/>
-      <path d="M68,178 Q70,182 72,178" stroke="#FFD700" stroke-width="1.5" fill="none"/>
+      <path d="M62,182 Q100,205 138,182" stroke="#FFD700" stroke-width="3" fill="none"/>
+      <circle cx="100" cy="206" r="8" fill="#FFD700"/>
+      <circle cx="100" cy="206" r="5" fill="#FFF8DC"/>
+      <circle cx="100" cy="206" r="3" fill="#FFD700"/>
     `,
     bow: `
-      <path d="M80,60 Q90,52 100,58 Q110,52 120,60 Q110,68 100,64 Q90,68 80,60 Z" fill="#FF6B9D"/>
-      <circle cx="100" cy="61" r="5.5" fill="#FF3D7F"/>
-      <path d="M78,56 L82,64 M122,56 L118,64" stroke="#FF6B9D" stroke-width="2" fill="none"/>
+      <path d="M75,56 Q88,44 100,52 Q112,44 125,56 Q112,68 100,62 Q88,68 75,56 Z" fill="#FF6B9D"/>
+      <circle cx="100" cy="58" r="6" fill="#FF3D7F"/>
+      <path d="M88,52 Q85,48 88,44" stroke="#FF6B9D" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M112,52 Q115,48 112,44" stroke="#FF6B9D" stroke-width="3" fill="none" stroke-linecap="round"/>
     `,
     headband: `
-      <path d="M38,76 Q100,56 162,76" stroke="#9B59B6" stroke-width="8" fill="none" stroke-linecap="round"/>
-      <path d="M38,76 Q100,56 162,76" stroke="#C39BD3" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M38,72 Q100,48 162,72" stroke="#9B59B6" stroke-width="10" fill="none" stroke-linecap="round"/>
+      <path d="M38,72 Q100,48 162,72" stroke="#BB8FCE" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <circle cx="60" cy="60" r="6" fill="#E8DAEF"/>
+      <circle cx="140" cy="60" r="6" fill="#E8DAEF"/>
     `,
     cap: `
-      <path d="M30,78 Q100,36 170,78 Q162,70 152,64 Q130,52 100,48 Q70,52 48,64 Q38,70 30,78 Z" fill="#3498DB"/>
-      <rect x="20" y="74" width="38" height="8" rx="4" fill="#2980B9"/>
-      <path d="M80,48 Q100,42 120,48" stroke="#2980B9" stroke-width="2" fill="none"/>
+      <path d="M28,76 Q100,28 172,76 Q162,66 150,60 Q125,44 100,40 Q75,44 50,60 Q38,66 28,76 Z" fill="#3498DB"/>
+      <rect x="18" y="70" width="48" height="10" rx="5" fill="#2980B9"/>
+      <path d="M78,42 Q100,34 122,42" stroke="#5DADE2" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <ellipse cx="100" cy="50" rx="15" ry="6" fill="rgba(255,255,255,0.2)"/>
     `,
     flower_crown: `
-      <circle cx="70" cy="58" r="8" fill="#FF69B4"/>
-      <circle cx="90" cy="52" r="9" fill="#FFB6C1"/>
-      <circle cx="110" cy="52" r="9" fill="#FF69B4"/>
-      <circle cx="130" cy="58" r="8" fill="#FFB6C1"/>
-      <circle cx="80" cy="55" r="4" fill="#FFD700"/>
-      <circle cx="100" cy="50" r="4" fill="#FFD700"/>
-      <circle cx="120" cy="55" r="4" fill="#FFD700"/>
+      <circle cx="60" cy="54" r="10" fill="#FF69B4"/>
+      <circle cx="60" cy="54" r="5" fill="#FFD700"/>
+      <circle cx="80" cy="48" r="11" fill="#FFB6C1"/>
+      <circle cx="80" cy="48" r="5" fill="#FFD700"/>
+      <circle cx="100" cy="45" r="12" fill="#FF69B4"/>
+      <circle cx="100" cy="45" r="6" fill="#FFD700"/>
+      <circle cx="120" cy="48" r="11" fill="#FFB6C1"/>
+      <circle cx="120" cy="48" r="5" fill="#FFD700"/>
+      <circle cx="140" cy="54" r="10" fill="#FF69B4"/>
+      <circle cx="140" cy="54" r="5" fill="#FFD700"/>
+      <path d="M60,54 Q100,65 140,54" stroke="#228B22" stroke-width="6" fill="none"/>
     `,
     tie: `
-      <path d="M90,178 L100,210 L110,178 Z" fill="#2c3e50"/>
-      <path d="M88,172 L112,172 L110,178 L90,178 Z" fill="#34495e"/>
-      <circle cx="100" cy="186" r="3" fill="#ECF0F1"/>
+      <path d="M90,178 L100,215 L110,178 Z" fill="#2C3E50"/>
+      <path d="M86,172 L114,172 L110,178 L90,178 Z" fill="#34495E"/>
+      <circle cx="100" cy="188" r="3" fill="#ECF0F1"/>
+      <path d="M95,180 L100,200 L105,180" stroke="#1A252F" stroke-width="1" fill="none" opacity="0.3"/>
+    `,
+    headphones: `
+      <path d="M38,108 Q38,38 100,38 Q162,38 162,108" stroke="#1A1A2E" stroke-width="14" fill="none" stroke-linecap="round"/>
+      <path d="M38,108 Q38,38 100,38 Q162,38 162,108" stroke="#6C5CE7" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <rect x="28" y="100" width="24" height="44" rx="12" fill="#1A1A2E"/>
+      <rect x="32" y="104" width="16" height="36" rx="8" fill="#6C5CE7" opacity="0.5"/>
+      <rect x="148" y="100" width="24" height="44" rx="12" fill="#1A1A2E"/>
+      <rect x="152" y="104" width="16" height="36" rx="8" fill="#6C5CE7" opacity="0.5"/>
+    `,
+    beanie: `
+      <path d="M38,80 Q100,0 162,80 L160,100 Q100,88 40,100 Z" fill="#6C5CE7"/>
+      <rect x="38" y="86" width="124" height="18" rx="8" fill="#5B4FCF"/>
+      <circle cx="100" cy="12" r="8" fill="#6C5CE7"/>
+      <path d="M50,85 Q70,82 90,85 Q110,82 130,85 Q150,82 160,85" stroke="rgba(255,255,255,0.2)" stroke-width="2" fill="none"/>
+    `,
+    hijab: `
+      <path d="M32,80 Q38,18 100,14 Q162,18 168,80 Q178,190 150,235 Q100,258 50,235 Q22,190 32,80 Z" fill="#5B4FCF"/>
+      <ellipse cx="100" cy="115" rx="62" ry="70" fill="SKIN_TONE"/>
+      <path d="M32,80 Q100,60 168,80" stroke="#6C5CE7" stroke-width="3" fill="none"/>
+      <path d="M38,120 Q100,110 162,120" stroke="rgba(255,255,255,0.2)" stroke-width="2" fill="none"/>
     `,
   };
   return accessories[style] || '';
@@ -333,11 +443,13 @@ const buildAvatarSVG = config => {
     skinTone,
     hairStyle,
     hairColor,
+    facialHair,
     eyeStyle,
     eyeColor,
     mouthStyle,
     glasses,
     accessories,
+    clothingColor,
     bgColor,
   } = config;
 
@@ -349,10 +461,20 @@ const buildAvatarSVG = config => {
     .replace(/fill="HAIR_DARK"/g, `fill="${hairDark}"`)
     .replace(/fill="HAIR"/g, `fill="${hairColor}"`);
 
+  let accessorySVG = getAccessorySVG(accessories, gender).replace(/SKIN_TONE/g, skinTone);
+
   return `
 <svg viewBox="0 0 200 280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:${lightenHex(bgColor, 20)};stop-opacity:1" />
+      <stop offset="100%" style="stop-color:${bgColor};stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
   <!-- Background -->
   <circle cx="100" cy="140" r="100" fill="${bgColor}"/>
+  <circle cx="100" cy="140" r="100" fill="url(#bgGrad)"/>
 
   <!-- Neck -->
   <rect x="88" y="168" width="24" height="32" rx="8" fill="${skinTone}"/>
@@ -362,12 +484,18 @@ const buildAvatarSVG = config => {
   ${gender === 'girl'
     ? '<path d="M28,250 Q48,192 100,186 Q152,192 172,250 Q148,262 100,265 Q52,262 28,250 Z" fill="#E91E8C"/>'
     : '<path d="M26,250 Q46,190 100,184 Q154,190 174,250 Q148,264 100,266 Q52,264 26,250 Z" fill="#3498DB"/>'}
+  <path d="M26,250 Q46,188 100,184 Q154,188 174,250 Q148,264 100,266 Q52,264 26,250 Z" fill="${clothingColor || (gender === 'girl' ? '#E91E8C' : '#3498DB')}"/>
 
-  <!-- Body detail - collar -->
-  <path d="M80,210 Q100,225 120,210" stroke="rgba(0,0,0,0.1)" stroke-width="2" fill="none"/>
+  <!-- Body detail - collar/shading -->
+  <path d="M80,210 Q100,225 120,210" stroke="rgba(255,255,255,0.3)" stroke-width="3" fill="none"/>
+  <path d="M70,230 Q100,245 130,230" stroke="rgba(0,0,0,0.1)" stroke-width="2" fill="none"/>
+  <ellipse cx="100" cy="220" rx="20" ry="8" fill="rgba(255,255,255,0.15)"/>
 
   <!-- Head -->
   <ellipse cx="100" cy="115" rx="66" ry="72" fill="${skinTone}"/>
+
+  <!-- Head highlight -->
+  <ellipse cx="85" cy="90" rx="25" ry="20" fill="rgba(255,255,255,0.12)"/>
 
   <!-- Head shadow for depth -->
   <ellipse cx="100" cy="115" rx="66" ry="72" fill="none" stroke="${darkenHex(skinTone, 15)}" stroke-width="1" opacity="0.3"/>
@@ -382,27 +510,38 @@ const buildAvatarSVG = config => {
   <ellipse cx="165" cy="118" rx="5" ry="7" fill="${darkenHex(skinTone, 15)}"/>
 
   <!-- Eyebrows -->
-  <path d="M62,95 Q76,86 90,93" stroke="${hairColor}" stroke-width="3" fill="none" stroke-linecap="round"/>
-  <path d="M110,93 Q124,86 138,95" stroke="${hairColor}" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M60,94 Q76,84 92,92" stroke="${hairColor}" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <path d="M108,92 Q124,84 140,94" stroke="${hairColor}" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <!-- Eyebrow highlights -->
+  <path d="M65,92 Q76,85 87,91" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" fill="none"/>
+  <path d="M113,91 Q124,85 135,92" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" fill="none"/>
 
   <!-- Eyes -->
   ${getEyesSVG(eyeStyle, eyeColor)}
 
+  <!-- Facial Hair -->
+  ${getFacialHairSVG(facialHair || 'none', hairColor)}
+
   <!-- Nose -->
-  <path d="M97,118 Q95,132 100,136 Q105,132 103,118" stroke="${darkenHex(skinTone, 25)}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <path d="M97,118 Q94,132 100,138 Q106,132 103,118" stroke="${darkenHex(skinTone, 20)}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <ellipse cx="100" cy="135" rx="6" ry="3" fill="rgba(255,200,200,0.2)"/>
 
   <!-- Cheek blush -->
-  <ellipse cx="62" cy="128" rx="12" ry="7" fill="rgba(255,150,150,0.35)"/>
-  <ellipse cx="138" cy="128" rx="12" ry="7" fill="rgba(255,150,150,0.35)"/>
+  <ellipse cx="58" cy="128" rx="14" ry="9" fill="rgba(255,150,150,0.45)"/>
+  <ellipse cx="142" cy="128" rx="14" ry="9" fill="rgba(255,150,150,0.45)"/>
+  <ellipse cx="58" cy="126" rx="8" ry="5" fill="rgba(255,180,180,0.3)"/>
+  <ellipse cx="142" cy="126" rx="8" ry="5" fill="rgba(255,180,180,0.3)"/>
 
   <!-- Mouth -->
   ${getMouthSVG(mouthStyle)}
 
-  <!-- Freckles (optional subtle detail) -->
-  <circle cx="70" cy="122" r="1" fill="${darkenHex(skinTone, 25)}" opacity="0.4"/>
-  <circle cx="76" cy="125" r="1" fill="${darkenHex(skinTone, 25)}" opacity="0.4"/>
-  <circle cx="124" cy="125" r="1" fill="${darkenHex(skinTone, 25)}" opacity="0.4"/>
-  <circle cx="130" cy="122" r="1" fill="${darkenHex(skinTone, 25)}" opacity="0.4"/>
+  <!-- Freckles (cute subtle detail) -->
+  <circle cx="66" cy="120" r="1.2" fill="${darkenHex(skinTone, 20)}" opacity="0.35"/>
+  <circle cx="72" cy="124" r="1.2" fill="${darkenHex(skinTone, 20)}" opacity="0.35"/>
+  <circle cx="68" cy="127" r="1.2" fill="${darkenHex(skinTone, 20)}" opacity="0.35"/>
+  <circle cx="128" cy="124" r="1.2" fill="${darkenHex(skinTone, 20)}" opacity="0.35"/>
+  <circle cx="134" cy="120" r="1.2" fill="${darkenHex(skinTone, 20)}" opacity="0.35"/>
+  <circle cx="132" cy="127" r="1.2" fill="${darkenHex(skinTone, 20)}" opacity="0.35"/>
 
   <!-- Hair (front layer - for bangs/front hair) -->
   <g id="front-hair">
@@ -420,6 +559,7 @@ const buildAvatarSVG = config => {
 
   <!-- Accessories -->
   ${getAccessorySVG(accessories, gender)}
+  ${accessorySVG}
 </svg>
   `.trim();
 };
@@ -486,15 +626,17 @@ const OptionChip = ({label, selected, onPress}) => (
 
 const DEFAULT_CONFIG = {
   gender: 'girl',
-  skinTone: '#FDDBB4',
+  skinTone: '#FDD9B5',
   hairStyle: 'long_straight',
-  hairColor: '#4B3621',
+  hairColor: '#5A3825',
+  facialHair: 'none',
   eyeStyle: 'normal',
   eyeColor: '#2c3e50',
   mouthStyle: 'smile',
   glasses: 'none',
   accessories: 'none',
-  bgColor: '#f5e6ff',
+  clothingColor: '#FF6B9D',
+  bgColor: '#FFE8F6',
 };
 
 const SECTIONS = [
@@ -502,11 +644,13 @@ const SECTIONS = [
   {key: 'skinTone', label: 'Skin Tone', type: 'color', icon: '🎨'},
   {key: 'hairStyle', label: 'Hair Style', type: 'chip_dynamic', icon: '💇'},
   {key: 'hairColor', label: 'Hair Color', type: 'color', icon: '🎨'},
+  {key: 'facialHair', label: 'Facial Hair', type: 'chip', icon: '🧔'},
   {key: 'eyeStyle', label: 'Eyes', type: 'chip', icon: '👁️'},
   {key: 'eyeColor', label: 'Eye Color', type: 'color', icon: '🎨'},
   {key: 'mouthStyle', label: 'Mouth', type: 'chip', icon: '😊'},
   {key: 'glasses', label: 'Glasses', type: 'chip', icon: '👓'},
   {key: 'accessories', label: 'Accessories', type: 'chip', icon: '💎'},
+  {key: 'clothingColor', label: 'Outfit Color', type: 'color', icon: '👕'},
   {key: 'bgColor', label: 'Background', type: 'color', icon: '🖼️'},
 ];
 
@@ -521,6 +665,8 @@ const AvatarBuilder = ({visible, onClose, onSave}) => {
       if (key === 'gender') {
         next.hairStyle = AVATAR_OPTIONS.hairStyle[value][0];
         next.accessories = 'none';
+        next.facialHair = 'none';
+        next.clothingColor = value === 'girl' ? '#E91E8C' : '#3498DB';
       }
       return next;
     });
@@ -536,11 +682,13 @@ const AvatarBuilder = ({visible, onClose, onSave}) => {
       skinTone: pick(AVATAR_OPTIONS.skinTone),
       hairStyle: pick(AVATAR_OPTIONS.hairStyle[g]),
       hairColor: pick(AVATAR_OPTIONS.hairColor),
+      facialHair: g === 'boy' ? pick(AVATAR_OPTIONS.facialHair) : 'none',
       eyeStyle: pick(AVATAR_OPTIONS.eyeStyle),
       eyeColor: pick(AVATAR_OPTIONS.eyeColor),
       mouthStyle: pick(AVATAR_OPTIONS.mouthStyle),
       glasses: pick(AVATAR_OPTIONS.glasses),
       accessories: pick(AVATAR_OPTIONS.accessories),
+      clothingColor: pick(AVATAR_OPTIONS.clothingColor),
       bgColor: pick(AVATAR_OPTIONS.bgColor),
     });
   }, []);
