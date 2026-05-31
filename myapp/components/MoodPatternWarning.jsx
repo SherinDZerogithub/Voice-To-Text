@@ -60,7 +60,9 @@ const PATTERNS = [
       message:
         "You've been carrying a lot lately. That's valid — and it's worth pausing to check in.",
       suggestion: 'Try a short breathing exercise or a gentle walk.',
-      cta: "I'm doing okay",
+      cta: 'Chat with Sage',
+      chatPrompt:
+        "I've been feeling really heavy lately and would like to check in with you about it.",
     }),
   },
   {
@@ -82,7 +84,9 @@ const PATTERNS = [
         'Your recent vibes show a lot of tension. Remember to ground yourself.',
       suggestion:
         'Try the 5-4-3-2-1 grounding technique: name 5 things you can see.',
-      cta: 'Thanks for the reminder',
+      cta: 'Chat with Sage',
+      chatPrompt:
+        "I'm feeling a lot of anxiety right now and could use a calm, aware conversation about it.",
     }),
   },
   {
@@ -111,14 +115,16 @@ const PATTERNS = [
         "There's a downward pattern in your recent entries. Small shifts can help.",
       suggestion:
         'Even a 10-minute walk or a warm drink can interrupt a spiral.',
-      cta: "I'll try that",
+      cta: 'Chat with Sage',
+      chatPrompt:
+        "My mood has been dipping lately and I want to explore what's behind it with you.",
     }),
   },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-const MoodPatternWarning = ({moodHistory, appBgColor}) => {
+const MoodPatternWarning = ({moodHistory, appBgColor, onOpenChat}) => {
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const slideAnim = useRef(new Animated.Value(-80)).current;
@@ -162,6 +168,14 @@ const MoodPatternWarning = ({moodHistory, appBgColor}) => {
     }
   }, [detected, dismissed, slideAnim, opacityAnim]);
 
+  const handleOpenChat = () => {
+    if (onOpenChat && detected?.chatPrompt) {
+      onOpenChat(detected.chatPrompt);
+    } else if (onOpenChat) {
+      onOpenChat();
+    }
+  };
+
   const handleExpand = () => {
     const toVal = expanded ? 0 : 1;
     setExpanded(!expanded);
@@ -195,15 +209,19 @@ const MoodPatternWarning = ({moodHistory, appBgColor}) => {
   const borderColor = detected.color;
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          borderColor,
-          opacity: opacityAnim,
-          transform: [{translateY: slideAnim}],
-        },
-      ]}>
+    <TouchableOpacity
+      activeOpacity={0.92}
+      onPress={handleOpenChat}
+      style={{width: '100%'}}>
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            borderColor,
+            opacity: opacityAnim,
+            transform: [{translateY: slideAnim}],
+          },
+        ]}>
       {/* Header row */}
       <TouchableOpacity
         style={styles.headerRow}
@@ -249,7 +267,7 @@ const MoodPatternWarning = ({moodHistory, appBgColor}) => {
               borderColor: detected.color + '40',
             },
           ]}
-          onPress={handleDismiss}
+          onPress={handleOpenChat}
           activeOpacity={0.8}>
           <Text style={[styles.ctaBtnText, {color: detected.color}]}>
             {detected.cta}
@@ -265,6 +283,7 @@ const MoodPatternWarning = ({moodHistory, appBgColor}) => {
         <Icon name="close" size={14} color="#ccc" />
       </TouchableOpacity>
     </Animated.View>
+    </TouchableOpacity>
   );
 };
 

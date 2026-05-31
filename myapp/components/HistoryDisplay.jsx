@@ -220,7 +220,7 @@ const HistoryDisplay = ({moodHistory, onSelect, onDelete}) => {
           <Text style={styles.subtitle}>{moodHistory.length} entries recorded</Text>
         </View>
         <View style={styles.headerBadge}>
-          <Icon name="book-heart" size={20} color={ACCENT} />
+          <Icon name="book-open-page-variant" size={20} color={ACCENT} />
         </View>
       </View>
 

@@ -597,22 +597,54 @@ const getIncompleteMessage = vibe => {
   return INCOMPLETE_MESSAGES[vibe?.toLowerCase()] || INCOMPLETE_MESSAGES.default;
 };
 
+const buildWeeklyReview = ({
+  goalVibe,
+  goalCount,
+  totalLogs,
+  goalProgress,
+  weeklyMoodCounts = {},
+  weeklyBreakdown = [],
+}) => {
+  const goalKey = goalVibe?.toLowerCase();
+  const targetCount = totalLogs > 0 ? Math.ceil(totalLogs * COMPLETION_THRESHOLD) : 0;
+  const entriesNeeded = Math.max(0, targetCount - goalCount);
+  const topVibes = Object.entries(weeklyMoodCounts || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+  const bestGoalDay = (weeklyBreakdown || []).reduce((best, day) => {
+    const dayFrequency = day?.mood_frequency || {};
+    const count = dayFrequency[goalKey] || dayFrequency[goalVibe] || 0;
+    return count > (best?.count || 0) ? {...day, count} : best;
+  }, null);
+
+  return {
+    percent: Math.round(goalProgress * 100),
+    targetPercent: Math.round(COMPLETION_THRESHOLD * 100),
+    entriesNeeded,
+    topVibes,
+    bestGoalDay,
+  };
+};
+
 const IncompleteContent = ({
   goalVibe,
   goalCount,
   totalLogs,
   goalProgress,
   goalFailed,
+  weeklyMoodCounts,
+  weeklyBreakdown,
   onClose,
 }) => {
   const meta = getMeta(goalVibe);
+  const [showReview, setShowReview] = useState(false);
   const msg = goalFailed
     ? {
-        headline: 'Goal Failed This Week',
+        headline: 'Fresh Start This Week',
         body:
-          'The 7-day focus ended before this vibe reached the target. That is useful feedback, not a dead end.',
-        tip: 'Start a fresh weekly focus or choose a vibe that matches what you need next.',
-        icon: 'flag-outline',
+          'The 7-day focus wrapped before this vibe reached the target. That is useful feedback, not a dead end.',
+        tip: 'Choose a fresh feel-good focus, or keep this vibe and make it easier to notice tomorrow.',
+        icon: 'creation-outline',
       }
     : getIncompleteMessage(goalVibe);
   const percent = Math.round(goalProgress * 100);
@@ -640,8 +672,99 @@ const IncompleteContent = ({
   }, []);
 
   // Simple arc progress indicator
-  const arcSize = 120;
   const clampedPct = Math.min(percent, 99);
+  const review = buildWeeklyReview({
+    goalVibe,
+    goalCount,
+    totalLogs,
+    goalProgress,
+    weeklyMoodCounts,
+    weeklyBreakdown,
+  });
+
+  const handlePrimaryPress = () => {
+    if (goalFailed && !showReview) {
+      setShowReview(true);
+      return;
+    }
+    onClose();
+  };
+
+  if (goalFailed && showReview) {
+    return (
+      <Animated.View
+        style={[
+          incompleteStyles.container,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+        ]}>
+        <View style={[incompleteStyles.reviewIcon, { backgroundColor: meta.color + '18' }]}>
+          <Icon name="clipboard-text-search-outline" size={34} color={meta.darkColor} />
+        </View>
+
+        <Text style={incompleteStyles.headline}>Your Week in Review</Text>
+        <Text style={incompleteStyles.vibe} numberOfLines={1}>
+          {goalVibe?.toUpperCase()} goal - {review.percent}% of entries
+        </Text>
+
+        <View style={incompleteStyles.reviewGrid}>
+          <View style={incompleteStyles.reviewStat}>
+            <Text style={[incompleteStyles.reviewStatValue, { color: meta.darkColor }]}>
+              {goalCount}/{totalLogs}
+            </Text>
+            <Text style={incompleteStyles.reviewStatLabel}>target vibe logs</Text>
+          </View>
+          <View style={incompleteStyles.reviewStat}>
+            <Text style={[incompleteStyles.reviewStatValue, { color: meta.darkColor }]}>
+              {review.entriesNeeded}
+            </Text>
+            <Text style={incompleteStyles.reviewStatLabel}>more to hit {review.targetPercent}%</Text>
+          </View>
+        </View>
+
+        <View style={incompleteStyles.reviewCard}>
+          <Text style={incompleteStyles.reviewCardTitle}>What showed up most</Text>
+          {review.topVibes.length > 0 ? (
+            review.topVibes.map(([vibe, count]) => (
+              <View key={vibe} style={incompleteStyles.reviewRow}>
+                <Text style={incompleteStyles.reviewRowText}>{vibe}</Text>
+                <Text style={[incompleteStyles.reviewRowCount, { color: getMeta(vibe).darkColor }]}>
+                  {count}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={incompleteStyles.reviewEmpty}>
+              No mood entries landed in this 7-day window.
+            </Text>
+          )}
+        </View>
+
+        <View style={[incompleteStyles.tipCard, { borderColor: meta.color + '50', backgroundColor: meta.color + '0E' }]}>
+          <Icon name="lightbulb-on-outline" size={18} color={meta.darkColor} style={{ marginRight: 10 }} />
+          <Text style={[incompleteStyles.tipText, { color: meta.darkColor }]}>
+            {review.bestGoalDay?.count > 0
+              ? `${goalVibe} appeared most on ${review.bestGoalDay.date?.slice(5)}. Try repeating what helped that day.`
+              : `Try making ${goalVibe} easier to notice: log one tiny moment when it appears, even if it is brief.`}
+          </Text>
+        </View>
+
+        <View style={incompleteStyles.footerRow}>
+          <TouchableOpacity
+            style={[incompleteStyles.keepBtn, { backgroundColor: meta.color }]}
+            onPress={onClose}
+            activeOpacity={0.8}>
+            <Text style={incompleteStyles.keepBtnText}>Done</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={incompleteStyles.dismissBtn}
+            onPress={() => setShowReview(false)}
+            activeOpacity={0.7}>
+            <Text style={incompleteStyles.dismissBtnText}>Back</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    );
+  }
 
   return (
     <Animated.View
@@ -692,10 +815,10 @@ const IncompleteContent = ({
       <View style={incompleteStyles.footerRow}>
         <TouchableOpacity
           style={[incompleteStyles.keepBtn, { backgroundColor: meta.color }]}
-          onPress={onClose}
+          onPress={handlePrimaryPress}
           activeOpacity={0.8}>
           <Text style={incompleteStyles.keepBtnText}>
-            {goalFailed ? 'Review this week' : 'Keep this goal 💪'}
+            {goalFailed ? 'Find the bright spot' : 'Keep this goal 💪'}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -799,6 +922,80 @@ const incompleteStyles = StyleSheet.create({
   },
   dismissBtn: { paddingVertical: 6 },
   dismissBtnText: { color: '#bbb', fontWeight: '600', fontSize: 14 },
+  reviewIcon: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  reviewGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+    marginBottom: 14,
+  },
+  reviewStat: {
+    flex: 1,
+    backgroundColor: '#f8f8ff',
+    borderWidth: 1,
+    borderColor: '#eeeeff',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  reviewStatValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    marginBottom: 3,
+  },
+  reviewStatLabel: {
+    fontSize: 10,
+    color: '#888',
+    fontWeight: '800',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  reviewCard: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  reviewCardTitle: {
+    fontSize: 13,
+    color: '#1a1a2e',
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 7,
+    borderTopWidth: 1,
+    borderTopColor: '#f2f2f7',
+  },
+  reviewRowText: {
+    color: '#555',
+    fontSize: 14,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  reviewRowCount: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  reviewEmpty: {
+    color: '#888',
+    fontSize: 13,
+    lineHeight: 20,
+  },
 });
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
@@ -813,6 +1010,8 @@ const GoalCompletionModal = ({
   moodHistory = [],
   onSaveInsight,
   goalFailed = false,
+  weeklyMoodCounts = {},
+  weeklyBreakdown = [],
 }) => {
   const isComplete = goalProgress >= COMPLETION_THRESHOLD;
   const isFailed = goalFailed && !isComplete;
@@ -872,7 +1071,7 @@ const GoalCompletionModal = ({
               mainStyles.strip,
               {
                 backgroundColor: isFailed
-                  ? '#d63031'
+                  ? '#f39c12'
                   : getMeta(goalVibe).color + (isComplete ? 'FF' : '55'),
               },
             ]}>
@@ -880,7 +1079,7 @@ const GoalCompletionModal = ({
               {isComplete
                 ? '🏆 Goal Achieved'
                 : isFailed
-                ? 'Goal Failed'
+                ? 'Fresh Start'
                 : '💪 Keep Going'}
             </Text>
             <TouchableOpacity onPress={handleClose} style={mainStyles.stripClose}>
@@ -910,6 +1109,8 @@ const GoalCompletionModal = ({
                 totalLogs={totalLogs}
                 goalProgress={goalProgress}
                 goalFailed={isFailed}
+                weeklyMoodCounts={weeklyMoodCounts}
+                weeklyBreakdown={weeklyBreakdown}
                 onClose={handleClose}
               />
             )}

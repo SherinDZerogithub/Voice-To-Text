@@ -12,14 +12,30 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 // ─── Vibe metadata (mirrors backend VIBE_META) ────────────────────────────────
 
 const VIBE_META = {
-  calm:        { color: '#A8E6CF', emoji: '😌' },
-  peaceful:    { color: '#B2E2F2', emoji: '🕊️' },
-  serene:      { color: '#D4F1F4', emoji: '🧘' },
+  calm: {color: '#A8E6CF', emoji: '😌', quote: 'Find your inner peace.'},
+  peaceful: {color: '#B2E2F2', emoji: '🕊️', quote: 'Embrace tranquility.'},
+  serene: {
+    color: '#D4F1F4',
+    emoji: '🧘',
+    quote: 'A calm mind brings inner strength.',
+  },
   minimalist:  { color: '#D0D0D0', emoji: '⚪' },
-  happy:       { color: '#FFDE7D', emoji: '😊' },
-  energetic:   { color: '#FFD93D', emoji: '⚡' },
-  playful:     { color: '#FF8B94', emoji: '🎈' },
-  vibrant:     { color: '#6BCB77', emoji: '🌈' },
+  happy: {color: '#FFDE7D', emoji: '😊', quote: 'Choose joy every day.'},
+  energetic: {
+    color: '#FFD93D',
+    emoji: '⚡',
+    quote: 'Spark your day with energy.',
+  },
+  playful: {
+    color: '#FF8B94',
+    emoji: '🎈',
+    quote: 'Life is better when you are laughing.',
+  },
+  vibrant: {
+    color: '#6BCB77',
+    emoji: '🌈',
+    quote: 'Shine bright and live colorfully.',
+  },
   sad:         { color: '#A2D2FF', emoji: '😢' },
   lonely:      { color: '#6C757D', emoji: '👤' },
   pensive:     { color: '#4A4E69', emoji: '🤔' },
@@ -29,19 +45,27 @@ const VIBE_META = {
   intense:     { color: '#FF4D4D', emoji: '🔥' },
   gritty:      { color: '#545B64', emoji: '⛓️' },
   nostalgic:   { color: '#FFAAA5', emoji: '📺' },
-  romantic:    { color: '#FFB7B2', emoji: '❤️' },
+  romantic: {color: '#FFB7B2', emoji: '❤️', quote: 'Love is in the air.'},
   mystical:    { color: '#9D4EDD', emoji: '✨' },
   vintage:     { color: '#B08968', emoji: '🎞️' },
-  cozy:        { color: '#E6A15C', emoji: '🕯️' },
-  ethereal:    { color: '#B8C0FF', emoji: '🌫️' },
+  cozy: {color: '#E6A15C', emoji: '🕯️', quote: 'Snuggle up and feel content.'},
+  ethereal: {
+    color: '#B8C0FF',
+    emoji: '🌫️',
+    quote: 'Dream beyond the ordinary.',
+  },
   melancholic: { color: '#4E6E81', emoji: '🥀' },
   industrial:  { color: '#545B64', emoji: '⚙️' },
-  natural:     { color: '#4A7C59', emoji: '🌲' },
+  natural: {color: '#4A7C59', emoji: '🌲', quote: 'Connect with the earth.'},
   futuristic:  { color: '#00F5D4', emoji: '🤖' },
-  bold:        { color: '#F15BB5', emoji: '🏎️' },
+  bold: {color: '#F15BB5', emoji: '🏎️', quote: 'Be brave, be bold.'},
   solitary:    { color: '#8D99AE', emoji: '🏔️' },
   tense:       { color: '#D90429', emoji: '⚠️' },
-  hopeful:     { color: '#FEE440', emoji: '🌅' },
+  hopeful: {
+    color: '#FEE440',
+    emoji: '🌅',
+    quote: 'Hope is the last thing ever lost.',
+  },
 };
 
 // ─── Time-of-day suggestion slots ─────────────────────────────────────────────
@@ -55,7 +79,7 @@ const TIME_SLOTS = [
     accent: '#FFD93D',
     headline: 'Start with intention',
     description: 'The day is fresh — how do you want to feel?',
-    vibes: ['hopeful', 'calm', 'energetic', 'serene', 'peaceful'],
+    vibes: ['hopeful', 'calm', 'energetic', 'serene', 'peaceful'], // All positive
   },
   {
     id: 'morning',
@@ -65,7 +89,7 @@ const TIME_SLOTS = [
     accent: '#FFB347',
     headline: 'Morning momentum',
     description: 'Great time to harness positive energy.',
-    vibes: ['energetic', 'happy', 'vibrant', 'bold', 'playful'],
+    vibes: ['energetic', 'happy', 'vibrant', 'bold', 'playful'], // All positive
   },
   {
     id: 'afternoon',
@@ -75,7 +99,7 @@ const TIME_SLOTS = [
     accent: '#74B9FF',
     headline: 'Midday check-in',
     description: 'Ground yourself through the busiest part of the day.',
-    vibes: ['calm', 'natural', 'hopeful', 'pensive', 'cozy'],
+    vibes: ['calm', 'natural', 'hopeful', 'minimalist', 'cozy'], // Positive and neutral
   },
   {
     id: 'evening',
@@ -85,7 +109,7 @@ const TIME_SLOTS = [
     accent: '#FD79A8',
     headline: 'Wind down rituals',
     description: 'Reflect and let the day soften.',
-    vibes: ['nostalgic', 'romantic', 'cozy', 'peaceful', 'ethereal'],
+    vibes: ['nostalgic', 'romantic', 'cozy', 'peaceful', 'ethereal'], // Positive and neutral
   },
   {
     id: 'night',
@@ -95,7 +119,7 @@ const TIME_SLOTS = [
     accent: '#A29BFE',
     headline: 'Quiet hours',
     description: 'Late night moods carry a different weight.',
-    vibes: ['mystical', 'solitary', 'melancholic', 'pensive', 'serene'],
+    vibes: ['serene', 'peaceful', 'calm', 'ethereal', 'cozy'], // All positive
   },
 ];
 
@@ -112,7 +136,14 @@ const getCurrentSlot = () => {
 
 // ─── VibeChip ─────────────────────────────────────────────────────────────────
 
-const VibeChip = ({ vibe, isGoal, isSelected, onPress, delay = 0 }) => {
+const VibeChip = ({
+  vibe,
+  isGoal,
+  isSelected,
+  onPress,
+  onLongPress,
+  delay = 0,
+}) => {
   const meta = VIBE_META[vibe] || { color: '#6c5ce7', emoji: '🌈' };
   const scaleAnim = useRef(new Animated.Value(0.7)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -164,6 +195,7 @@ const VibeChip = ({ vibe, isGoal, isSelected, onPress, delay = 0 }) => {
         transform: [{ scale: scaleAnim }],
       }}>
       <TouchableOpacity
+        onLongPress={() => onLongPress?.(vibe)}
         onPress={() => onPress(vibe)}
         activeOpacity={0.75}
         style={[
@@ -260,20 +292,23 @@ const VibeSuggestions = ({
   style,
 }) => {
   const slot = useMemo(() => getCurrentSlot(), []);
-  const goalVibe = moodGoal?.vibe?.toLowerCase() || null;
+  const goalVibes = (
+    Array.isArray(moodGoal?.vibes) && moodGoal.vibes.length > 0
+      ? moodGoal.vibes
+      : moodGoal?.vibe
+      ? [moodGoal.vibe]
+      : []
+  )
+    .map(vibe => vibe?.toLowerCase())
+    .filter(Boolean)
+    .slice(0, 3);
 
   // Merge goal vibe into suggestions (always show goal first if not already present)
   const suggestions = useMemo(() => {
     const base = [...slot.vibes];
-    if (goalVibe && !base.includes(goalVibe)) {
-      base.unshift(goalVibe);
-    } else if (goalVibe && base.includes(goalVibe)) {
-      // float goal to front
-      const filtered = base.filter(v => v !== goalVibe);
-      return [goalVibe, ...filtered];
-    }
-    return base;
-  }, [slot.vibes, goalVibe]);
+    const filtered = base.filter(vibe => !goalVibes.includes(vibe));
+    return [...goalVibes, ...filtered];
+  }, [slot.vibes, goalVibes]);
 
   const [selectedVibe, setSelectedVibe] = useState(null);
   const [goalToast, setGoalToast] = useState('');
@@ -311,17 +346,29 @@ const VibeSuggestions = ({
 
   const handleChipPress = vibe => {
     setSelectedVibe(prev => (prev === vibe ? null : vibe));
-    onSelectVibe && onSelectVibe(vibe);
+    onSelectVibe?.(vibe);
+    const meta = VIBE_META[vibe];
+    if (meta?.quote) showToast(meta.quote);
   };
 
   const handleChipLongPress = vibe => {
     if (!onUpdateGoal) return;
-    onUpdateGoal(vibe);
-    showToast(`🎯 Goal set to "${vibe}"`);
+    const nextGoals = goalVibes.includes(vibe)
+      ? goalVibes.filter(goal => goal !== vibe)
+      : goalVibes.length >= 3
+      ? null
+      : [...goalVibes, vibe];
+    if (!nextGoals || nextGoals.length === 0) return;
+    onUpdateGoal(nextGoals);
+    const toastMessage = nextGoals.includes(vibe)
+      ? `🎯 Added "${vibe}" to goals`
+      : `Removed "${vibe}" from goals`;
+    showToast(toastMessage);
   };
 
   // Is the goal vibe in today's suggestions?
-  const goalAligned = goalVibe && suggestions.includes(goalVibe);
+  const alignedGoals = goalVibes.filter(vibe => suggestions.includes(vibe));
+  const goalAligned = alignedGoals.length > 0;
 
   return (
     <Animated.View
@@ -358,7 +405,9 @@ const VibeSuggestions = ({
           <Text style={styles.goalBannerText}>
             Your goal vibe{' '}
             <Text style={styles.goalBannerBold}>
-              {VIBE_META[goalVibe]?.emoji} {goalVibe}
+              {alignedGoals
+                .map(vibe => `${VIBE_META[vibe]?.emoji} ${vibe}`)
+                .join(', ')}
             </Text>{' '}
             fits this time of day ✨
           </Text>
@@ -374,7 +423,7 @@ const VibeSuggestions = ({
           <VibeChip
             key={vibe}
             vibe={vibe}
-            isGoal={vibe === goalVibe}
+            isGoal={goalVibes.includes(vibe)}
             isSelected={selectedVibe === vibe}
             onPress={handleChipPress}
             onLongPress={handleChipLongPress}

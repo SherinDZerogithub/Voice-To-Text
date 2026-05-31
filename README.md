@@ -61,8 +61,8 @@ The app uses `http://10.0.2.2:8000` for Android emulator backend access and `htt
 ## Useful Checks
 
 ```powershell
-python -m compileall backend -x "venv"
 cd backend
+python -m compileall auth.py database.py main.py models.py new_endpoints.py schemas.py verify_auth.py check_db.py
 .\venv\Scripts\python.exe -c "import main; print(main.app.title)"
 cd ..\myapp
 npm test

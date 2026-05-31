@@ -36,6 +36,12 @@ import WeeklySummaryCard from './components/WeeklySummaryCard';
 import MoodForecastCard from './components/MoodForecastCard';
 import HabitRecommendations from './components/HabitRecommendations';
 import TriggerInsightsCard from './components/TriggerInsightsCard';
+import MoodDice from './components/MoodDice';
+import MoodJar from './components/MoodJar';
+import MoodTwin from './components/MoodTwin';
+import MoodGarden from './components/MoodGarden';
+import GoalAlignmentRing from './components/GoalAlignmentRing';
+import CelebrationCorner from './components/CelebrationCorner';
 
 // RN 0.71+ expects native event modules to expose listener stubs.
 // We stub common module names used by voice libraries to prevent NativeEventEmitter warnings.
@@ -73,11 +79,14 @@ const App = () => {
   const [isListening, setIsListening] = useState(false);
   const [text, setText] = useState('');
   const [appBgColor, setAppBgColor] = useState('#f5f5f5');
-  const [moodGoal, setMoodGoal] = useState(null); // { vibe: string }
+  const [moodGoal, setMoodGoal] = useState(null); // { vibe: string, vibes: string[] }
   const [analyticsData, setAnalyticsData] = useState(null); // New state for analytics
   const [crisisAlert, setCrisisAlert] = useState(null);
+  const [chatInitialPrompt, setChatInitialPrompt] = useState('');
+  const [gratitudeGems, setGratitudeGems] = useState([]);
+  const moodGoalRequestId = useRef(0);
 
-  const [activeTab, setActiveTab] = useState('home'); // 'home', 'history', 'analytics'
+  const [activeTab, setActiveTab] = useState('home'); // 'home', 'chat', 'history', 'analytics'
 
   // Check if a mood has been logged today
   const hasLoggedToday = useMemo(() => {
@@ -89,12 +98,72 @@ const App = () => {
     });
   }, [moodHistory]);
 
+  const journeyAnalyticsData = useMemo(() => {
+    const moodFrequency = analyticsData?.mood_frequency || {};
+    const vibeBreakdown = Object.entries(moodFrequency)
+      .map(([label, count]) => ({label, count}))
+      .sort((a, b) => b.count - a.count);
+
+    const entryDays = Array.from(
+      new Set(
+        moodHistory
+          .map(item => {
+            const date = item.rawTimestamp ? new Date(item.rawTimestamp) : null;
+            return date && !Number.isNaN(date.getTime())
+              ? date.toISOString().slice(0, 10)
+              : null;
+          })
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => (a < b ? 1 : -1));
+
+    let consecutiveDays = 0;
+    if (entryDays.length > 0) {
+      const cursor = new Date(entryDays[0]);
+      for (const day of entryDays) {
+        const expected = cursor.toISOString().slice(0, 10);
+        if (day !== expected) {
+          break;
+        }
+        consecutiveDays += 1;
+        cursor.setDate(cursor.getDate() - 1);
+      }
+    }
+
+    const goalVibes = moodGoal?.vibes?.length
+      ? moodGoal.vibes
+      : moodGoal?.vibe
+      ? [moodGoal.vibe]
+      : [];
+    const totalEntries = analyticsData?.total_entries || 0;
+    const goalEntries = vibeBreakdown
+      .filter(vibe => goalVibes.includes(vibe.label.toLowerCase()))
+      .reduce((sum, vibe) => sum + vibe.count, 0);
+    const goalTarget = Math.max(totalEntries * 0.5, 5);
+
+    return {
+      ...analyticsData,
+      total_entries: totalEntries,
+      vibe_breakdown: vibeBreakdown,
+      consecutive_days: analyticsData?.consecutive_days || consecutiveDays,
+      goal_completed:
+        analyticsData?.goal_completed ||
+        (goalTarget > 0 && goalEntries >= goalTarget),
+      gratitude_count: analyticsData?.gratitude_count || gratitudeGems.length,
+    };
+  }, [analyticsData, gratitudeGems.length, moodGoal, moodHistory]);
+
   // Configuration for Backend
   // Note: 10.0.2.2 is the localhost for Android emulator.
   const BACKEND_URL =
     Platform.OS === 'android'
       ? 'http://10.0.2.2:8000'
       : 'http://localhost:8000';
+
+  const handleOpenChat = useCallback((prompt = '') => {
+    setChatInitialPrompt(prompt);
+    setActiveTab('chat');
+  }, []);
 
   const fetchMoodGoal = useCallback(
     async (authToken = token) => {
@@ -119,10 +188,24 @@ const App = () => {
   );
 
   const updateMoodGoal = useCallback(
-    async vibe => {
+    async vibes => {
       if (!token) {
         return;
       }
+      const selectedVibes = (Array.isArray(vibes) ? vibes : [vibes])
+        .map(vibe => vibe?.toString().trim().toLowerCase())
+        .filter(Boolean)
+        .slice(0, 3);
+      if (selectedVibes.length === 0) {
+        return;
+      }
+      const requestId = moodGoalRequestId.current + 1;
+      moodGoalRequestId.current = requestId;
+      setMoodGoal(current => ({
+        ...current,
+        vibe: selectedVibes[0],
+        vibes: selectedVibes,
+      }));
       try {
         const response = await fetch(`${BACKEND_URL}/mood-goal`, {
           method: 'PUT',
@@ -130,11 +213,13 @@ const App = () => {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({vibe}),
+          body: JSON.stringify({vibes: selectedVibes}),
         });
         if (response.ok) {
           const data = await response.json();
-          setMoodGoal(data);
+          if (moodGoalRequestId.current === requestId) {
+            setMoodGoal(data);
+          }
         }
       } catch (error) {
         console.error('Failed to update mood goal:', error);
@@ -416,7 +501,7 @@ const App = () => {
         const journalPayload = extractJournalPayload(
           journalPromptsRef.current?.getAnswers?.() || {},
         );
-        
+
         const response = await fetch(`${BACKEND_URL}/mood-log`, {
           method: 'POST',
           headers: {
@@ -475,7 +560,72 @@ const App = () => {
         console.warn('Mood log save failed:', error.message || error);
       }
     },
-    [BACKEND_URL, extractJournalPayload, formatMoodHistoryItem, token, moodHistory],
+    [
+      BACKEND_URL,
+      extractJournalPayload,
+      formatMoodHistoryItem,
+      token,
+      moodHistory,
+    ],
+  );
+
+  const saveInteractiveMoodEntry = useCallback(
+    async ({
+      vibe,
+      emoji = '',
+      caption,
+      description = '',
+      reflection = '',
+      color = DESIGN_TOKENS.primary,
+      sceneTags = [],
+    }) => {
+      if (!token) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/mood-log`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            vibe,
+            emoji,
+            short_caption: caption || description || vibe,
+            color,
+            scene_tags: sceneTags,
+            timestamp: new Date().toISOString(),
+            description,
+            reflection,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(
+            `Failed to save interactive entry: ${response.status} ${errorText}`,
+          );
+        }
+
+        const savedLog = await response.json();
+        const formatted = formatMoodHistoryItem(savedLog, emoji);
+        setMoodHistory(prev =>
+          prev.some(item => item.id === formatted.id)
+            ? prev
+            : [formatted, ...prev],
+        );
+        setMoodData(prev => ({...prev, ...formatted}));
+        fetchAnalyticsData(token);
+      } catch (error) {
+        console.warn(
+          'Interactive mood entry save failed:',
+          error.message || error,
+        );
+      }
+    },
+    [BACKEND_URL, fetchAnalyticsData, formatMoodHistoryItem, token],
   );
 
   const onSpeechStart = useCallback(() => {
@@ -807,11 +957,18 @@ const App = () => {
     // Crisis check runs in parallel — non-blocking
     fetch(`${BACKEND_URL}/crisis-check`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({text: transcript}),
     })
       .then(r => r.json())
-      .then(d => { if (d.is_crisis) setCrisisAlert(d); })
+      .then(d => {
+        if (d.is_crisis) {
+          setCrisisAlert(d);
+        }
+      })
       .catch(() => {});
 
     setIsAnalyzing(true);
@@ -837,7 +994,9 @@ const App = () => {
         } catch {
           // Keep the raw server response when it is not JSON.
         }
-        throw new Error(`Server analysis error: ${response.status} ${errorDetail}`);
+        throw new Error(
+          `Server analysis error: ${response.status} ${errorDetail}`,
+        );
       }
 
       const data = await response.json();
@@ -1118,6 +1277,9 @@ const App = () => {
       marginBottom: 28,
       paddingHorizontal: 2,
     },
+    featureBlock: {
+      width: '100%',
+    },
     tabBar: {
       flexDirection: 'row',
       backgroundColor: DESIGN_TOKENS.surface,
@@ -1340,6 +1502,78 @@ const App = () => {
     // Could add analytics tracking here
   }, []);
 
+  const handleInteractiveTabChange = useCallback(tabId => {
+    setActiveTab(tabId === 'journal' ? 'history' : tabId);
+  }, []);
+
+  const handleMoodTwinCheckIn = useCallback(
+    checkIn => {
+      saveInteractiveMoodEntry({
+        vibe: checkIn.mood || 'neutral',
+        emoji:
+          checkIn.mood === 'happy' ? '🙂' : checkIn.mood === 'sad' ? '💙' : '',
+        caption: checkIn.response,
+        description: checkIn.response,
+        reflection: checkIn.response,
+        sceneTags: ['mood-twin', 'quick-check-in'],
+      });
+      if (['sad', 'anxious'].includes(checkIn.mood)) {
+        handleOpenChat(
+          `I'm feeling ${checkIn.mood}. Can you help me breathe for a minute?`,
+        );
+      }
+    },
+    [handleOpenChat, saveInteractiveMoodEntry],
+  );
+
+  const handleMoodDiceJournalEntry = useCallback(
+    entry => {
+      saveInteractiveMoodEntry({
+        vibe:
+          entry.category === 'gratitude' || entry.category === 'positive'
+            ? 'grateful'
+            : 'reflective',
+        emoji: '✍️',
+        caption: entry.prompt,
+        description: `${entry.prompt}\n\n${entry.response}`,
+        reflection: entry.response,
+        sceneTags: ['mood-dice', entry.category],
+        color: '#FFD93D',
+      });
+      setActiveTab('history');
+    },
+    [saveInteractiveMoodEntry],
+  );
+
+  const handleGemAdded = useCallback(
+    gem => {
+      setGratitudeGems(prev => [gem, ...prev].slice(0, 7));
+      saveInteractiveMoodEntry({
+        vibe: 'grateful',
+        emoji: '💎',
+        caption: 'Gratitude gem',
+        description: gem.text,
+        reflection: gem.text,
+        sceneTags: ['gratitude-jar'],
+        color: gem.color || '#FFD93D',
+      });
+    },
+    [saveInteractiveMoodEntry],
+  );
+
+  const handlePlantTap = useCallback(
+    plant => {
+      const matchingEntry = moodHistory.find(
+        item => item.vibe?.toLowerCase() === plant.label?.toLowerCase(),
+      );
+      if (matchingEntry) {
+        setSelectedHistoryItem(matchingEntry);
+        setActiveTab('history');
+      }
+    },
+    [moodHistory],
+  );
+
   if (!isAuthenticated) {
     return (
       <AuthScreen
@@ -1357,17 +1591,42 @@ const App = () => {
   const renderContent = () => {
     if (activeTab === 'analytics') {
       return (
-        <AnalyticsDisplay
-          analyticsData={analyticsData}
-          appBgColor={appBgColor}
-          isLoading={!analyticsData}
-          onRefresh={() => fetchAnalyticsData(token)}
-          moodGoal={moodGoal}
-          onUpdateGoal={updateMoodGoal}
-          moodHistory={moodHistory}
-          token={token}
-          backendUrl={BACKEND_URL}
-        />
+        <>
+          <View style={styles.featureBlock}>
+            <MoodGarden
+              analyticsData={journeyAnalyticsData}
+              moodHistory={moodHistory}
+              onPlantTap={handlePlantTap}
+            />
+          </View>
+
+          <View style={styles.featureBlock}>
+            <GoalAlignmentRing
+              moodGoal={moodGoal}
+              analyticsData={journeyAnalyticsData}
+              onGoalUpdate={updateMoodGoal}
+            />
+          </View>
+
+          <View style={styles.featureBlock}>
+            <CelebrationCorner
+              analyticsData={journeyAnalyticsData}
+              moodHistory={moodHistory}
+            />
+          </View>
+
+          <AnalyticsDisplay
+            analyticsData={analyticsData}
+            appBgColor={appBgColor}
+            isLoading={!analyticsData}
+            onRefresh={() => fetchAnalyticsData(token)}
+            moodGoal={moodGoal}
+            onUpdateGoal={updateMoodGoal}
+            moodHistory={moodHistory}
+            token={token}
+            backendUrl={BACKEND_URL}
+          />
+        </>
       );
     } else if (activeTab === 'history') {
       if (selectedHistoryItem) {
@@ -1401,148 +1660,185 @@ const App = () => {
           onDelete={deleteMoodEntry}
         />
       );
-     } else {
-       return (
-         <>
-           {/* Weekly AI Summary */}
-           <WeeklySummaryCard token={token} backendUrl={BACKEND_URL} />
+    } else {
+      return (
+        <>
+          <View style={styles.featureBlock}>
+            <MoodTwin
+              onCheckIn={handleMoodTwinCheckIn}
+              onTabChange={handleInteractiveTabChange}
+            />
+          </View>
 
-           {/* Mood Forecast */}
-           <MoodForecastCard token={token} backendUrl={BACKEND_URL} />
+          <View style={styles.featureBlock}>
+            <MoodDice
+              onJournalEntry={handleMoodDiceJournalEntry}
+              onTabChange={handleInteractiveTabChange}
+            />
+          </View>
 
-           {/* Habit Recommendations */}
-           <HabitRecommendations
-             token={token}
-             backendUrl={BACKEND_URL}
-             moodHistory={moodHistory}
-             moodGoal={moodGoal}
-           />
+          <View style={styles.featureBlock}>
+            <MoodJar
+              onGemAdded={handleGemAdded}
+              onJarFull={() => {
+                fetchAnalyticsData(token);
+                setActiveTab('analytics');
+              }}
+            />
+          </View>
 
-           {/* Trigger Insights */}
-           <TriggerInsightsCard
-             token={token}
-             backendUrl={BACKEND_URL}
-             days={30}
-           />
+          {/* Weekly AI Summary */}
+          <WeeklySummaryCard token={token} backendUrl={BACKEND_URL} />
 
-           {/* Streak & Badges Overview */}
-           <StreakBadges
-             moodHistory={moodHistory}
-             userName={userName}
-             appBgColor={appBgColor}
-             onPressBadge={handleBadgePress}
-           />
+          {/* Mood Forecast */}
+          <MoodForecastCard token={token} backendUrl={BACKEND_URL} />
 
-           {/* Mood Companion — contextual question */}
-           <MoodCompanion
-             moodHistory={moodHistory}
-             userName={userName}
-             token={token}
-             backendUrl={BACKEND_URL}
-             onQuestionSelect={setText}
-             appBgColor={appBgColor}
-           />
+          {/* Habit Recommendations */}
+          <HabitRecommendations
+            token={token}
+            backendUrl={BACKEND_URL}
+            moodHistory={moodHistory}
+            moodGoal={moodGoal}
+          />
 
-           {!hasLoggedToday && (
-             <View style={styles.checkInBanner}>
-               <View style={styles.checkInAccent} />
-               <View style={styles.checkInIconContainer}>
-                 <Icon name="star-shooting" size={20} color={DESIGN_TOKENS.primary} />
-               </View>
-               <View style={{flex: 1}}>
-                 <Text style={styles.checkInText}>How are you feeling today?</Text>
-                 <Text style={styles.checkInSub}>Tap the mic to start your check-in</Text>
-               </View>
-             </View>
-           )}
-           <MoodPatternWarning
-             moodHistory={moodHistory}
-             appBgColor={appBgColor}
-           />
-           <VibeSuggestions
-             moodGoal={moodGoal}
-             onSelectVibe={handleVibeSelect}
-             onUpdateGoal={updateMoodGoal}
-             appBgColor={appBgColor}
-           />
-           <VoiceInput
-             text={text}
-             onChangeText={setText}
-             isListening={isListening}
-             onStartListening={startListening}
-             onStopListening={stopListening}
-             onAnalyze={() => analyzeMood(text)}
-             isAnalyzing={isAnalyzing}
-             appBgColor={appBgColor}
-             shortDescription={moodData?.short_description}
-             longDescription={moodData?.description}
-           />
+          {/* Trigger Insights */}
+          <TriggerInsightsCard
+            token={token}
+            backendUrl={BACKEND_URL}
+            days={30}
+          />
 
-           <Text style={styles.statusText}>
-             {isListening
-               ? 'Recording active...'
-               : isVoiceAvailable
-               ? 'Tap button to start'
-               : 'Speech recognition unavailable'}
-           </Text>
-           {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+          {/* Streak & Badges Overview */}
+          <StreakBadges
+            moodHistory={moodHistory}
+            userName={userName}
+            appBgColor={appBgColor}
+            onPressBadge={handleBadgePress}
+          />
 
-           {!!crisisAlert && (
-             <View style={styles.crisisBanner}>
-               <Text style={styles.crisisBannerText}>{crisisAlert.message}</Text>
-               {crisisAlert.resources?.map((r, i) => (
-                 <Text key={i} style={styles.crisisResource}>• {r.name}: {r.contact}</Text>
-               ))}
-               <TouchableOpacity onPress={() => setCrisisAlert(null)} style={styles.crisisDismiss}>
-                 <Text style={styles.crisisDismissText}>Dismiss</Text>
-               </TouchableOpacity>
-             </View>
-           )}
+          {/* Mood Companion — contextual question */}
+          <MoodCompanion
+            moodHistory={moodHistory}
+            userName={userName}
+            token={token}
+            backendUrl={BACKEND_URL}
+            onQuestionSelect={setText}
+            appBgColor={appBgColor}
+          />
 
-           <MoodResult
-             moodData={moodData}
-             token={token}
-             backendUrl={BACKEND_URL}
-             isAnalyzing={isAnalyzing}
-             isListening={isListening}
-             hasText={text.length > 0}
-             setAppBgColor={setAppBgColor}
-             appBgColor={appBgColor}
-           />
+          {!hasLoggedToday && (
+            <View style={styles.checkInBanner}>
+              <View style={styles.checkInAccent} />
+              <View style={styles.checkInIconContainer}>
+                <Icon
+                  name="star-shooting"
+                  size={20}
+                  color={DESIGN_TOKENS.primary}
+                />
+              </View>
+              <View style={{flex: 1}}>
+                <Text style={styles.checkInText}>
+                  How are you feeling today?
+                </Text>
+                <Text style={styles.checkInSub}>
+                  Tap the mic to start your check-in
+                </Text>
+              </View>
+            </View>
+          )}
+          <MoodPatternWarning
+            moodHistory={moodHistory}
+            appBgColor={appBgColor}
+            onOpenChat={handleOpenChat}
+          />
+          <VibeSuggestions
+            moodGoal={moodGoal}
+            onSelectVibe={handleVibeSelect}
+            onUpdateGoal={updateMoodGoal}
+            appBgColor={appBgColor}
+          />
+          <VoiceInput
+            text={text}
+            onChangeText={setText}
+            isListening={isListening}
+            onStartListening={startListening}
+            onStopListening={stopListening}
+            onAnalyze={() => analyzeMood(text)}
+            isAnalyzing={isAnalyzing}
+            appBgColor={appBgColor}
+            shortDescription={moodData?.short_description}
+            longDescription={moodData?.description}
+          />
 
-           <AffirmationBanner
-             ref={affirmationRef}
-             vibe={moodData?.vibe}
-             moodColor={moodData?.color}
-             token={token}
-             backendUrl={BACKEND_URL}
-             savedAffirmation={moodData?.gentle_reminder}
-           />
+          <Text style={styles.statusText}>
+            {isListening
+              ? 'Recording active...'
+              : isVoiceAvailable
+              ? 'Tap button to start'
+              : 'Speech recognition unavailable'}
+          </Text>
+          {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
 
-           <JournalPrompts
-             ref={journalPromptsRef}
-             vibe={moodData?.vibe}
-             description={moodData?.description}
-             token={token}
-             backendUrl={BACKEND_URL}
-             savedReflection={moodData?.reflection}
-             savedDoodles={moodData?.doodles}
-             onJournalChange={saveJournalForCurrentMood}
-           />
+          {!!crisisAlert && (
+            <View style={styles.crisisBanner}>
+              <Text style={styles.crisisBannerText}>{crisisAlert.message}</Text>
+              {crisisAlert.resources?.map((r, i) => (
+                <Text key={i} style={styles.crisisResource}>
+                  • {r.name}: {r.contact}
+                </Text>
+              ))}
+              <TouchableOpacity
+                onPress={() => setCrisisAlert(null)}
+                style={styles.crisisDismiss}>
+                <Text style={styles.crisisDismissText}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
-           <ImageGallery
-             images={images}
-             sampleImages={SAMPLE_IMAGES}
-             onCapture={handleCaptureImage}
-             onSelect={handleSelectImage}
-             onAnalyzeImage={analyzeImageDescription}
-             isCapturingImage={isCapturingImage}
-             isSelectingImage={isSelectingImage}
-             isAnalyzing={isAnalyzing}
-           />
-         </>
-       );
-     }
+          <MoodResult
+            moodData={moodData}
+            token={token}
+            backendUrl={BACKEND_URL}
+            isAnalyzing={isAnalyzing}
+            isListening={isListening}
+            hasText={text.length > 0}
+            setAppBgColor={setAppBgColor}
+            appBgColor={appBgColor}
+          />
+
+          <AffirmationBanner
+            ref={affirmationRef}
+            vibe={moodData?.vibe}
+            moodColor={moodData?.color}
+            token={token}
+            backendUrl={BACKEND_URL}
+            savedAffirmation={moodData?.gentle_reminder}
+          />
+
+          <JournalPrompts
+            ref={journalPromptsRef}
+            vibe={moodData?.vibe}
+            description={moodData?.description}
+            token={token}
+            backendUrl={BACKEND_URL}
+            savedReflection={moodData?.reflection}
+            savedDoodles={moodData?.doodles}
+            onJournalChange={saveJournalForCurrentMood}
+          />
+
+          <ImageGallery
+            images={images}
+            sampleImages={SAMPLE_IMAGES}
+            onCapture={handleCaptureImage}
+            onSelect={handleSelectImage}
+            onAnalyzeImage={analyzeImageDescription}
+            isCapturingImage={isCapturingImage}
+            isSelectingImage={isSelectingImage}
+            isAnalyzing={isAnalyzing}
+          />
+        </>
+      );
+    }
   };
 
   return (
@@ -1553,7 +1849,11 @@ const App = () => {
           token={token}
           backendUrl={BACKEND_URL}
           vibeContext={moodData?.vibe}
-          onClose={() => setActiveTab('home')}
+          initialPrompt={chatInitialPrompt}
+          onClose={() => {
+            setActiveTab('home');
+            setChatInitialPrompt('');
+          }}
         />
       ) : (
         <ScrollView
@@ -1611,7 +1911,7 @@ const App = () => {
         {[
           {id: 'home', icon: 'home-variant', label: 'Home'},
           {id: 'chat', icon: 'chat-processing-outline', label: 'Chat'},
-          {id: 'history', icon: 'book-heart', label: 'Journal'},
+          {id: 'history', icon: 'book-open-page-variant', label: 'Journal'},
           {id: 'analytics', icon: 'chart-areaspline', label: 'Insights'},
         ].map(tab => {
           const active = activeTab === tab.id;
@@ -1621,10 +1921,28 @@ const App = () => {
               style={styles.tabItem}
               onPress={() => setActiveTab(tab.id)}
               activeOpacity={0.7}>
-              <View style={[styles.tabIconWrap, active && styles.tabIconWrapActive]}>
-                <Icon name={tab.icon} size={22} color={active ? DESIGN_TOKENS.primary : DESIGN_TOKENS.primaryLight} />
+              <View
+                style={[
+                  styles.tabIconWrap,
+                  active && styles.tabIconWrapActive,
+                ]}>
+                <Icon
+                  name={tab.icon}
+                  size={22}
+                  color={
+                    active ? DESIGN_TOKENS.primary : DESIGN_TOKENS.primaryLight
+                  }
+                />
               </View>
-              <Text style={[styles.tabText, {color: active ? DESIGN_TOKENS.primary : DESIGN_TOKENS.primaryLight}]}>
+              <Text
+                style={[
+                  styles.tabText,
+                  {
+                    color: active
+                      ? DESIGN_TOKENS.primary
+                      : DESIGN_TOKENS.primaryLight,
+                  },
+                ]}>
                 {tab.label}
               </Text>
             </TouchableOpacity>

@@ -660,7 +660,7 @@ const MoodHeatmap = ({dailyData, chartWidth}) => {
     for (let i = 27; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
+      const key = getDateOnly(d);
       const found = source.find(x => x.date === key);
       result.push({date: key, count: found?.total_entries || 0});
     }
@@ -689,7 +689,14 @@ const MoodHeatmap = ({dailyData, chartWidth}) => {
 
   // FIX: Lay out as rows (weeks), not columns, for correct calendar grid
   // last28[0] is the oldest day — figure out which weekday it lands on
-  const startDayOfWeek = new Date(last28[0].date).getDay(); // 0=Sun
+  const [startYear, startMonth, startDate] = last28[0].date
+    .split('-')
+    .map(Number);
+  const startDayOfWeek = new Date(
+    startYear,
+    startMonth - 1,
+    startDate,
+  ).getDay();
   // Pad front so the first day aligns to correct column
   const paddedDays = [...Array(startDayOfWeek).fill(null), ...last28];
 
@@ -706,21 +713,21 @@ const MoodHeatmap = ({dailyData, chartWidth}) => {
       {/* Grid: rows of 7 */}
       <View style={[styles.heatmapGrid, {width: gridWidth}]}>
         {paddedDays.map((day, i) => (
-          <View
-            key={i}
-            style={[
-              styles.heatmapCell,
-              {
-                backgroundColor: day ? getColor(day.count) : 'transparent',
-                width: CELL,
-                height: CELL,
-                borderRadius: 7,
-                margin: GAP / 2,
-              },
-            ]}>
-            {day && day.count > 0 && (
-              <Text style={styles.heatmapCellText}>{day.count}</Text>
-            )}
+          <View key={i} style={[styles.heatmapCellSlot, {width: CELL + GAP}]}>
+            <View
+              style={[
+                styles.heatmapCell,
+                {
+                  backgroundColor: day ? getColor(day.count) : 'transparent',
+                  width: CELL,
+                  height: CELL,
+                  borderRadius: 7,
+                },
+              ]}>
+              {day && day.count > 0 && (
+                <Text style={styles.heatmapCellText}>{day.count}</Text>
+              )}
+            </View>
           </View>
         ))}
       </View>
@@ -801,6 +808,44 @@ const MOOD_COLORS = {
   hopeful: '#FEE440',
 };
 
+const POSITIVE_GOAL_VIBES = [
+  'happy',
+  'hopeful',
+  'calm',
+  'peaceful',
+  'serene',
+  'energetic',
+  'playful',
+  'vibrant',
+  'romantic',
+  'cozy',
+  'ethereal',
+  'natural',
+  'bold',
+  'mystical',
+  'futuristic',
+  'minimalist',
+];
+
+const GOAL_VIBE_QUOTES = {
+  happy: 'Choose joy, then let it choose you back.',
+  hopeful: 'Small sparks can still light the whole room.',
+  calm: 'Soft breath, steady heart, clear next step.',
+  peaceful: 'Peace grows when you give it a little room.',
+  serene: 'Quiet confidence looks good on you.',
+  energetic: 'Bring the spark, keep the rhythm.',
+  playful: 'Make room for tiny ridiculous wins.',
+  vibrant: 'Let your color take up space today.',
+  romantic: 'Lead with warmth and notice what softens.',
+  cozy: 'Comfort counts. Let it recharge you.',
+  ethereal: 'Dreamy can still be deeply grounded.',
+  natural: 'Return to what feels honest and alive.',
+  bold: 'Pick courage. It gets easier with reps.',
+  mystical: 'Follow the shimmer, but pack snacks.',
+  futuristic: 'Build the mood you want to live in.',
+  minimalist: 'Less noise, more signal.',
+};
+
 const MOOD_EMOJIS = {
   calm: '😌',
   peaceful: '🕊️',
@@ -836,6 +881,18 @@ const MOOD_EMOJIS = {
 
 const getMoodColor = mood => MOOD_COLORS[mood?.toLowerCase()] || '#6c5ce7';
 const getMoodEmoji = mood => MOOD_EMOJIS[mood?.toLowerCase()] || '🌈';
+const isPositiveGoalVibe = vibe =>
+  POSITIVE_GOAL_VIBES.includes(vibe?.toLowerCase());
+const getGoalVibes = moodGoal =>
+  (Array.isArray(moodGoal?.vibes) && moodGoal.vibes.length > 0
+    ? moodGoal.vibes
+    : moodGoal?.vibe
+    ? [moodGoal.vibe]
+    : []
+  )
+    .map(vibe => vibe?.toLowerCase())
+    .filter(isPositiveGoalVibe)
+    .slice(0, 3);
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -856,6 +913,16 @@ const AnalyticsDisplay = ({
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [savedInsights, setSavedInsights] = useState([]);
   const [contentWidth, setContentWidth] = useState(DEFAULT_CONTENT_WIDTH);
+  const [previewGoalVibe, setPreviewGoalVibe] = useState(POSITIVE_GOAL_VIBES[0]);
+  const selectedGoalVibes = useMemo(() => getGoalVibes(moodGoal), [moodGoal]);
+  const [draftGoalVibes, setDraftGoalVibes] = useState(selectedGoalVibes);
+
+  useEffect(() => {
+    if (showGoalPicker) {
+      setDraftGoalVibes(selectedGoalVibes);
+      setPreviewGoalVibe(selectedGoalVibes[0] || POSITIVE_GOAL_VIBES[0]);
+    }
+  }, [selectedGoalVibes, showGoalPicker]);
 
   const handleContentLayout = useCallback(event => {
     const nextWidth = Math.round(event.nativeEvent.layout.width);
@@ -879,10 +946,18 @@ const AnalyticsDisplay = ({
 
   const handleSetGoal = useCallback(
     vibe => {
-      onUpdateGoal && onUpdateGoal(vibe);
-      setShowGoalPicker(false);
+      if (!isPositiveGoalVibe(vibe)) return;
+      setPreviewGoalVibe(vibe);
+      const nextGoals = draftGoalVibes.includes(vibe)
+        ? draftGoalVibes.filter(goal => goal !== vibe)
+        : draftGoalVibes.length >= 3
+        ? null
+        : [...draftGoalVibes, vibe];
+      if (!nextGoals || nextGoals.length === 0) return;
+      setDraftGoalVibes(nextGoals);
+      onUpdateGoal?.(nextGoals);
     },
-    [onUpdateGoal],
+    [draftGoalVibes, onUpdateGoal],
   );
 
   if (isLoading && !analyticsData) {
@@ -950,13 +1025,27 @@ const AnalyticsDisplay = ({
     Object.values(weeklyMoodCounts).reduce((sum, count) => sum + count, 0);
 
   // Weekly goal progress is based on the current 7-day focus window.
-  const goalVibe = moodGoal?.vibe;
-  const goalKey = goalVibe?.toLowerCase();
-  const goalCount = goalKey ? weeklyMoodCounts[goalKey] || 0 : 0;
-  const goalProgress = weeklyTotalLogs > 0 ? goalCount / weeklyTotalLogs : 0;
+  // If any selected vibe reaches the weekly threshold, the focus counts as won.
+  const goalStats = selectedGoalVibes.map(vibe => {
+    const count = weeklyMoodCounts[vibe] || 0;
+    const progress = weeklyTotalLogs > 0 ? count / weeklyTotalLogs : 0;
+    return {vibe, count, progress};
+  });
+  const winningGoal =
+    goalStats.find(goal => goal.progress >= COMPLETION_THRESHOLD) || null;
+  const bestGoal =
+    goalStats.reduce(
+      (best, goal) => (goal.progress > (best?.progress || 0) ? goal : best),
+      null,
+    ) || null;
+  const activeGoal = winningGoal || bestGoal;
+  const goalVibe = activeGoal?.vibe || selectedGoalVibes[0];
+  const goalCount = activeGoal?.count || 0;
+  const goalProgress = activeGoal?.progress || 0;
   const goalReached = goalProgress >= COMPLETION_THRESHOLD;
   const goalWindowStatus = getGoalWindowStatus(moodGoal);
   const goalFailed = goalWindowStatus.isWindowComplete && !goalReached;
+  const goalAccent = getMoodColor(goalVibe);
   const goalDaysLabel = goalWindowStatus.isWindowComplete
     ? '7-day focus ended'
     : `${goalWindowStatus.daysRemaining} day${
@@ -1072,28 +1161,43 @@ const AnalyticsDisplay = ({
         icon="target"
         iconColor="#e17055"
         accentColor="#e17055">
-        {goalVibe ? (
+        {selectedGoalVibes.length > 0 ? (
           <View style={styles.goalActiveContainer}>
             <View style={styles.goalInfoRow}>
               <Text style={styles.goalText}>
-                Target Vibe:{' '}
-                <Text
-                  style={{fontWeight: 'bold', color: getMoodColor(goalVibe)}}>
-                  {getMoodEmoji(goalVibe)} {goalVibe}
-                </Text>
+                Target Vibes
               </Text>
               <TouchableOpacity onPress={() => setShowGoalPicker(true)}>
                 <Text style={styles.goalChangeBtn}>Change</Text>
               </TouchableOpacity>
             </View>
+            <View style={styles.goalChipRow}>
+              {selectedGoalVibes.map(vibe => (
+                <View
+                  key={vibe}
+                  style={[
+                    styles.goalMiniChip,
+                    {backgroundColor: getMoodColor(vibe) + '22'},
+                  ]}>
+                  <Text
+                    style={[
+                      styles.goalMiniChipText,
+                      {color: getMoodColor(vibe)},
+                    ]}>
+                    {getMoodEmoji(vibe)} {vibe}
+                  </Text>
+                </View>
+              ))}
+            </View>
 
             <AnimatedProgressBar
               progress={goalProgress}
-              color={getMoodColor(goalVibe)}
+              color={goalAccent}
             />
 
             <Text style={styles.goalSubtext}>
-              {goalCount}/{weeklyTotalLogs} weekly entries ·{' '}
+              Best goal: {getMoodEmoji(goalVibe)} {goalVibe} · {goalCount}/
+              {weeklyTotalLogs} weekly entries ·{' '}
               {Math.round(goalProgress * 100)}% reached · {goalDaysLabel}
             </Text>
 
@@ -1104,13 +1208,13 @@ const AnalyticsDisplay = ({
                 {
                   backgroundColor:
                     goalReached
-                      ? getMoodColor(goalVibe) + '22'
+                      ? goalAccent + '22'
                       : goalFailed
                       ? '#fff1f0'
                       : '#fff8f3',
                   borderColor:
                     goalReached
-                      ? getMoodColor(goalVibe)
+                      ? goalAccent
                       : goalFailed
                       ? '#d63031'
                       : '#e17055',
@@ -1128,23 +1232,23 @@ const AnalyticsDisplay = ({
                     {
                       color:
                         goalReached
-                          ? getMoodColor(goalVibe)
+                          ? goalAccent
                           : goalFailed
                           ? '#d63031'
                           : '#e17055',
                     },
                   ]}>
                   {goalReached
-                    ? 'Goal Achieved! See Your Insight'
+                    ? `${goalVibe} won this week! See Your Insight`
                     : goalFailed
-                    ? 'Goal Failed - Review This Week'
-                    : 'How am I doing with this goal?'}
+                    ? 'Fresh Start - Review This Week'
+                    : 'How am I doing with these goals?'}
                 </Text>
                 <Text style={goalReactionStyles.checkBtnSub}>
                   {goalReached
-                    ? 'Tap to celebrate & get a personal AI note'
+                    ? 'Any one selected vibe can win the weekly focus'
                     : goalFailed
-                    ? 'The 7-day focus ended before the goal was reached'
+                    ? 'The 7-day focus wrapped. Grab a useful clue for next time'
                     : `${Math.round(
                         goalProgress * 100,
                       )}% reached — ${goalDaysLabel.toLowerCase()}`}
@@ -1195,6 +1299,8 @@ const AnalyticsDisplay = ({
         totalLogs={weeklyTotalLogs}
         moodHistory={moodHistory} // pass moodHistory prop from parent if available
         goalFailed={goalFailed}
+        weeklyMoodCounts={weeklyMoodCounts}
+        weeklyBreakdown={weeklyBreakdown}
         onSaveInsight={text => {
           setSavedInsights(prev => [text, ...prev]);
           setShowGoalModal(false);
@@ -1215,18 +1321,43 @@ const AnalyticsDisplay = ({
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Choose your Focus</Text>
               <Text style={styles.modalSub}>
-                Which vibe would you like to cultivate more?
+                Pick up to 3 feel-good vibes. Tap around for a tiny boost.
               </Text>
+              <View
+                style={[
+                  styles.goalQuoteCard,
+                  {borderColor: getMoodColor(previewGoalVibe) + '55'},
+                ]}>
+                <Text style={styles.goalQuoteEmoji}>
+                  {getMoodEmoji(previewGoalVibe)}
+                </Text>
+                <View style={{flex: 1}}>
+                  <Text
+                    style={[
+                      styles.goalQuoteVibe,
+                      {color: getMoodColor(previewGoalVibe)},
+                    ]}>
+                    {previewGoalVibe}
+                  </Text>
+                  <Text style={styles.goalQuoteText}>
+                    "{GOAL_VIBE_QUOTES[previewGoalVibe]}"
+                  </Text>
+                </View>
+              </View>
               <ScrollView
                 contentContainerStyle={styles.vibeGrid}
                 style={{maxHeight: 300}}>
-                {Object.keys(MOOD_COLORS).map(vibe => (
+                {POSITIVE_GOAL_VIBES.map(vibe => (
                   <TouchableOpacity
                     key={vibe}
                     style={[
                       styles.vibeChip,
                       {borderColor: getMoodColor(vibe)},
-                      goalVibe === vibe && {
+                      previewGoalVibe === vibe && {
+                        borderWidth: 2,
+                        transform: [{scale: 1.02}],
+                      },
+                      draftGoalVibes.includes(vibe) && {
                         backgroundColor: getMoodColor(vibe) + '25',
                       },
                     ]}
@@ -1235,6 +1366,9 @@ const AnalyticsDisplay = ({
                       {getMoodEmoji(vibe)}
                     </Text>
                     <Text style={styles.vibeChipText}>{vibe}</Text>
+                    {draftGoalVibes.includes(vibe) && (
+                      <Icon name="check-circle" size={14} color={getMoodColor(vibe)} />
+                    )}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -1509,6 +1643,11 @@ const styles = StyleSheet.create({
     color: '#aaa',
   },
   heatmapGrid: {flexDirection: 'row', flexWrap: 'wrap'},
+  heatmapCellSlot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
   heatmapCell: {justifyContent: 'center', alignItems: 'center'},
   heatmapCellText: {fontSize: 9, fontWeight: '800', color: '#fff'},
   heatmapLegend: {
@@ -1544,6 +1683,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   goalText: {fontSize: 15, color: '#2d3436', flex: 1},
+  goalChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  goalMiniChip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  goalMiniChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'capitalize',
+  },
   goalChangeBtn: {
     fontSize: 13,
     color: '#6c5ce7',
@@ -1596,7 +1751,30 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginTop: 4,
-    marginBottom: 20,
+    marginBottom: 14,
+  },
+  goalQuoteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: '#fffdf8',
+    marginBottom: 16,
+  },
+  goalQuoteEmoji: {fontSize: 28},
+  goalQuoteVibe: {
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'capitalize',
+    marginBottom: 2,
+  },
+  goalQuoteText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#666',
+    fontWeight: '600',
   },
   vibeGrid: {
     flexDirection: 'row',

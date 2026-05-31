@@ -1582,6 +1582,22 @@ def get_analytics(
         )
 
 
+def parse_goal_vibes(stored_vibe: str) -> list[str]:
+    if not stored_vibe:
+        return []
+    try:
+        parsed = json.loads(stored_vibe)
+        if isinstance(parsed, list):
+            return [
+                str(vibe).strip().lower()
+                for vibe in parsed
+                if str(vibe or "").strip()
+            ][:3]
+    except (TypeError, json.JSONDecodeError):
+        pass
+    return [stored_vibe.strip().lower()]
+
+
 @app.get("/mood-goal")
 def get_mood_goal(
     db: Session = Depends(database.get_db),
@@ -1592,9 +1608,11 @@ def get_mood_goal(
         db.query(models.MoodGoal).filter(models.MoodGoal.user_id == db_user.id).first()
     )
     if not goal:
-        return {"vibe": None}
+        return {"vibe": None, "vibes": []}
+    vibes = parse_goal_vibes(goal.vibe)
     return {
-        "vibe": goal.vibe,
+        "vibe": vibes[0] if vibes else None,
+        "vibes": vibes,
         "updated_at": goal.updated_at.isoformat() if goal.updated_at else None,
     }
 
@@ -1606,24 +1624,44 @@ def update_mood_goal(
     db_user: models.User = Depends(get_current_db_user),
 ):
     """Create or update the user's mood goal."""
-    vibe = body.get("vibe", "").strip().lower()
-    if not vibe:
-        raise HTTPException(status_code=400, detail="vibe cannot be empty")
-    if vibe not in VIBE_LABELS:
-        raise HTTPException(status_code=400, detail=f"Unknown vibe: {vibe}")
+    raw_vibes = body.get("vibes")
+    if raw_vibes is None:
+        raw_vibes = [body.get("vibe")]
+    if not isinstance(raw_vibes, list):
+        raise HTTPException(status_code=400, detail="vibes must be a list")
+
+    vibes = []
+    for raw_vibe in raw_vibes:
+        vibe = str(raw_vibe or "").strip().lower()
+        if vibe and vibe not in vibes:
+            vibes.append(vibe)
+
+    if not vibes:
+        raise HTTPException(status_code=400, detail="choose at least one vibe")
+    if len(vibes) > 3:
+        raise HTTPException(status_code=400, detail="choose up to 3 vibes")
+    for vibe in vibes:
+        if vibe not in VIBE_LABELS:
+            raise HTTPException(status_code=400, detail=f"Unknown vibe: {vibe}")
+
+    stored_vibes = json.dumps(vibes)
 
     goal = (
         db.query(models.MoodGoal).filter(models.MoodGoal.user_id == db_user.id).first()
     )
     if goal:
-        goal.vibe = vibe
+        goal.vibe = stored_vibes
         goal.updated_at = datetime.now(timezone.utc)
     else:
-        goal = models.MoodGoal(user_id=db_user.id, vibe=vibe)
+        goal = models.MoodGoal(user_id=db_user.id, vibe=stored_vibes)
         db.add(goal)
     db.commit()
     db.refresh(goal)
-    return {"vibe": goal.vibe, "updated_at": goal.updated_at.isoformat()}
+    return {
+        "vibe": vibes[0],
+        "vibes": vibes,
+        "updated_at": goal.updated_at.isoformat(),
+    }
 
 
 @app.post("/journal-prompts")

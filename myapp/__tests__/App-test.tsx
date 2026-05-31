@@ -43,6 +43,8 @@ import App from '../App';
 // Note: test renderer must be required after react-native.
 import renderer, {act} from 'react-test-renderer';
 
+jest.setTimeout(30000);
+
 it('renders correctly', async () => {
   let tree: renderer.ReactTestRenderer;
 

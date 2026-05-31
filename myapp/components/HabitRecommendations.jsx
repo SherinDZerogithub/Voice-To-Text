@@ -8,13 +8,44 @@ import {
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ACCENT = '#10b981';
+const getGoalVibes = moodGoal =>
+  (Array.isArray(moodGoal?.vibes) && moodGoal.vibes.length > 0
+    ? moodGoal.vibes
+    : moodGoal?.vibe
+    ? [moodGoal.vibe]
+    : []
+  )
+    .map(vibe => vibe?.toLowerCase())
+    .filter(Boolean)
+    .slice(0, 3);
 
-const HabitRecommendations = ({token, backendUrl, moodHistory, moodGoal}) => {
+const isWriteAction = text => {
+  const t = text.toLowerCase();
+  return t.includes('write') || t.includes('note') || t.includes('journal') || t.includes('record') || t.includes('reflect');
+};
+
+const HabitRecommendations = ({token, backendUrl, moodHistory, moodGoal, onAction}) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [completed, setCompleted] = useState(new Set());
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Load completions for today's habits
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const today = new Date().toDateString();
+        const stored = await AsyncStorage.getItem(`habit_check_${today}`);
+        if (stored) {
+          setCompleted(new Set(JSON.parse(stored)));
+        }
+      } catch (e) { console.warn(e); }
+    };
+    load();
+  }, [data]); // Re-sync when new habits are loaded
 
   const fetchHabits = useCallback(async () => {
     if (!token || !backendUrl || !moodHistory || moodHistory.length < 3) return;
@@ -22,6 +53,7 @@ const HabitRecommendations = ({token, backendUrl, moodHistory, moodGoal}) => {
     setLoading(true);
     try {
       const recentVibes = moodHistory.slice(0, 10).map(m => m.vibe);
+      const goalVibes = getGoalVibes(moodGoal);
       const res = await fetch(`${backendUrl}/habit-recommendations`, {
         method: 'POST',
         headers: {
@@ -30,7 +62,7 @@ const HabitRecommendations = ({token, backendUrl, moodHistory, moodGoal}) => {
         },
         body: JSON.stringify({
           recent_vibes: recentVibes,
-          mood_goal: moodGoal?.vibe || null,
+          mood_goal: goalVibes.length > 0 ? goalVibes.join(', ') : null,
         }),
       });
       
@@ -49,6 +81,24 @@ const HabitRecommendations = ({token, backendUrl, moodHistory, moodGoal}) => {
     fetchHabits();
   }, [fetchHabits]);
 
+  const handleHabitPress = async (habit) => {
+    const next = new Set(completed);
+    const isDone = next.has(habit);
+    
+    if (isDone) {
+      next.delete(habit);
+    } else {
+      next.add(habit);
+      // If it's a writing action, trigger the app response
+      if (isWriteAction(habit) && onAction) {
+        onAction(habit);
+      }
+    }
+    setCompleted(next);
+    const today = new Date().toDateString();
+    await AsyncStorage.setItem(`habit_check_${today}`, JSON.stringify([...next]));
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingCard}>
@@ -59,6 +109,7 @@ const HabitRecommendations = ({token, backendUrl, moodHistory, moodGoal}) => {
   }
 
   if (!data || data.source === 'no_data' || !data.habits || data.habits.length === 0) return null;
+  const goalVibes = getGoalVibes(moodGoal);
 
   return (
     <Animated.View style={[styles.card, {opacity: fadeAnim}]}>
@@ -81,20 +132,33 @@ const HabitRecommendations = ({token, backendUrl, moodHistory, moodGoal}) => {
       </View>
 
       <View style={styles.habitList}>
-        {data.habits.map((habit, i) => (
-          <View key={i} style={styles.habitItem}>
-            <View style={[styles.habitNumber, {backgroundColor: ACCENT + '18'}]}>
-              <Text style={[styles.habitNumberText, {color: ACCENT}]}>{i + 1}</Text>
-            </View>
-            <Text style={styles.habitText}>{habit}</Text>
-          </View>
-        ))}
+        {data?.habits?.map((habit, i) => {
+          const isDone = completed.has(habit);
+          return (
+            <TouchableOpacity 
+              key={i} 
+              style={styles.habitItem} 
+              onPress={() => handleHabitPress(habit)}
+              activeOpacity={0.7}>
+              <View style={[styles.habitNumber, {backgroundColor: isDone ? ACCENT : ACCENT + '18'}]}>
+                {isDone ? (
+                  <Icon name="check" size={14} color="#fff" />
+                ) : (
+                  <Text style={[styles.habitNumberText, {color: ACCENT}]}>{i + 1}</Text>
+                )}
+              </View>
+              <Text style={[styles.habitText, isDone && styles.habitTextDone]}>{habit}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {moodGoal?.vibe && (
+      {goalVibes.length > 0 && (
         <View style={styles.goalTag}>
           <Icon name="target" size={11} color="#9ca3af" />
-          <Text style={styles.goalTagText}>Aligned with your {moodGoal.vibe} goal</Text>
+          <Text style={styles.goalTagText}>
+            Aligned with your {goalVibes.join(', ')} goals
+          </Text>
         </View>
       )}
     </Animated.View>
@@ -126,6 +190,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 3,
+    width: '100%',
+    alignSelf: 'stretch',
   },
   header: {flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14},
   iconWrap: {

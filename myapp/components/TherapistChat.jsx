@@ -132,7 +132,7 @@ const StarterChip = ({ item, onPress, delay }) => {
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-const TherapistChat = ({ token, backendUrl, vibeContext, onClose }) => {
+const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose }) => {
   const isMounted     = useRef(true);
   const flatListRef   = useRef(null);
   const inputRef      = useRef(null);
@@ -153,6 +153,7 @@ const TherapistChat = ({ token, backendUrl, vibeContext, onClose }) => {
   const [error,     setError]     = useState('');
   const [retryText, setRetryText] = useState('');
   const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
+  const [initialPromptSent, setInitialPromptSent] = useState(false);
 
   useEffect(() => {
     isMounted.current = true;
@@ -190,6 +191,15 @@ const TherapistChat = ({ token, backendUrl, vibeContext, onClose }) => {
       console.warn('Failed to save therapist chat history', err);
     });
   }, [messages, isHistoryLoaded]);
+
+  useEffect(() => {
+    if (!isHistoryLoaded || initialPromptSent) return;
+    if (!initialPrompt?.trim()) return;
+    if (messages.length <= 1) {
+      sendMessage(initialPrompt);
+      setInitialPromptSent(true);
+    }
+  }, [initialPrompt, initialPromptSent, isHistoryLoaded, messages.length, sendMessage]);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
