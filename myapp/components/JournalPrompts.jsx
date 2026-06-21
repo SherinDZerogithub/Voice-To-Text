@@ -178,19 +178,37 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
   const [bgColor, setBgColor] = useState('#fffdf7');
   const [prompt, setPrompt] = useState(DOODLE_PROMPTS[0]);
   const [canvasWidth, setCanvasWidth] = useState(0);
-  const [stickers, setStickers] = useState([]); // [{id, x, y, scale, stickerId}]
+  const [stickers, setStickers] = useState([]);
   const [activeSticker, setActiveSticker] = useState(null);
   const [showStickerPanel, setShowStickerPanel] = useState(false);
+  const [stickerMode, setStickerMode] = useState(false); // true = move stickers, false = draw
   const canvasRef = useRef(null);
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  // Refs so panResponder always reads latest values
+  const brushColorRef = useRef(brushColor);
+  const brushSizeRef = useRef(brushSize);
+  const isEraserRef = useRef(isEraser);
+  const isMirrorRef = useRef(isMirror);
+  const bgColorRef = useRef(bgColor);
+  const canvasWidthRef = useRef(canvasWidth);
+  const stickerModeRef = useRef(stickerMode);
+
+  useEffect(() => { brushColorRef.current = brushColor; }, [brushColor]);
+  useEffect(() => { brushSizeRef.current = brushSize; }, [brushSize]);
+  useEffect(() => { isEraserRef.current = isEraser; }, [isEraser]);
+  useEffect(() => { isMirrorRef.current = isMirror; }, [isMirror]);
+  useEffect(() => { bgColorRef.current = bgColor; }, [bgColor]);
+  useEffect(() => { canvasWidthRef.current = canvasWidth; }, [canvasWidth]);
+  useEffect(() => { stickerModeRef.current = stickerMode; }, [stickerMode]);
 
   useEffect(() => {
     if (visible) {
       setPrompt(DOODLE_PROMPTS[Math.floor(Math.random() * DOODLE_PROMPTS.length)]);
       Animated.parallel([
-        Animated.spring(scaleAnim, {toValue: 1, tension: 60, friction: 10, useNativeDriver: true}),
-        Animated.timing(opacityAnim, {toValue: 1, duration: 250, useNativeDriver: true}),
+        Animated.spring(scaleAnim, {toValue: 1, tension: 60, friction: 10, useNativeDriver: false}),
+        Animated.timing(opacityAnim, {toValue: 1, duration: 250, useNativeDriver: false}),
       ]).start();
     } else {
       scaleAnim.setValue(0.92);
@@ -200,21 +218,23 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => !stickerModeRef.current,
+      onMoveShouldSetPanResponder: () => !stickerModeRef.current,
       onPanResponderGrant: evt => {
+        if (stickerModeRef.current) return;
         const {locationX, locationY} = evt.nativeEvent;
         const newPath = {
           points: [{x: locationX, y: locationY}],
-          color: isEraser ? bgColor : brushColor,
-          size: isEraser ? brushSize * 3 : brushSize,
+          color: isEraserRef.current ? bgColorRef.current : brushColorRef.current,
+          size: isEraserRef.current ? brushSizeRef.current * 3 : brushSizeRef.current,
           id: Date.now(),
-          mirrored: isMirror,
-          mirrorX: canvasWidth / 2,
+          mirrored: isMirrorRef.current,
+          mirrorX: canvasWidthRef.current / 2,
         };
         setCurrentPath(newPath);
       },
       onPanResponderMove: evt => {
+        if (stickerModeRef.current) return;
         const {locationX, locationY} = evt.nativeEvent;
         setCurrentPath(prev => {
           if (!prev) return prev;
@@ -222,6 +242,7 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
         });
       },
       onPanResponderRelease: () => {
+        if (stickerModeRef.current) return;
         setCurrentPath(prev => {
           if (prev) {
             setPaths(ps => [...ps, prev]);
@@ -257,17 +278,14 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
       id: Date.now(),
       stickerId,
       x: canvasWidth / 2 - 40,
-      y: 140,
+      y: 100,
       scale: 1,
-      color: brushColor,
+      color: brushColorRef.current,
     };
     setStickers(prev => [...prev, newSticker]);
     setActiveSticker(newSticker.id);
     setShowStickerPanel(false);
-  };
-
-  const handleUpdateSticker = (id, updates) => {
-    setStickers(prev => prev.map(s => s.id === id ? {...s, ...updates} : s));
+    setStickerMode(true);
   };
 
   const handleDeleteSticker = id => {
@@ -276,6 +294,74 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
   };
 
   const BG_COLORS = ['#fffdf7', '#f8f0ff', '#e8fff8', '#fff0f5', '#f0f8ff', '#fffbf0', '#f0fff4', '#1a1a2e', '#2C3E50', '#E8E8F5'];
+
+  // Sticker component with its own pan+pinch handling
+  const DraggableSticker = ({sticker}) => {
+    const stickerData = STICKERS.find(s => s.id === sticker.stickerId);
+    if (!stickerData) return null;
+    const isActive = activeSticker === sticker.id;
+    const posRef = useRef({x: sticker.x, y: sticker.y});
+    const scaleRef = useRef(sticker.scale);
+    const lastTap = useRef(0);
+
+    const stickerPan = useRef(PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        setActiveSticker(sticker.id);
+        posRef.current = {x: sticker.x, y: sticker.y};
+      },
+      onPanResponderMove: (_, g) => {
+        const newX = posRef.current.x + g.dx;
+        const newY = posRef.current.y + g.dy;
+        setStickers(prev => prev.map(s => s.id === sticker.id ? {...s, x: newX, y: newY} : s));
+      },
+      onPanResponderRelease: (_, g) => {
+        posRef.current = {x: posRef.current.x + g.dx, y: posRef.current.y + g.dy};
+      },
+    })).current;
+
+    const stickerSize = 60 * sticker.scale;
+
+    return (
+      <View
+        style={[
+          doodleStyles.stickerWrapper,
+          {left: sticker.x, top: sticker.y, width: stickerSize, height: stickerSize},
+          isActive && doodleStyles.stickerActive,
+        ]}
+        {...stickerPan.panHandlers}>
+        <SvgXml
+          xml={getStickerXml(stickerData.svg, sticker.color)}
+          width={stickerSize}
+          height={stickerSize}
+        />
+        {isActive && (
+          <>
+            <TouchableOpacity
+              style={doodleStyles.stickerDelete}
+              onPress={() => handleDeleteSticker(sticker.id)}>
+              <Icon name="close-circle" size={18} color="#e74c3c" />
+            </TouchableOpacity>
+            {/* Resize handle */}
+            <View
+              style={doodleStyles.stickerResizeHandle}
+              {...PanResponder.create({
+                onStartShouldSetPanResponder: () => true,
+                onMoveShouldSetPanResponder: () => true,
+                onPanResponderGrant: () => { scaleRef.current = sticker.scale; },
+                onPanResponderMove: (_, g) => {
+                  const newScale = Math.max(0.4, Math.min(3.0, scaleRef.current + (g.dx + g.dy) / 80));
+                  setStickers(prev => prev.map(s => s.id === sticker.id ? {...s, scale: newScale} : s));
+                },
+              }).panHandlers}>
+              <Icon name="arrow-expand" size={12} color="#6c5ce7" />
+            </View>
+          </>
+        )}
+      </View>
+    );
+  };
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -347,6 +433,11 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
                 onPress={() => setShowStickerPanel(s => !s)}
                 style={[doodleStyles.sizeBtn, showStickerPanel && doodleStyles.activeTool]}>
                 <Icon name="sticker-emoji" size={18} color={showStickerPanel ? '#6c5ce7' : '#888'} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setStickerMode(m => !m)}
+                style={[doodleStyles.sizeBtn, stickerMode && doodleStyles.activeTool]}>
+                <Icon name="cursor-move" size={16} color={stickerMode ? '#6c5ce7' : '#888'} />
               </TouchableOpacity>
             </View>
 
@@ -439,34 +530,9 @@ const DoodleCanvas = ({visible, onClose, onSave, accentColor}) => {
               )}
             </Svg>
             {/* Stickers */}
-            {stickers.map(sticker => {
-              const stickerData = STICKERS.find(s => s.id === sticker.stickerId);
-              if (!stickerData) return null;
-              return (
-                <View
-                  key={sticker.id}
-                  style={[
-                    doodleStyles.stickerWrapper,
-                    {left: sticker.x, top: sticker.y},
-                    activeSticker === sticker.id && doodleStyles.stickerActive,
-                  ]}
-                  onTouchStart={() => setActiveSticker(sticker.id)}
-                >
-                  <SvgXml
-                    xml={getStickerXml(stickerData.svg, sticker.color)}
-                    width={60}
-                    height={60}
-                  />
-                  {activeSticker === sticker.id && (
-                    <TouchableOpacity
-                      style={doodleStyles.stickerDelete}
-                      onPress={() => handleDeleteSticker(sticker.id)}>
-                      <Icon name="close-circle" size={18} color="#e74c3c" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })}
+            {stickers.map(sticker => (
+              <DraggableSticker key={sticker.id} sticker={sticker} />
+            ))}
             {paths.length === 0 && !currentPath && stickers.length === 0 && (
               <View style={doodleStyles.canvasHint}>
                 <Icon name="gesture-swipe" size={28} color="#ccc" />
@@ -1393,6 +1459,19 @@ const doodleStyles = StyleSheet.create({
     right: -10,
     backgroundColor: '#fff',
     borderRadius: 10,
+  },
+  stickerResizeHandle: {
+    position: 'absolute',
+    bottom: -10,
+    right: -10,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#6c5ce7',
   },
 });
 

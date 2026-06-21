@@ -83,7 +83,7 @@ const MoodGarden = ({analyticsData, onPlantTap, moodHistory = []}) => {
       toValue: 1,
       friction: 6,
       tension: 40,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [plants.length, scaleAnim]);
 

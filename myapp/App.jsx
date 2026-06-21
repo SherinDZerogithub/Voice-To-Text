@@ -25,7 +25,6 @@ import AnalyticsDisplay from './components/AnalyticsDisplay'; // Import the new 
 import TherapistChat from './components/TherapistChat';
 import VibeSuggestions from './components/VibeSuggestions';
 import DashboardHero from './components/DashboardHero';
-import MoodPatternWarning from './components/MoodPatternWarning';
 import JournalPrompts from './components/JournalPrompts';
 import AffirmationBanner from './components/AffirmationBanner';
 import {SAMPLE_IMAGES} from './constants/sampleImages';
@@ -33,15 +32,14 @@ import {getContrastColor, DESIGN_TOKENS} from './utils/colors';
 import StreakBadges from './components/StreakBadges';
 import MoodCompanion from './components/MoodCompanion';
 import WeeklySummaryCard from './components/WeeklySummaryCard';
-import MoodForecastCard from './components/MoodForecastCard';
-import HabitRecommendations from './components/HabitRecommendations';
-import TriggerInsightsCard from './components/TriggerInsightsCard';
 import MoodDice from './components/MoodDice';
 import MoodJar from './components/MoodJar';
+import ReleaseWorry from './components/ReleaseWorry';
 import MoodTwin from './components/MoodTwin';
 import MoodGarden from './components/MoodGarden';
 import GoalAlignmentRing from './components/GoalAlignmentRing';
 import CelebrationCorner from './components/CelebrationCorner';
+import BACKEND_URL from './config';
 
 // RN 0.71+ expects native event modules to expose listener stubs.
 // We stub common module names used by voice libraries to prevent NativeEventEmitter warnings.
@@ -56,7 +54,7 @@ import CelebrationCorner from './components/CelebrationCorner';
   }
 });
 
-import Voice from '@react-native-voice/voice';
+const Voice = require('@react-native-voice/voice').default;
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -84,6 +82,7 @@ const App = () => {
   const [crisisAlert, setCrisisAlert] = useState(null);
   const [chatInitialPrompt, setChatInitialPrompt] = useState('');
   const [gratitudeGems, setGratitudeGems] = useState([]);
+  const [historyTagFilter, setHistoryTagFilter] = useState(null);
   const moodGoalRequestId = useRef(0);
 
   const [activeTab, setActiveTab] = useState('home'); // 'home', 'chat', 'history', 'analytics'
@@ -153,16 +152,35 @@ const App = () => {
     };
   }, [analyticsData, gratitudeGems.length, moodGoal, moodHistory]);
 
-  // Configuration for Backend
-  // Note: 10.0.2.2 is the localhost for Android emulator.
-  const BACKEND_URL =
-    Platform.OS === 'android'
-      ? 'http://10.0.2.2:8000'
-      : 'http://localhost:8000';
-
   const handleOpenChat = useCallback((prompt = '') => {
     setChatInitialPrompt(prompt);
     setActiveTab('chat');
+  }, []);
+
+  const handleOpenHistory = useCallback(() => {
+    setSelectedHistoryItem(null);
+    setHistoryTagFilter(null);
+    setActiveTab('history');
+  }, []);
+
+  const handleTagPress = useCallback(tag => {
+    setHistoryTagFilter(tag);
+    setSelectedHistoryItem(null);
+    setActiveTab('history');
+  }, []);
+
+  const handleOpenGoalEditor = useCallback(() => {
+    setSelectedHistoryItem(null);
+    setHistoryTagFilter(null);
+    setActiveTab('home');
+  }, []);
+
+  const handleTabPress = useCallback(tabId => {
+    if (tabId === 'history') {
+      setSelectedHistoryItem(null);
+      setHistoryTagFilter(null);
+    }
+    setActiveTab(tabId);
   }, []);
 
   const fetchMoodGoal = useCallback(
@@ -205,6 +223,7 @@ const App = () => {
         ...current,
         vibe: selectedVibes[0],
         vibes: selectedVibes,
+        updated_at: new Date().toISOString(),
       }));
       try {
         const response = await fetch(`${BACKEND_URL}/mood-goal`, {
@@ -248,7 +267,6 @@ const App = () => {
         }
 
         const data = await response.json();
-        console.log('Analytics data loaded:', data);
         setAnalyticsData(data);
       } catch (error) {
         console.warn('Analytics fetch failed:', error.message || error);
@@ -278,15 +296,10 @@ const App = () => {
         toValue: 1,
         friction: 8,
         tension: 35,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }).start();
     }
   }, [isAuthenticated, avatarAnim]);
-
-  // Configuration for Backend
-  // Note: 10.0.2.2 is the localhost for Android emulator.
-  // Change to your machine's IP if testing on a real device.
-  // (BACKEND_URL is defined at line 71)
 
   const formatMoodHistoryItem = useCallback((item, fallbackEmoji = '') => {
     const date = item.timestamp ? new Date(item.timestamp) : new Date();
@@ -490,9 +503,6 @@ const App = () => {
       });
 
       if (duplicateToday) {
-        console.log(
-          'Duplicate mood log skipped: same entry already saved today.',
-        );
         setMoodData(prev => ({...prev, ...duplicateToday}));
         return;
       }
@@ -631,19 +641,16 @@ const App = () => {
   const onSpeechStart = useCallback(() => {
     setIsListening(true);
     setErrorMessage('');
-    console.log('onSpeechStart');
   }, []);
 
   const onSpeechEnd = useCallback(() => {
     setIsListening(false);
-    console.log('onSpeechEnd');
   }, []);
 
   const onSpeechResults = useCallback(event => {
     const transcript =
       event && event.value && event.value[0] ? event.value[0] : '';
     setText(transcript);
-    console.log('onSpeechResults: ', transcript);
   }, []);
 
   const onSpeechPartialResults = useCallback(event => {
@@ -680,7 +687,6 @@ const App = () => {
     }
 
     setIsListening(false);
-    console.log('onSpeechError: ', error);
   }, []);
 
   useEffect(() => {
@@ -1490,6 +1496,8 @@ const App = () => {
     setText('');
     setImages([]);
     setMoodHistory([]);
+    setSelectedHistoryItem(null);
+    setHistoryTagFilter(null);
     setAppBgColor('#f5f5f5');
   };
 
@@ -1497,14 +1505,18 @@ const App = () => {
     setText(`I'm feeling ${vibe} right now`);
   }, []);
 
-  const handleBadgePress = useCallback(badge => {
-    console.log('Badge earned:', badge.label);
-    // Could add analytics tracking here
-  }, []);
+  const handleBadgePress = useCallback(() => {}, []);
 
-  const handleInteractiveTabChange = useCallback(tabId => {
-    setActiveTab(tabId === 'journal' ? 'history' : tabId);
-  }, []);
+  const handleInteractiveTabChange = useCallback(
+    tabId => {
+      if (tabId === 'journal') {
+        handleOpenHistory();
+        return;
+      }
+      setActiveTab(tabId);
+    },
+    [handleOpenHistory],
+  );
 
   const handleMoodTwinCheckIn = useCallback(
     checkIn => {
@@ -1540,14 +1552,14 @@ const App = () => {
         sceneTags: ['mood-dice', entry.category],
         color: '#FFD93D',
       });
-      setActiveTab('history');
+      handleOpenHistory();
     },
-    [saveInteractiveMoodEntry],
+    [handleOpenHistory, saveInteractiveMoodEntry],
   );
 
   const handleGemAdded = useCallback(
     gem => {
-      setGratitudeGems(prev => [gem, ...prev].slice(0, 7));
+      setGratitudeGems(prev => [...prev, gem].slice(-10));
       saveInteractiveMoodEntry({
         vibe: 'grateful',
         emoji: '💎',
@@ -1561,12 +1573,32 @@ const App = () => {
     [saveInteractiveMoodEntry],
   );
 
+  const handleGemDeleted = useCallback(id => {
+    setGratitudeGems(prev => prev.filter(gem => gem.id !== id));
+  }, []);
+
+  const handleWorryReleased = useCallback(
+    worry => {
+      saveInteractiveMoodEntry({
+        vibe: 'relieved',
+        emoji: '🕊️',
+        caption: 'Released worry',
+        description: worry.text,
+        reflection: worry.text,
+        sceneTags: ['release-worry'],
+        color: worry.flameColor || '#FF6B35',
+      });
+    },
+    [saveInteractiveMoodEntry],
+  );
+
   const handlePlantTap = useCallback(
     plant => {
       const matchingEntry = moodHistory.find(
         item => item.vibe?.toLowerCase() === plant.label?.toLowerCase(),
       );
       if (matchingEntry) {
+        setHistoryTagFilter(null);
         setSelectedHistoryItem(matchingEntry);
         setActiveTab('history');
       }
@@ -1604,7 +1636,7 @@ const App = () => {
             <GoalAlignmentRing
               moodGoal={moodGoal}
               analyticsData={journeyAnalyticsData}
-              onGoalUpdate={updateMoodGoal}
+              onGoalUpdate={handleOpenGoalEditor}
             />
           </View>
 
@@ -1648,6 +1680,7 @@ const App = () => {
               hasText={!!selectedHistoryItem.description}
               setAppBgColor={setAppBgColor}
               appBgColor={appBgColor}
+              onTagPress={handleTagPress}
             />
           </>
         );
@@ -1658,6 +1691,7 @@ const App = () => {
           appBgColor={appBgColor}
           onSelect={item => setSelectedHistoryItem(item)}
           onDelete={deleteMoodEntry}
+          initialTagFilter={historyTagFilter}
         />
       );
     } else {
@@ -1667,6 +1701,8 @@ const App = () => {
             <MoodTwin
               onCheckIn={handleMoodTwinCheckIn}
               onTabChange={handleInteractiveTabChange}
+              token={token}
+              backendUrl={BACKEND_URL}
             />
           </View>
 
@@ -1679,7 +1715,9 @@ const App = () => {
 
           <View style={styles.featureBlock}>
             <MoodJar
+              gems={gratitudeGems}
               onGemAdded={handleGemAdded}
+              onGemDeleted={handleGemDeleted}
               onJarFull={() => {
                 fetchAnalyticsData(token);
                 setActiveTab('analytics');
@@ -1687,26 +1725,12 @@ const App = () => {
             />
           </View>
 
+          <View style={styles.featureBlock}>
+            <ReleaseWorry onWorryReleased={handleWorryReleased} />
+          </View>
+
           {/* Weekly AI Summary */}
           <WeeklySummaryCard token={token} backendUrl={BACKEND_URL} />
-
-          {/* Mood Forecast */}
-          <MoodForecastCard token={token} backendUrl={BACKEND_URL} />
-
-          {/* Habit Recommendations */}
-          <HabitRecommendations
-            token={token}
-            backendUrl={BACKEND_URL}
-            moodHistory={moodHistory}
-            moodGoal={moodGoal}
-          />
-
-          {/* Trigger Insights */}
-          <TriggerInsightsCard
-            token={token}
-            backendUrl={BACKEND_URL}
-            days={30}
-          />
 
           {/* Streak & Badges Overview */}
           <StreakBadges
@@ -1746,11 +1770,6 @@ const App = () => {
               </View>
             </View>
           )}
-          <MoodPatternWarning
-            moodHistory={moodHistory}
-            appBgColor={appBgColor}
-            onOpenChat={handleOpenChat}
-          />
           <VibeSuggestions
             moodGoal={moodGoal}
             onSelectVibe={handleVibeSelect}
@@ -1804,6 +1823,7 @@ const App = () => {
             hasText={text.length > 0}
             setAppBgColor={setAppBgColor}
             appBgColor={appBgColor}
+            onTagPress={handleTagPress}
           />
 
           <AffirmationBanner
@@ -1868,7 +1888,7 @@ const App = () => {
               isLoginFlow={isLoginFlow}
               onEditAvatar={() => setAvatarVisible(true)}
               onLogout={handleLogout}
-              onOpenHistory={() => setActiveTab('history')}
+              onOpenHistory={handleOpenHistory}
               userName={userName}
             />
           </View>
@@ -1919,7 +1939,7 @@ const App = () => {
             <TouchableOpacity
               key={tab.id}
               style={styles.tabItem}
-              onPress={() => setActiveTab(tab.id)}
+              onPress={() => handleTabPress(tab.id)}
               activeOpacity={0.7}>
               <View
                 style={[

@@ -22,7 +22,8 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 Required for full AI features:
 
-- `GOOGLE_API_KEY` enables Gemini mood analysis, journaling, affirmations, companion questions, and chat.
+- `GEMINI_API_KEY` enables Gemini mood analysis, journaling, affirmations, companion questions, and chat. `GOOGLE_API_KEY` is still accepted as a fallback.
+- `GEMINI_MODEL` defaults to `gemini-2.5-flash`.
 - `YOUTUBE_API_KEY` enables playlist suggestions.
 - `SECRET_KEY` should be changed before sharing or deployment.
 

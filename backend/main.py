@@ -28,14 +28,35 @@ import math
 import re
 import wave
 from typing import Optional
-import google.generativeai as genai
 from dotenv import load_dotenv
 import requests
 
+try:
+    from google import genai
+    from google.genai import types as genai_types
+except ImportError:
+    genai = None
+    genai_types = None
+
+try:
+    import google.generativeai as legacy_genai
+except ImportError:
+    legacy_genai = None
+
 load_dotenv()
 
-# ── Create uploads directory for storing user photos ──
-UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+# ── Create uploads directory for storing user photos/audio ──
+#
+# IMPORTANT FOR AZURE DEPLOYMENT: Azure App Service's local filesystem is not
+# guaranteed to persist across restarts, redeploys, or scale events. The
+# default below is fine for local development and quick demos, but for a
+# production deployment you should either:
+#   1. Mount Azure Storage as a persistent file share, and point UPLOADS_DIR
+#      at that mount, or
+#   2. Migrate to Azure Blob Storage and store blob URLs in the database.
+UPLOADS_DIR = os.environ.get(
+    "UPLOADS_DIR", os.path.join(os.path.dirname(__file__), "uploads")
+)
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 
@@ -118,9 +139,16 @@ def ensure_sqlite_schema():
 
 ensure_sqlite_schema()
 
+_cors_origins_env = os.environ.get("CORS_ALLOWED_ORIGINS", "*")
+_cors_origins = (
+    ["*"]
+    if _cors_origins_env.strip() == "*"
+    else [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -336,13 +364,71 @@ def pick_static_companion_question(req: schemas.CompanionQuestionRequest) -> str
     return pool[day_index % len(pool)]
 
 
-GEMINI_API_KEY = os.environ.get("GOOGLE_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel("gemini-3-flash-preview")
-    print("Gemini model initialized.")
+class GeminiClientModel:
+    """Small adapter for the current Google GenAI SDK."""
+
+    def __init__(self, api_key: str, model_name: str):
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = model_name
+
+    def _normalize_content(self, contents):
+        if isinstance(contents, list):
+            return [self._normalize_part(part) for part in contents]
+        return contents
+
+    def _normalize_part(self, part):
+        if (
+            isinstance(part, dict)
+            and part.get("mime_type")
+            and part.get("data")
+            and genai_types is not None
+        ):
+            return genai_types.Part.from_bytes(
+                data=base64.b64decode(part["data"]),
+                mime_type=part["mime_type"],
+            )
+        return part
+
+    def generate_content(self, contents):
+        return self.client.models.generate_content(
+            model=self.model_name,
+            contents=self._normalize_content(contents),
+        )
+
+    def start_chat(self, history=None):
+        return GeminiClientChat(self, history or [])
+
+
+class GeminiClientChat:
+    """Minimal chat adapter matching the old SDK shape used by this app."""
+
+    def __init__(self, model: GeminiClientModel, history):
+        self.model = model
+        self.history = history
+
+    def send_message(self, message: str):
+        transcript = []
+        for item in self.history:
+            role = item.get("role", "user")
+            parts = item.get("parts", [])
+            text = " ".join(str(part) for part in parts if part)
+            if text:
+                transcript.append(f"{role}: {text}")
+        transcript.append(f"user: {message}")
+        return self.model.generate_content("\n\n".join(transcript))
+
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+if GEMINI_API_KEY and genai is not None:
+    gemini_model = GeminiClientModel(GEMINI_API_KEY, GEMINI_MODEL_NAME)
+    print(f"Gemini model initialized with Google GenAI SDK: {GEMINI_MODEL_NAME}")
+elif GEMINI_API_KEY and legacy_genai is not None:
+    legacy_genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = legacy_genai.GenerativeModel(GEMINI_MODEL_NAME)
+    print(f"Gemini model initialized with legacy SDK: {GEMINI_MODEL_NAME}")
 else:
-    print("WARNING: GOOGLE_API_KEY not found. Gemini features will be disabled.")
+    print("WARNING: GEMINI_API_KEY/GOOGLE_API_KEY not found or SDK missing. Gemini features will be disabled.")
     gemini_model = None
 
 VIBE_YOUTUBE_QUERIES = {

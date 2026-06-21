@@ -313,13 +313,14 @@ const VibeSuggestions = ({
   const [selectedVibe, setSelectedVibe] = useState(null);
   const [goalToast, setGoalToast] = useState('');
   const toastAnim = useRef(new Animated.Value(0)).current;
+  const toastAnimationRef = useRef(null);
 
   // Card entrance
   const cardSlide = useRef(new Animated.Value(20)).current;
   const cardOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
+    const animation = Animated.parallel([
       Animated.spring(cardSlide, {
         toValue: 0,
         tension: 50,
@@ -331,17 +332,31 @@ const VibeSuggestions = ({
         duration: 400,
         useNativeDriver: true,
       }),
-    ]).start();
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [cardOpacity, cardSlide]);
+
+  useEffect(() => {
+    return () => {
+      toastAnimationRef.current?.stop();
+    };
   }, []);
 
   const showToast = msg => {
     setGoalToast(msg);
+    toastAnimationRef.current?.stop();
     toastAnim.setValue(0);
-    Animated.sequence([
+    toastAnimationRef.current = Animated.sequence([
       Animated.timing(toastAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
       Animated.delay(1800),
       Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start(() => setGoalToast(''));
+    ]);
+    toastAnimationRef.current.start(({finished}) => {
+      if (finished) {
+        setGoalToast('');
+      }
+    });
   };
 
   const handleChipPress = vibe => {

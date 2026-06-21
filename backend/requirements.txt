@@ -1,4 +1,5 @@
 fastapi
+gunicorn>=21.2
 uvicorn
 sqlalchemy
 transformers
@@ -7,7 +8,7 @@ pydantic
 email-validator
 python-multipart
 sentence-transformers
-google-generativeai
+google-genai
 python-dotenv
 requests
 python-jose[cryptography]
@@ -15,3 +16,7 @@ bcrypt
 pillow
 numpy
 scipy
+
+# Uncomment if you switch DATABASE_URL to PostgreSQL (e.g. Azure Database
+# for PostgreSQL) instead of the default local SQLite file:
+# psycopg2-binary>=2.9

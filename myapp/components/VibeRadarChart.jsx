@@ -24,12 +24,12 @@ const VibeRadarChart = ({vibeScores, size = 280, color = '#6c5ce7'}) => {
         toValue: 1,
         friction: 5,
         tension: 28,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
       Animated.timing(opacityAnim, {
         toValue: 1,
         duration: 700,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]).start();
   }, [vibeScores]);

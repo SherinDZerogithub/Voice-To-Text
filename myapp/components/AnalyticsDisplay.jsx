@@ -24,11 +24,67 @@ import {getContrastColor} from '../utils/colors';
 import GoalCompletionModal, {COMPLETION_THRESHOLD} from './GoalCompletionModal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import VibeRadarChart from './VibeRadarChart';
-import TriggerInsightsCard from './TriggerInsightsCard';
 
 const ANALYTICS_HORIZONTAL_PADDING = 20;
 const CHART_HEIGHT = 180;
 const DEFAULT_CONTENT_WIDTH = 320;
+
+// ─── Mood Metadata Helpers ────────────────────────────────────────────────────
+
+const MOOD_COLORS = {
+  calm: '#A8E6CF', peaceful: '#B2E2F2', serene: '#D4F1F4', minimalist: '#D0D0D0',
+  happy: '#FFDE7D', energetic: '#FFD93D', playful: '#FF8B94', vibrant: '#6BCB77',
+  sad: '#A2D2FF', lonely: '#6C757D', pensive: '#4A4E69', gloomy: '#9A8C98',
+  anxious: '#D4A5A5', chaotic: '#E94560', intense: '#FF4D4D', gritty: '#666',
+  nostalgic: '#FFAAA5', romantic: '#FFB7B2', mystical: '#9D4EDD', vintage: '#B08968',
+  cozy: '#E6A15C', ethereal: '#B8C0FF', melancholic: '#4E6E81', industrial: '#545B64',
+  natural: '#4A7C59', futuristic: '#00F5D4', bold: '#F15BB5', solitary: '#8D99AE',
+  tense: '#D90429', hopeful: '#FEE440',
+};
+
+const POSITIVE_GOAL_VIBES = [
+  'happy','hopeful','calm','peaceful','serene','energetic','playful',
+  'vibrant','romantic','cozy','ethereal','natural','bold','mystical','futuristic','minimalist',
+];
+
+const GOAL_VIBE_QUOTES = {
+  happy: 'Choose joy, then let it choose you back.',
+  hopeful: 'Small sparks can still light the whole room.',
+  calm: 'Soft breath, steady heart, clear next step.',
+  peaceful: 'Peace grows when you give it a little room.',
+  serene: 'Quiet confidence looks good on you.',
+  energetic: 'Bring the spark, keep the rhythm.',
+  playful: 'Make room for tiny ridiculous wins.',
+  vibrant: 'Let your color take up space today.',
+  romantic: 'Lead with warmth and notice what softens.',
+  cozy: 'Comfort counts. Let it recharge you.',
+  ethereal: 'Dreamy can still be deeply grounded.',
+  natural: 'Return to what feels honest and alive.',
+  bold: 'Pick courage. It gets easier with reps.',
+  mystical: 'Follow the shimmer, but pack snacks.',
+  futuristic: 'Build the mood you want to live in.',
+  minimalist: 'Less noise, more signal.',
+};
+
+const MOOD_EMOJIS = {
+  calm: '😌', peaceful: '🕊️', serene: '🧘', minimalist: '⚪',
+  happy: '😊', energetic: '⚡', playful: '🎈', vibrant: '🌈',
+  sad: '😢', lonely: '👤', pensive: '🤔', gloomy: '☁️',
+  anxious: '😰', chaotic: '🌀', intense: '🔥', gritty: '⛓️',
+  nostalgic: '📺', romantic: '❤️', mystical: '✨', vintage: '🎞️',
+  cozy: '🕯️', ethereal: '🌫️', melancholic: '🥀', industrial: '⚙️',
+  natural: '🌲', futuristic: '🤖', bold: '🏎️', solitary: '🏔️',
+  tense: '⚠️', hopeful: '🌅',
+};
+
+const getMoodColor = mood => MOOD_COLORS[mood?.toLowerCase()] || '#6c5ce7';
+const getMoodEmoji = mood => MOOD_EMOJIS[mood?.toLowerCase()] || '🌈';
+const isPositiveGoalVibe = vibe => POSITIVE_GOAL_VIBES.includes(vibe?.toLowerCase());
+const getGoalVibes = moodGoal =>
+  (Array.isArray(moodGoal?.vibes) && moodGoal.vibes.length > 0
+    ? moodGoal.vibes
+    : moodGoal?.vibe ? [moodGoal.vibe] : []
+  ).map(vibe => vibe?.toLowerCase()).filter(isPositiveGoalVibe).slice(0, 3);
 const SECTION_CARD_PADDING = 20;
 const DONUT_SIZE = 200;
 const DONUT_RADIUS = 70;
@@ -64,6 +120,24 @@ const getLastSevenDayBreakdown = dailyBreakdown => {
   const cutoffKey = getDateOnly(cutoff);
 
   return dailyBreakdown.filter(day => day?.date >= cutoffKey);
+};
+
+const getGoalWindowBreakdown = (dailyBreakdown, moodGoal) => {
+  const updatedAt = moodGoal?.updated_at ? new Date(moodGoal.updated_at) : null;
+
+  if (!updatedAt || Number.isNaN(updatedAt.getTime())) {
+    return getLastSevenDayBreakdown(dailyBreakdown);
+  }
+
+  const start = new Date(updatedAt);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + (GOAL_WINDOW_DAYS - 1));
+
+  const startKey = getDateOnly(start);
+  const endKey = getDateOnly(end);
+
+  return dailyBreakdown.filter(day => day?.date >= startKey && day?.date <= endKey);
 };
 
 const getGoalWindowStatus = moodGoal => {
@@ -650,102 +724,384 @@ const BarChart = ({data, total, chartWidth}) => {
   );
 };
 
-// ─── Heatmap Calendar ─────────────────────────────────────────────────────────
+// ─── Fandom Character Match ───────────────────────────────────────────────────
 
-const MoodHeatmap = ({dailyData, chartWidth}) => {
-  const last28 = useMemo(() => {
-    const result = [];
-    const today = new Date();
-    const source = Array.isArray(dailyData) ? dailyData : [];
-    for (let i = 27; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const key = getDateOnly(d);
-      const found = source.find(x => x.date === key);
-      result.push({date: key, count: found?.total_entries || 0});
-    }
-    return result;
-  }, [dailyData]);
+const FANDOM_CHARACTERS = {
+  happy: [
+    {name: 'Tohru Honda', show: 'Fruits Basket', type: 'anime', trait: 'radiates warmth and pure joy', emoji: '🌸'},
+    {name: 'Park Saeroyi', show: 'Itaewon Class', type: 'kdrama', trait: 'relentless optimism and drive', emoji: '🍺'},
+    {name: 'Ted Lasso', show: 'Ted Lasso', type: 'tv', trait: 'infectious positivity always', emoji: '🍪'},
+  ],
+  calm: [
+    {name: 'Shouto Todoroki', show: 'My Hero Academia', type: 'anime', trait: 'quietly grounded and composed', emoji: '🧊'},
+    {name: 'Kim Dok-mi', show: 'Flower Boy Next Door', type: 'kdrama', trait: 'peaceful solitude and reflection', emoji: '📚'},
+    {name: 'Bob Belcher', show: "Bob's Burgers", type: 'tv', trait: 'steady, warm, unshakeable calm', emoji: '🍔'},
+  ],
+  sad: [
+    {name: 'Violet Evergarden', show: 'Violet Evergarden', type: 'anime', trait: 'carries grief with quiet grace', emoji: '💌'},
+    {name: 'Yoon Seri', show: 'Crash Landing on You', type: 'kdrama', trait: 'vulnerability beneath the strength', emoji: '🪂'},
+    {name: 'BoJack Horseman', show: 'BoJack Horseman', type: 'tv', trait: 'wrestling with deep inner sadness', emoji: '🌊'},
+  ],
+  anxious: [
+    {name: 'Shinji Ikari', show: 'Neon Genesis Evangelion', type: 'anime', trait: 'overthinks but still shows up', emoji: '🤖'},
+    {name: 'Han Ji-pyeong', show: 'Start-Up', type: 'kdrama', trait: 'anxiety masked by sharp wit', emoji: '💼'},
+    {name: 'Eleanor Shellstrop', show: 'The Good Place', type: 'tv', trait: 'spiraling but secretly determined', emoji: '😬'},
+  ],
+  energetic: [
+    {name: 'Rock Lee', show: 'Naruto', type: 'anime', trait: 'pure unstoppable energy', emoji: '💥'},
+    {name: 'Do Kyung-seok', show: 'My ID is Gangnam Beauty', type: 'kdrama', trait: 'driven by fierce inner fire', emoji: '🏃'},
+    {name: 'Jake Peralta', show: 'Brooklyn Nine-Nine', type: 'tv', trait: 'chaotic, fun, full-throttle energy', emoji: '🚔'},
+  ],
+  angry: [
+    {name: 'Levi Ackerman', show: 'Attack on Titan', type: 'anime', trait: 'controlled fury with purpose', emoji: '⚔️'},
+    {name: 'Ji Sung-joon', show: 'She Was Pretty', type: 'kdrama', trait: 'sharp edges hiding a soft heart', emoji: '🗞️'},
+    {name: 'Zuko', show: 'Avatar: The Last Airbender', type: 'cartoon', trait: 'anger on the path to redemption', emoji: '🔥'},
+  ],
+  lonely: [
+    {name: 'Hachiman Hikigaya', show: 'My Teen Romantic Comedy SNAFU', type: 'anime', trait: 'lonely but deeply self-aware', emoji: '🎭'},
+    {name: 'Oh Il-nam', show: 'Squid Game', type: 'kdrama', trait: 'isolation hidden behind smiles', emoji: '🎮'},
+    {name: 'Aang', show: 'Avatar: The Last Airbender', type: 'cartoon', trait: 'last of his kind, never gives up', emoji: '💨'},
+  ],
+  nostalgic: [
+    {name: 'Chihiro', show: "Spirited Away", type: 'anime', trait: 'longing to return to what was', emoji: '🏮'},
+    {name: 'Go Eun-tak', show: 'Goblin', type: 'kdrama', trait: 'romance tinged with longing', emoji: '🕯️'},
+    {name: 'Kevin McCallister', show: 'Home Alone', type: 'movie', trait: 'aches for home and family', emoji: '🏠'},
+  ],
+  pensive: [
+    {name: 'Gintoki Sakata', show: 'Gintama', type: 'anime', trait: 'reflects deeply beneath the comedy', emoji: '🍡'},
+    {name: 'Baek In-ho', show: 'Cheese in the Trap', type: 'kdrama', trait: 'philosophical about life and loss', emoji: '🎹'},
+    {name: 'Bojack Horseman', show: 'BoJack Horseman', type: 'tv', trait: 'contemplative, messy, honest', emoji: '🌙'},
+  ],
+  cozy: [
+    {name: 'Yotsuba', show: 'Yotsuba&!', type: 'anime', trait: 'finds magic in the ordinary', emoji: '🌻'},
+    {name: 'Eun Dan-oh', show: 'Extraordinary You', type: 'kdrama', trait: 'soft joy in simple moments', emoji: '🌼'},
+    {name: 'Moana', show: 'Moana', type: 'movie', trait: 'at peace with herself and the world', emoji: '🌊'},
+  ],
+};
 
-  if (!dailyData || dailyData.length === 0) return null;
+const TYPE_BADGE = {
+  anime: {label: 'Anime', color: '#ff7675', bg: '#ff767520'},
+  kdrama: {label: 'K-Drama', color: '#00cec9', bg: '#00cec920'},
+  tv: {label: 'TV Show', color: '#6c5ce7', bg: '#6c5ce720'},
+  cartoon: {label: 'Cartoon', color: '#fdcb6e', bg: '#fdcb6e20'},
+  movie: {label: 'Movie', color: '#fd79a8', bg: '#fd79a820'},
+};
 
-  const maxCount = Math.max(...last28.map(d => d.count), 1);
+const STORY_ARCS = [
+  {
+    id: 'hero',
+    title: 'The Hero\'s Journey',
+    description: 'You\'ve been riding a wave of high energy — this is your training arc. Think Naruto before the chunin exams.',
+    condition: d => (d.find(x => x.label === 'energetic' || x.label === 'happy')?.count || 0) / (d.reduce((a,b)=>a+b.count,0)||1) > 0.4,
+    emoji: '⚡',
+    color: '#fdcb6e',
+    character: {name: 'Naruto Uzumaki', show: 'Naruto', line: '"I never go back on my word — that\'s my nindo!"'},
+  },
+  {
+    id: 'healing',
+    title: 'The Healing Arc',
+    description: 'Your mood shows softness and introspection. Like Violet Evergarden learning to feel again, you\'re processing.',
+    condition: d => (d.find(x => x.label === 'sad' || x.label === 'lonely' || x.label === 'pensive')?.count || 0) / (d.reduce((a,b)=>a+b.count,0)||1) > 0.35,
+    emoji: '💜',
+    color: '#a29bfe',
+    character: {name: 'Violet Evergarden', show: 'Violet Evergarden', line: '"I want to understand these human emotions."'},
+  },
+  {
+    id: 'slowburn',
+    title: 'The Slow Burn',
+    description: 'Calm and steady — you\'re in your cozy kdrama era. Building something beautiful without rushing.',
+    condition: d => (d.find(x => x.label === 'calm' || x.label === 'cozy')?.count || 0) / (d.reduce((a,b)=>a+b.count,0)||1) > 0.35,
+    emoji: '🕯️',
+    color: '#fd79a8',
+    character: {name: 'Ri Jeong-hyeok', show: 'Crash Landing on You', line: '"Even if I can\'t have you, the world you\'re in is enough."'},
+  },
+  {
+    id: 'chaos',
+    title: 'The Chaotic Arc',
+    description: 'Mixed signals, big feelings — you\'re in a plot twist episode. Even Gintoki would respect the chaos.',
+    condition: () => true,
+    emoji: '🌀',
+    color: '#00b894',
+    character: {name: 'Gintoki Sakata', show: 'Gintama', line: '"If you can\'t fight back tears, fight with them flowing."'},
+  },
+];
 
-  const availableWidth = Math.max(chartWidth || DEFAULT_CONTENT_WIDTH, 220);
-  const GAP = 4;
-  const CELL = Math.min(28, Math.floor((availableWidth - GAP * 7) / 7));
-  const gridWidth = 7 * (CELL + GAP);
+const FandomCharacterMatch = ({topMood, distribution, totalLogs}) => {
+  const [selectedType, setSelectedType] = useState(null);
+  const [expanded, setExpanded] = useState(false);
+  const slideAnim = useRef(new Animated.Value(0)).current;
 
-  const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  const chars = FANDOM_CHARACTERS[topMood?.toLowerCase()] || FANDOM_CHARACTERS.pensive;
+  const filtered = selectedType ? chars.filter(c => c.type === selectedType) : chars;
+  const displayChars = filtered.length > 0 ? filtered : chars;
 
-  const getColor = count => {
-    if (count === 0) return '#F0EFF8';
-    const intensity = count / maxCount;
-    if (intensity < 0.25) return '#c7c2f8';
-    if (intensity < 0.5) return '#a29bfe';
-    if (intensity < 0.75) return '#7c75f5';
-    return '#6c5ce7';
+  const toggleExpand = () => {
+    const next = !expanded;
+    setExpanded(next);
+    Animated.spring(slideAnim, {toValue: next ? 1 : 0, friction: 8, useNativeDriver: false}).start();
   };
 
-  // FIX: Lay out as rows (weeks), not columns, for correct calendar grid
-  // last28[0] is the oldest day — figure out which weekday it lands on
-  const [startYear, startMonth, startDate] = last28[0].date
-    .split('-')
-    .map(Number);
-  const startDayOfWeek = new Date(
-    startYear,
-    startMonth - 1,
-    startDate,
-  ).getDay();
-  // Pad front so the first day aligns to correct column
-  const paddedDays = [...Array(startDayOfWeek).fill(null), ...last28];
+  const types = [...new Set(chars.map(c => c.type))];
 
   return (
-    <View style={styles.heatmapContainer}>
-      {/* Day-of-week header */}
-      <View style={styles.heatmapDayLabels}>
-        {dayLabels.map((l, i) => (
-          <Text key={i} style={[styles.heatmapDayLabel, {width: CELL + GAP}]}>
-            {l}
-          </Text>
-        ))}
+    <SectionCard title="Your Fandom Twin" icon="account-star" iconColor="#fd79a8" accentColor="#fd79a8">
+      <Text style={fanStyles.intro}>
+        Your dominant mood is <Text style={{fontWeight:'800', color: getMoodColor(topMood)}}>{topMood}</Text> — here are the characters who get you:
+      </Text>
+
+      {/* Type filter */}
+      <View style={fanStyles.typeRow}>
+        <TouchableOpacity
+          style={[fanStyles.typePill, !selectedType && fanStyles.typePillActive]}
+          onPress={() => setSelectedType(null)}>
+          <Text style={[fanStyles.typePillText, !selectedType && fanStyles.typePillTextActive]}>All</Text>
+        </TouchableOpacity>
+        {types.map(t => {
+          const badge = TYPE_BADGE[t] || {label: t, color: '#888', bg: '#88888820'};
+          const isActive = selectedType === t;
+          return (
+            <TouchableOpacity
+              key={t}
+              style={[fanStyles.typePill, {borderColor: badge.color}, isActive && {backgroundColor: badge.bg}]}
+              onPress={() => setSelectedType(isActive ? null : t)}>
+              <Text style={[fanStyles.typePillText, {color: isActive ? badge.color : '#888'}]}>{badge.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
-      {/* Grid: rows of 7 */}
-      <View style={[styles.heatmapGrid, {width: gridWidth}]}>
-        {paddedDays.map((day, i) => (
-          <View key={i} style={[styles.heatmapCellSlot, {width: CELL + GAP}]}>
-            <View
-              style={[
-                styles.heatmapCell,
-                {
-                  backgroundColor: day ? getColor(day.count) : 'transparent',
-                  width: CELL,
-                  height: CELL,
-                  borderRadius: 7,
-                },
-              ]}>
-              {day && day.count > 0 && (
-                <Text style={styles.heatmapCellText}>{day.count}</Text>
-              )}
+
+      {/* Character cards */}
+      {displayChars.map((char, i) => {
+        const badge = TYPE_BADGE[char.type] || {label: char.type, color: '#888', bg: '#88888820'};
+        return (
+          <View key={i} style={fanStyles.charCard}>
+            <Text style={fanStyles.charEmoji}>{char.emoji}</Text>
+            <View style={{flex: 1}}>
+              <View style={fanStyles.charHeader}>
+                <Text style={fanStyles.charName}>{char.name}</Text>
+                <View style={[fanStyles.typeBadge, {backgroundColor: badge.bg}]}>
+                  <Text style={[fanStyles.typeBadgeText, {color: badge.color}]}>{badge.label}</Text>
+                </View>
+              </View>
+              <Text style={fanStyles.charShow}>from {char.show}</Text>
+              <Text style={fanStyles.charTrait}>{char.trait}</Text>
             </View>
           </View>
-        ))}
-      </View>
-      <View style={styles.heatmapLegend}>
-        <Text style={styles.heatmapLegendLabel}>Less</Text>
-        {['#F0EFF8', '#c7c2f8', '#a29bfe', '#7c75f5', '#6c5ce7'].map((c, i) => (
-          <View
-            key={i}
-            style={[styles.heatmapLegendCell, {backgroundColor: c}]}
-          />
-        ))}
-        <Text style={styles.heatmapLegendLabel}>More</Text>
-      </View>
-    </View>
+        );
+      })}
+
+      <TouchableOpacity style={fanStyles.moreBtn} onPress={toggleExpand}>
+        <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color="#fd79a8" />
+        <Text style={fanStyles.moreBtnText}>{expanded ? 'Show less' : 'Tell me more about my vibe'}</Text>
+      </TouchableOpacity>
+
+      {expanded && (
+        <View style={fanStyles.expandedSection}>
+          <Text style={fanStyles.expandedTitle}>What this means for you</Text>
+          {distribution.slice(0, 4).map((item, i) => {
+            const chars2 = FANDOM_CHARACTERS[item.label?.toLowerCase()];
+            if (!chars2) return null;
+            const pick = chars2[0];
+            return (
+              <View key={i} style={fanStyles.miniRow}>
+                <Text style={fanStyles.miniMood}>{getMoodEmoji(item.label)} {item.label}</Text>
+                <Text style={fanStyles.miniChar}>→ {pick.emoji} {pick.name}</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </SectionCard>
   );
 };
 
-// ─── Section Card ─────────────────────────────────────────────────────────────
+const fanStyles = StyleSheet.create({
+  intro: {fontSize: 13, color: '#555', lineHeight: 19, marginBottom: 12},
+  typeRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14},
+  typePill: {paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#ddd'},
+  typePillActive: {backgroundColor: '#fd79a820', borderColor: '#fd79a8'},
+  typePillText: {fontSize: 11, fontWeight: '700', color: '#888'},
+  typePillTextActive: {color: '#fd79a8'},
+  charCard: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: '#fdf4ff',
+    borderRadius: 14,
+    padding: 13,
+    marginBottom: 8,
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#fd79a820',
+  },
+  charEmoji: {fontSize: 28, marginTop: 2},
+  charHeader: {flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2},
+  charName: {fontSize: 14, fontWeight: '800', color: '#2d3436'},
+  typeBadge: {paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8},
+  typeBadgeText: {fontSize: 10, fontWeight: '700'},
+  charShow: {fontSize: 11, color: '#999', fontWeight: '600', marginBottom: 4},
+  charTrait: {fontSize: 12, color: '#555', lineHeight: 17},
+  moreBtn: {flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 6, justifyContent: 'center'},
+  moreBtnText: {fontSize: 12, color: '#fd79a8', fontWeight: '700'},
+  expandedSection: {
+    backgroundColor: '#f8f0ff',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 8,
+    gap: 8,
+  },
+  expandedTitle: {fontSize: 12, fontWeight: '800', color: '#6c5ce7', marginBottom: 4},
+  miniRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
+  miniMood: {fontSize: 12, color: '#444', fontWeight: '600'},
+  miniChar: {fontSize: 11, color: '#888'},
+});
+
+// ─── Mood Story Arc ────────────────────────────────────────────────────────────
+
+const MoodStoryArc = ({distribution, totalLogs, weeklyBreakdown}) => {
+  const [currentArcIdx, setCurrentArcIdx] = useState(0);
+  const [showQuote, setShowQuote] = useState(false);
+  const quoteAnim = useRef(new Animated.Value(0)).current;
+
+  const arc = useMemo(() => {
+    const found = STORY_ARCS.find(a => a.condition(distribution));
+    return found || STORY_ARCS[STORY_ARCS.length - 1];
+  }, [distribution]);
+
+  const toggleQuote = () => {
+    const next = !showQuote;
+    setShowQuote(next);
+    Animated.spring(quoteAnim, {toValue: next ? 1 : 0, friction: 8, useNativeDriver: true}).start();
+  };
+
+  // Build 7-day vibe timeline
+  const timeline = (weeklyBreakdown || []).slice(-7).map(day => {
+    const top = Object.entries(day.mood_frequency || {}).sort((a, b) => b[1] - a[1])[0];
+    return {date: day.date, mood: top?.[0] || null};
+  });
+
+  const scaleY = quoteAnim.interpolate({inputRange: [0, 1], outputRange: [0, 1]});
+
+  return (
+    <SectionCard title="Your Story Arc" icon="book-open-variant" iconColor="#a29bfe" accentColor="#a29bfe">
+      {/* Arc card */}
+      <View style={[arcStyles.arcCard, {borderColor: arc.color + '50', backgroundColor: arc.color + '0A'}]}>
+        <Text style={arcStyles.arcEmoji}>{arc.emoji}</Text>
+        <View style={{flex: 1}}>
+          <Text style={[arcStyles.arcTitle, {color: arc.color}]}>{arc.title}</Text>
+          <Text style={arcStyles.arcDesc}>{arc.description}</Text>
+        </View>
+      </View>
+
+      {/* Character quote toggle */}
+      <TouchableOpacity style={[arcStyles.quoteToggle, {borderColor: arc.color + '40'}]} onPress={toggleQuote}>
+        <Icon name="format-quote-open" size={16} color={arc.color} />
+        <Text style={[arcStyles.quoteToggleText, {color: arc.color}]}>
+          {showQuote ? 'Hide' : `What would ${arc.character.name} say?`}
+        </Text>
+        <Icon name={showQuote ? 'chevron-up' : 'chevron-down'} size={16} color={arc.color} />
+      </TouchableOpacity>
+
+      {showQuote && (
+        <Animated.View style={[arcStyles.quoteBox, {borderLeftColor: arc.color, transform: [{scaleY}]}]}>
+          <Text style={arcStyles.quoteChar}>— {arc.character.name}, {arc.character.show}</Text>
+          <Text style={arcStyles.quoteText}>{arc.character.line}</Text>
+        </Animated.View>
+      )}
+
+      {/* 7-day mood timeline */}
+      {timeline.length > 0 && (
+        <View style={arcStyles.timeline}>
+          <Text style={arcStyles.timelineTitle}>This week's plot</Text>
+          <View style={arcStyles.timelineDots}>
+            {timeline.map((day, i) => (
+              <View key={i} style={arcStyles.timelineItem}>
+                <View style={[arcStyles.timelineDot, {backgroundColor: day.mood ? getMoodColor(day.mood) + '30' : '#f0f0f0', borderColor: day.mood ? getMoodColor(day.mood) : '#ddd'}]}>
+                  <Text style={arcStyles.timelineMoodEmoji}>{day.mood ? getMoodEmoji(day.mood) : '·'}</Text>
+                </View>
+                <Text style={arcStyles.timelineDayLabel}>
+                  {day.date ? new Date(day.date + 'T00:00:00').toLocaleDateString([], {weekday: 'narrow'}) : '·'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Story prompt */}
+      <View style={arcStyles.promptBox}>
+        <Icon name="pencil-box-outline" size={15} color="#a29bfe" />
+        <Text style={arcStyles.promptText}>
+          <Text style={{fontWeight: '800', color: '#a29bfe'}}>Journal prompt: </Text>
+          {arc.id === 'hero' && "What challenge are you training to overcome right now?"}
+          {arc.id === 'healing' && "What emotion have you been avoiding, and what might it be telling you?"}
+          {arc.id === 'slowburn' && "What are you quietly building for yourself these days?"}
+          {arc.id === 'chaos' && "If your life were a drama, what episode title would this week be?"}
+        </Text>
+      </View>
+    </SectionCard>
+  );
+};
+
+const arcStyles = StyleSheet.create({
+  arcCard: {
+    flexDirection: 'row',
+    gap: 12,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    marginBottom: 12,
+    alignItems: 'flex-start',
+  },
+  arcEmoji: {fontSize: 30},
+  arcTitle: {fontSize: 15, fontWeight: '900', marginBottom: 4},
+  arcDesc: {fontSize: 12, color: '#555', lineHeight: 18},
+  quoteToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 8,
+    justifyContent: 'center',
+  },
+  quoteToggleText: {fontSize: 12, fontWeight: '700', flex: 1, textAlign: 'center'},
+  quoteBox: {
+    borderLeftWidth: 3,
+    paddingLeft: 12,
+    paddingVertical: 8,
+    marginBottom: 14,
+    backgroundColor: '#fafafa',
+    borderRadius: 8,
+  },
+  quoteChar: {fontSize: 10, color: '#aaa', fontWeight: '700', marginBottom: 4},
+  quoteText: {fontSize: 13, color: '#444', fontStyle: 'italic', lineHeight: 20},
+  timeline: {marginBottom: 14},
+  timelineTitle: {fontSize: 11, color: '#aaa', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10},
+  timelineDots: {flexDirection: 'row', justifyContent: 'space-between'},
+  timelineItem: {alignItems: 'center', gap: 4},
+  timelineDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+  },
+  timelineMoodEmoji: {fontSize: 16},
+  timelineDayLabel: {fontSize: 9, color: '#bbb', fontWeight: '700'},
+  promptBox: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: '#f0ecff',
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'flex-start',
+  },
+  promptText: {flex: 1, fontSize: 12, color: '#555', lineHeight: 18},
+});
+
+ // ─── Section Card ─────────────────────────────────────────────────────────────
 
 const SectionCard = ({
   title,
@@ -773,127 +1129,6 @@ const SectionCard = ({
   </View>
 );
 
-// ─── Mood Metadata Helpers ────────────────────────────────────────────────────
-
-const MOOD_COLORS = {
-  calm: '#A8E6CF',
-  peaceful: '#B2E2F2',
-  serene: '#D4F1F4',
-  minimalist: '#D0D0D0',
-  happy: '#FFDE7D',
-  energetic: '#FFD93D',
-  playful: '#FF8B94',
-  vibrant: '#6BCB77',
-  sad: '#A2D2FF',
-  lonely: '#6C757D',
-  pensive: '#4A4E69',
-  gloomy: '#9A8C98',
-  anxious: '#D4A5A5',
-  chaotic: '#E94560',
-  intense: '#FF4D4D',
-  gritty: '#666',
-  nostalgic: '#FFAAA5',
-  romantic: '#FFB7B2',
-  mystical: '#9D4EDD',
-  vintage: '#B08968',
-  cozy: '#E6A15C',
-  ethereal: '#B8C0FF',
-  melancholic: '#4E6E81',
-  industrial: '#545B64',
-  natural: '#4A7C59',
-  futuristic: '#00F5D4',
-  bold: '#F15BB5',
-  solitary: '#8D99AE',
-  tense: '#D90429',
-  hopeful: '#FEE440',
-};
-
-const POSITIVE_GOAL_VIBES = [
-  'happy',
-  'hopeful',
-  'calm',
-  'peaceful',
-  'serene',
-  'energetic',
-  'playful',
-  'vibrant',
-  'romantic',
-  'cozy',
-  'ethereal',
-  'natural',
-  'bold',
-  'mystical',
-  'futuristic',
-  'minimalist',
-];
-
-const GOAL_VIBE_QUOTES = {
-  happy: 'Choose joy, then let it choose you back.',
-  hopeful: 'Small sparks can still light the whole room.',
-  calm: 'Soft breath, steady heart, clear next step.',
-  peaceful: 'Peace grows when you give it a little room.',
-  serene: 'Quiet confidence looks good on you.',
-  energetic: 'Bring the spark, keep the rhythm.',
-  playful: 'Make room for tiny ridiculous wins.',
-  vibrant: 'Let your color take up space today.',
-  romantic: 'Lead with warmth and notice what softens.',
-  cozy: 'Comfort counts. Let it recharge you.',
-  ethereal: 'Dreamy can still be deeply grounded.',
-  natural: 'Return to what feels honest and alive.',
-  bold: 'Pick courage. It gets easier with reps.',
-  mystical: 'Follow the shimmer, but pack snacks.',
-  futuristic: 'Build the mood you want to live in.',
-  minimalist: 'Less noise, more signal.',
-};
-
-const MOOD_EMOJIS = {
-  calm: '😌',
-  peaceful: '🕊️',
-  serene: '🧘',
-  minimalist: '⚪',
-  happy: '😊',
-  energetic: '⚡',
-  playful: '🎈',
-  vibrant: '🌈',
-  sad: '😢',
-  lonely: '👤',
-  pensive: '🤔',
-  gloomy: '☁️',
-  anxious: '😰',
-  chaotic: '🌀',
-  intense: '🔥',
-  gritty: '⛓️',
-  nostalgic: '📺',
-  romantic: '❤️',
-  mystical: '✨',
-  vintage: '🎞️',
-  cozy: '🕯️',
-  ethereal: '🌫️',
-  melancholic: '🥀',
-  industrial: '⚙️',
-  natural: '🌲',
-  futuristic: '🤖',
-  bold: '🏎️',
-  solitary: '🏔️',
-  tense: '⚠️',
-  hopeful: '🌅',
-};
-
-const getMoodColor = mood => MOOD_COLORS[mood?.toLowerCase()] || '#6c5ce7';
-const getMoodEmoji = mood => MOOD_EMOJIS[mood?.toLowerCase()] || '🌈';
-const isPositiveGoalVibe = vibe =>
-  POSITIVE_GOAL_VIBES.includes(vibe?.toLowerCase());
-const getGoalVibes = moodGoal =>
-  (Array.isArray(moodGoal?.vibes) && moodGoal.vibes.length > 0
-    ? moodGoal.vibes
-    : moodGoal?.vibe
-    ? [moodGoal.vibe]
-    : []
-  )
-    .map(vibe => vibe?.toLowerCase())
-    .filter(isPositiveGoalVibe)
-    .slice(0, 3);
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const AnalyticsDisplay = ({
@@ -916,6 +1151,8 @@ const AnalyticsDisplay = ({
   const [previewGoalVibe, setPreviewGoalVibe] = useState(POSITIVE_GOAL_VIBES[0]);
   const selectedGoalVibes = useMemo(() => getGoalVibes(moodGoal), [moodGoal]);
   const [draftGoalVibes, setDraftGoalVibes] = useState(selectedGoalVibes);
+  const isDraftGoalValid =
+    draftGoalVibes.length > 0 && draftGoalVibes.length <= 3;
 
   useEffect(() => {
     if (showGoalPicker) {
@@ -955,10 +1192,21 @@ const AnalyticsDisplay = ({
         : [...draftGoalVibes, vibe];
       if (!nextGoals || nextGoals.length === 0) return;
       setDraftGoalVibes(nextGoals);
-      onUpdateGoal?.(nextGoals);
     },
-    [draftGoalVibes, onUpdateGoal],
+    [draftGoalVibes],
   );
+
+  const handleCancelGoalPicker = useCallback(() => {
+    setDraftGoalVibes(selectedGoalVibes);
+    setPreviewGoalVibe(selectedGoalVibes[0] || POSITIVE_GOAL_VIBES[0]);
+    setShowGoalPicker(false);
+  }, [selectedGoalVibes]);
+
+  const handleSaveGoalPicker = useCallback(() => {
+    if (!isDraftGoalValid) return;
+    onUpdateGoal?.(draftGoalVibes);
+    setShowGoalPicker(false);
+  }, [draftGoalVibes, isDraftGoalValid, onUpdateGoal]);
 
   if (isLoading && !analyticsData) {
     return (
@@ -1012,8 +1260,8 @@ const AnalyticsDisplay = ({
     distribution.reduce((a, c) => a + c.count, 0) || total_entries;
   const topMood = analyticsData.most_common || distribution[0]?.label || 'N/A';
 
-  // Build goal progress from the current 7-day focus window.
-  const weeklyBreakdown = getLastSevenDayBreakdown(daily_breakdown);
+  // Build goal progress from this goal's own 7-day focus window.
+  const weeklyBreakdown = getGoalWindowBreakdown(daily_breakdown, moodGoal);
   const weeklyMoodCounts = weeklyBreakdown.reduce((acc, day) => {
     Object.entries(day.mood_frequency || {}).forEach(([vibe, count]) => {
       acc[vibe.toLowerCase()] = (acc[vibe.toLowerCase()] || 0) + count;
@@ -1312,16 +1560,16 @@ const AnalyticsDisplay = ({
         visible={showGoalPicker}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowGoalPicker(false)}>
+        onRequestClose={handleCancelGoalPicker}>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setShowGoalPicker(false)}>
+          onPress={handleCancelGoalPicker}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}}>
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Choose your Focus</Text>
               <Text style={styles.modalSub}>
-                Pick up to 3 feel-good vibes. Tap around for a tiny boost.
+                Pick 1 to 3 feel-good vibes to keep as this week's focus.
               </Text>
               <View
                 style={[
@@ -1372,69 +1620,59 @@ const AnalyticsDisplay = ({
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-              <TouchableOpacity
-                style={styles.closeModalBtn}
-                onPress={() => setShowGoalPicker(false)}>
-                <Text style={styles.closeModalBtnText}>Cancel</Text>
-              </TouchableOpacity>
+              <Text style={styles.goalPickerHint}>
+                {draftGoalVibes.length}/3 selected - each one stays active for
+                the full week.
+              </Text>
+              <View style={styles.goalPickerActions}>
+                <TouchableOpacity
+                  style={styles.closeModalBtn}
+                  onPress={handleCancelGoalPicker}>
+                  <Text style={styles.closeModalBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.doneModalBtn,
+                    {
+                      backgroundColor: isDraftGoalValid
+                        ? getMoodColor(previewGoalVibe)
+                        : '#dfe3e8',
+                    },
+                  ]}
+                  onPress={handleSaveGoalPicker}
+                  disabled={!isDraftGoalValid}
+                  activeOpacity={0.8}>
+                  <Icon
+                    name="check"
+                    size={16}
+                    color={isDraftGoalValid ? '#fff' : '#8a94a3'}
+                  />
+                  <Text
+                    style={[
+                      styles.doneModalBtnText,
+                      !isDraftGoalValid && styles.doneModalBtnTextDisabled,
+                    ]}>
+                    Done
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
-      {/* Daily Trend */}
-      {daily_breakdown.length > 1 && (
-        <SectionCard
-          title="Daily Trend"
-          icon="chart-line"
-          iconColor="#6c5ce7"
-          accentColor="#6c5ce7">
-          <LineChart dailyData={daily_breakdown} chartWidth={chartWidth} />
-        </SectionCard>
-      )}
-
-      {/* Mood Donut */}
+{/* ── Fandom Character Match ── */}
       {distribution.length > 0 && (
-        <SectionCard
-          title="Mood Distribution"
-          icon="chart-donut"
-          iconColor="#fd79a8"
-          accentColor="#fd79a8">
-          <DonutChart data={distribution} total={totalLogs} />
-        </SectionCard>
+        <FandomCharacterMatch topMood={topMood} distribution={distribution} totalLogs={totalLogs} />
       )}
 
-      {/* Horizontal bar breakdown */}
+      {/* ── Story Arc Section ── */}
       {distribution.length > 0 && (
-        <SectionCard
-          title="Breakdown"
-          icon="format-list-bulleted"
-          iconColor="#00b894"
-          accentColor="#00b894">
-          <BarChart
-            data={distribution.slice(0, 8)}
-            total={totalLogs}
-            chartWidth={chartWidth}
-          />
-        </SectionCard>
+        <MoodStoryArc distribution={distribution} totalLogs={totalLogs} weeklyBreakdown={weeklyBreakdown} />
       )}
 
-      {/* 28-day Heatmap */}
-      {daily_breakdown.length > 0 && (
-        <SectionCard
-          title="Activity Heatmap"
-          icon="calendar-month"
-          iconColor="#e17055"
-          accentColor="#e17055">
-          <MoodHeatmap dailyData={daily_breakdown} chartWidth={chartWidth} />
-        </SectionCard>
-      )}
-
-      {/* Trigger & Coping Insights */}
-      <TriggerInsightsCard token={token} backendUrl={backendUrl} days={30} />
-
-      {/* Refresh */}
-      {onRefresh && (
+       {/* Refresh */}
+       {onRefresh && (
         <TouchableOpacity style={styles.fullRefreshButton} onPress={onRefresh}>
           <Icon name="refresh" size={15} color="#aaa" />
           <Text style={styles.fullRefreshText}>Sync Latest Data</Text>
@@ -1634,31 +1872,6 @@ const styles = StyleSheet.create({
   barFill: {height: '100%'},
   barPct: {width: 36, fontSize: 11, fontWeight: '800', textAlign: 'right'},
 
-  heatmapContainer: {alignItems: 'center', gap: 8},
-  heatmapDayLabels: {flexDirection: 'row', alignSelf: 'flex-start'},
-  heatmapDayLabel: {
-    textAlign: 'center',
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#aaa',
-  },
-  heatmapGrid: {flexDirection: 'row', flexWrap: 'wrap'},
-  heatmapCellSlot: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  heatmapCell: {justifyContent: 'center', alignItems: 'center'},
-  heatmapCellText: {fontSize: 9, fontWeight: '800', color: '#fff'},
-  heatmapLegend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  heatmapLegendCell: {width: 14, height: 14, borderRadius: 3},
-  heatmapLegendLabel: {fontSize: 10, color: '#aaa', fontWeight: '600'},
-
   insightText: {
     fontSize: 14,
     lineHeight: 22,
@@ -1799,8 +2012,41 @@ const styles = StyleSheet.create({
     color: '#444',
     textTransform: 'capitalize',
   },
-  closeModalBtn: {marginTop: 24, alignItems: 'center'},
+  goalPickerHint: {
+    marginTop: 14,
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#7a7f87',
+    fontWeight: '700',
+  },
+  goalPickerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 24,
+  },
+  closeModalBtn: {
+    minWidth: 112,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
   closeModalBtnText: {color: '#999', fontWeight: '700', fontSize: 15},
+  doneModalBtn: {
+    minWidth: 112,
+    minHeight: 44,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 18,
+  },
+  doneModalBtnText: {color: '#fff', fontWeight: '800', fontSize: 15},
+  doneModalBtnTextDisabled: {color: '#8a94a3'},
 });
 const goalReactionStyles = StyleSheet.create({
   checkBtn: {

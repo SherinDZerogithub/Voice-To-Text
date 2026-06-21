@@ -198,6 +198,7 @@ const MoodResult = ({
   hasText,
   setAppBgColor,
   appBgColor,
+  onTagPress,
 }) => {
   const [isSpeaking, setIsSpeaking] = React.useState(false);
   const [containerWidth, setContainerWidth] = React.useState(0);
@@ -260,7 +261,7 @@ const MoodResult = ({
         Animated.timing(highlightOpacity, {
           toValue: 1,
           duration: 160,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }).start();
       }
     });
@@ -307,17 +308,17 @@ const MoodResult = ({
             Animated.timing(highlightTranslateY, {
               toValue: line.y,
               duration: 180,
-              useNativeDriver: true,
+              useNativeDriver: false,
             }),
             Animated.timing(highlightTranslateX, {
               toValue: targetX,
               duration: 100,
-              useNativeDriver: true,
+              useNativeDriver: false,
             }),
             Animated.timing(highlightOpacity, {
               toValue: 1,
               duration: 120,
-              useNativeDriver: true,
+              useNativeDriver: false,
             }),
           ]).start();
         } else {
@@ -325,7 +326,7 @@ const MoodResult = ({
           Animated.timing(highlightTranslateX, {
             toValue: targetX,
             duration: 100,
-            useNativeDriver: true,
+            useNativeDriver: false,
           }).start();
         }
       }
@@ -645,11 +646,20 @@ const MoodResult = ({
               <Text style={[styles.cardLabel, secondaryTextStyle]}>Scene Tags</Text>
               <View style={styles.tagsRow}>
                 {moodData.scene_tags.map((tag, index) => (
-                  <View key={index} style={[styles.tag, { backgroundColor: `${moodData.color}40` }]}>
+                  <TouchableOpacity
+                    key={index}
+                    style={[styles.tag, { backgroundColor: `${moodData.color}40` }]}
+                    onPress={() => onTagPress && onTagPress(tag)}
+                    activeOpacity={onTagPress ? 0.7 : 1}>
                     <Text style={[styles.tagText, { color: isDarkBg ? '#fff' : moodData.color }]}>
                       {tag}
                     </Text>
-                  </View>
+                    {onTagPress && (
+                      <Text style={[styles.tagText, { color: isDarkBg ? '#fff' : moodData.color, fontSize: 9, opacity: 0.7 }]}>
+                        {' '}↗
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                 ))}
               </View>
             </View>

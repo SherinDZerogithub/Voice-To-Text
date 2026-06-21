@@ -671,8 +671,13 @@ const IncompleteContent = ({
     }, 500);
   }, []);
 
-  // Simple arc progress indicator
+  // Keep failed goals visually active even when the actual progress is 0%.
   const clampedPct = Math.min(percent, 99);
+  const visualPct = goalFailed ? Math.max(clampedPct, 8) : clampedPct;
+  const ringColor = goalFailed ? '#d63031' : meta.color;
+  const ringBaseColor = goalFailed ? '#ffd8d6' : meta.color + '30';
+  const ringFillColor = goalFailed ? '#fff1f0' : meta.color + '18';
+  const progressLabel = goalFailed ? 'review' : 'reached';
   const review = buildWeeklyReview({
     goalVibe,
     goalCount,
@@ -775,21 +780,23 @@ const IncompleteContent = ({
 
       {/* Animated arc progress indicator */}
       <Animated.View style={{ transform: [{ translateX: shakeAnim }], marginBottom: 18 }}>
-        <View style={[incompleteStyles.arcOuter, { borderColor: meta.color + '30' }]}>
-          <View style={[incompleteStyles.arcInner, { backgroundColor: meta.color + '18' }]}>
-            <Text style={incompleteStyles.arcEmoji}>{meta.emoji}</Text>
+        <View style={[incompleteStyles.arcOuter, { borderColor: ringBaseColor }]}>
+          <View style={[incompleteStyles.arcInner, { backgroundColor: ringFillColor }]}>
+            <Text style={incompleteStyles.arcEmoji}>{goalFailed ? '⚠️' : meta.emoji}</Text>
             <Text style={[incompleteStyles.arcPercent, { color: meta.darkColor }]}>{clampedPct}%</Text>
-            <Text style={incompleteStyles.arcLabel}>reached</Text>
+            <Text style={[incompleteStyles.arcLabel, goalFailed && incompleteStyles.arcLabelFailed]}>
+              {progressLabel}
+            </Text>
           </View>
           {/* Progress ring simulation via border */}
           <View
             style={[
               incompleteStyles.arcRing,
               {
-                borderColor: meta.color,
-                borderTopColor: clampedPct > 25 ? meta.color : 'transparent',
-                borderRightColor: clampedPct > 50 ? meta.color : 'transparent',
-                borderBottomColor: clampedPct > 75 ? meta.color : 'transparent',
+                borderColor: ringColor,
+                borderTopColor: visualPct > 25 ? ringColor : 'transparent',
+                borderRightColor: visualPct > 50 ? ringColor : 'transparent',
+                borderBottomColor: visualPct > 75 ? ringColor : 'transparent',
               },
             ]}
           />
@@ -864,6 +871,7 @@ const incompleteStyles = StyleSheet.create({
   arcEmoji: { fontSize: 30, marginBottom: 2 },
   arcPercent: { fontSize: 16, fontWeight: '900' },
   arcLabel: { fontSize: 10, color: '#aaa', fontWeight: '700', textTransform: 'uppercase' },
+  arcLabelFailed: { color: '#d63031' },
   headline: {
     fontSize: 22,
     fontWeight: '900',

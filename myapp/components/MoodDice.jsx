@@ -78,7 +78,7 @@ const MoodDice = ({onJournalEntry, onTabChange}) => {
         Animated.timing(rotateAnim, {
           toValue: 1,
           duration: 600,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.sequence([
           Animated.spring(scaleAnim, {

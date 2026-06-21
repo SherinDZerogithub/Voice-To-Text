@@ -83,12 +83,12 @@ const SwipeableHistoryItem = ({item, onSelect, onDelete, index}) => {
         translateX.flattenOffset();
         const val = isOpen.current ? SWIPE_THRESHOLD + g.dx : g.dx;
         if (val < SWIPE_THRESHOLD) {
-          Animated.spring(translateX, {toValue: SWIPE_THRESHOLD, useNativeDriver: true}).start();
-          Animated.timing(deleteOpacity, {toValue: 1, duration: 150, useNativeDriver: true}).start();
+          Animated.spring(translateX, {toValue: SWIPE_THRESHOLD, useNativeDriver: false}).start();
+          Animated.timing(deleteOpacity, {toValue: 1, duration: 150, useNativeDriver: false}).start();
           isOpen.current = true;
         } else {
-          Animated.spring(translateX, {toValue: 0, useNativeDriver: true}).start();
-          Animated.timing(deleteOpacity, {toValue: 0, duration: 150, useNativeDriver: true}).start();
+          Animated.spring(translateX, {toValue: 0, useNativeDriver: false}).start();
+          Animated.timing(deleteOpacity, {toValue: 0, duration: 150, useNativeDriver: false}).start();
           isOpen.current = false;
         }
       },
@@ -96,8 +96,8 @@ const SwipeableHistoryItem = ({item, onSelect, onDelete, index}) => {
   ).current;
 
   const closeSwipe = () => {
-    Animated.spring(translateX, {toValue: 0, useNativeDriver: true}).start();
-    Animated.timing(deleteOpacity, {toValue: 0, duration: 150, useNativeDriver: true}).start();
+    Animated.spring(translateX, {toValue: 0, useNativeDriver: false}).start();
+    Animated.timing(deleteOpacity, {toValue: 0, duration: 150, useNativeDriver: false}).start();
     isOpen.current = false;
   };
 
@@ -171,13 +171,27 @@ const SwipeableHistoryItem = ({item, onSelect, onDelete, index}) => {
   );
 };
 
-const HistoryDisplay = ({moodHistory, onSelect, onDelete}) => {
-  const [searchQuery, setSearchQuery] = useState('');
+const HistoryDisplay = ({moodHistory, onSelect, onDelete, initialTagFilter}) => {
+  const [searchQuery, setSearchQuery] = useState(initialTagFilter ? `#${initialTagFilter}` : '');
+  const [activeTagFilter, setActiveTagFilter] = useState(initialTagFilter || null);
+
+  // Update if initialTagFilter changes (e.g. navigating from a tag)
+  React.useEffect(() => {
+    if (initialTagFilter) {
+      setActiveTagFilter(initialTagFilter);
+      setSearchQuery('');
+    }
+  }, [initialTagFilter]);
 
   const filteredHistory = useCallback(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return moodHistory;
-    return moodHistory.filter(
+    const base = activeTagFilter
+      ? moodHistory.filter(item =>
+          Array.isArray(item.scene_tags) && item.scene_tags.some(t => t.toLowerCase() === activeTagFilter.toLowerCase())
+        )
+      : moodHistory;
+    if (!q) return base;
+    return base.filter(
       item =>
         item.vibe?.toLowerCase().includes(q) ||
         item.caption?.toLowerCase().includes(q) ||
@@ -185,7 +199,7 @@ const HistoryDisplay = ({moodHistory, onSelect, onDelete}) => {
         item.reflection?.toLowerCase().includes(q) ||
         item.gentle_reminder?.toLowerCase().includes(q),
     );
-  }, [moodHistory, searchQuery])();
+  }, [moodHistory, searchQuery, activeTagFilter])();
 
   // Group by date
   const grouped = useCallback(() => {
@@ -243,9 +257,20 @@ const HistoryDisplay = ({moodHistory, onSelect, onDelete}) => {
         )}
       </View>
 
-      {searchQuery.length > 0 && (
+      {/* Active tag filter chip */}
+      {activeTagFilter && (
+        <View style={styles.tagFilterRow}>
+          <Icon name="tag" size={13} color={ACCENT} />
+          <Text style={styles.tagFilterLabel}>Tag: <Text style={{fontWeight:'800'}}>{activeTagFilter}</Text></Text>
+          <TouchableOpacity onPress={() => setActiveTagFilter(null)} style={styles.tagFilterClear}>
+            <Icon name="close" size={13} color={ACCENT} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {(searchQuery.length > 0 || activeTagFilter) && (
         <Text style={styles.resultCount}>
-          {filteredHistory.length} result{filteredHistory.length !== 1 ? 's' : ''} for "{searchQuery}"
+          {filteredHistory.length} result{filteredHistory.length !== 1 ? 's' : ''}{activeTagFilter ? ` tagged "${activeTagFilter}"` : ` for "${searchQuery}"`}
         </Text>
       )}
 
@@ -335,6 +360,21 @@ const styles = StyleSheet.create({
   },
   searchInput: {flex: 1, fontSize: 14, color: '#1a1a2e', fontWeight: '500'},
   resultCount: {fontSize: 12, color: '#9ca3af', marginBottom: 10, marginLeft: 4, fontStyle: 'italic'},
+  tagFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#6c5ce715',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#6c5ce730',
+  },
+  tagFilterLabel: {fontSize: 12, color: '#6c5ce7', fontWeight: '600'},
+  tagFilterClear: {marginLeft: 2},
 
   listContent: {paddingBottom: 40, paddingTop: 4},
 

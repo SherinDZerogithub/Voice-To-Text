@@ -5,514 +5,278 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Modal,
 } from 'react-native';
-import Svg, {
-  G,
-  Circle,
-  Path,
-  Line,
-  Defs,
-  LinearGradient,
-  Stop,
-  Text as SvgText,
-} from 'react-native-svg';
+import Svg, {Circle, Defs, LinearGradient, Stop} from 'react-native-svg';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
-const GoalAlignmentRing = ({moodGoal, analyticsData, onGoalUpdate}) => {
-  const [progress, setProgress] = useState(0);
-  const [showDetails, setShowDetails] = useState(false);
-  const [nextSteps, setNextSteps] = useState([]);
+const GOAL_WINDOW_DAYS = 7;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-  const ringAnim = useRef(new Animated.Value(0)).current;
-  const needleAnim = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
+const getGoalWindowStatus = moodGoal => {
+  const updatedAt = moodGoal?.updated_at ? new Date(moodGoal.updated_at) : null;
+  if (!updatedAt || Number.isNaN(updatedAt.getTime())) {
+    return {daysElapsed: 0, daysRemaining: GOAL_WINDOW_DAYS};
+  }
+  const elapsedMs = Math.max(0, Date.now() - updatedAt.getTime());
+  const daysElapsed = Math.floor(elapsedMs / MS_PER_DAY);
+  return {
+    daysElapsed: Math.min(daysElapsed, GOAL_WINDOW_DAYS),
+    daysRemaining: Math.max(0, GOAL_WINDOW_DAYS - daysElapsed),
+  };
+};
 
-  // Calculate progress based on mood goal
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+const ProgressRing = ({progress, color}) => {
+  const size = 160;
+  const strokeWidth = 14;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const cx = size / 2;
+  const cy = size / 2;
+
+  const animVal = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    if (!moodGoal?.vibes || !analyticsData?.vibe_breakdown) {
-      setProgress(0);
-      return;
-    }
+    Animated.timing(animVal, {
+      toValue: progress,
+      duration: 1000,
+      useNativeDriver: false,
+    }).start();
+  }, [progress]);
 
-    const goalVibes = Array.isArray(moodGoal.vibes)
-      ? moodGoal.vibes
-      : [moodGoal.vibe];
-    const totalEntries = analyticsData.total_entries || 1;
-    const goalEntries = analyticsData.vibe_breakdown
-      .filter(v => goalVibes.includes(v.label.toLowerCase()))
-      .reduce((sum, v) => sum + v.count, 0);
-
-    const calculatedProgress = Math.min(
-      (goalEntries / Math.max(totalEntries * 0.5, 5)) * 100,
-      100,
-    );
-    setProgress(calculatedProgress);
-
-    // Generate next steps
-    generateNextSteps(calculatedProgress, goalVibes);
-
-    // Animate ring and needle
-    Animated.parallel([
-      Animated.spring(ringAnim, {
-        toValue: 1,
-        friction: 6,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(needleAnim, {
-        toValue: calculatedProgress / 100,
-        duration: 1200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [moodGoal, analyticsData, needleAnim, ringAnim]);
-
-  const generateNextSteps = (currentProgress, goalVibes) => {
-    const steps = [];
-
-    if (currentProgress < 30) {
-      steps.push({
-        emoji: '🎯',
-        text: `You're ${Math.round(currentProgress)}% toward your goal`,
-        action: 'Try logging one positive moment today',
-      });
-      steps.push({
-        emoji: '📝',
-        text: 'Log your first entry',
-        action: 'Use the Mood Dice for a quick prompt',
-      });
-    } else if (currentProgress < 70) {
-      steps.push({
-        emoji: '🚀',
-        text: `You're ${Math.round(currentProgress)}% there!`,
-        action: 'Your compass is pointing the right way',
-      });
-      steps.push({
-        emoji: '💪',
-        text: 'Keep the momentum',
-        action: 'One more ${goalVibes[0]} day will help',
-      });
-    } else {
-      steps.push({
-        emoji: '🏁',
-        text: `Almost there! ${Math.round(currentProgress)}% complete`,
-        action: 'One more calm day will complete your goal',
-      });
-      steps.push({
-        emoji: '🎉',
-        text: 'Goal completion is near',
-        action: "You're about to unlock a badge!",
-      });
-    }
-
-    setNextSteps(steps);
-  };
-
-  const getCompassMessage = prog => {
-    if (prog < 30) {
-      return 'Finding direction...';
-    }
-    if (prog < 70) {
-      return 'On the right path';
-    }
-    if (prog < 100) {
-      return 'Almost aligned';
-    }
-    return 'Goal achieved! 🎉';
-  };
-
-  const CompassRing = ({progress}) => {
-    const size = 240;
-    const cx = size / 2;
-    const cy = size / 2;
-    const outerRadius = 100;
-    const innerRadius = 70;
-
-    // Needle angle (0-270 degrees for progress)
-    const needleAngle = (progress / 100) * 270 - 135;
-    const needleRad = (needleAngle * Math.PI) / 180;
-    const needleEndX = cx + 60 * Math.cos(needleRad);
-    const needleEndY = cy + 60 * Math.sin(needleRad);
-
-    // Cardinal directions
-    const directions = [
-      {label: 'N', angle: 0},
-      {label: 'E', angle: 90},
-      {label: 'S', angle: 180},
-      {label: 'W', angle: 270},
-    ];
-
-    return (
-      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <Defs>
-          <LinearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#6c5ce7" stopOpacity="0.3" />
-            <Stop offset="100%" stopColor="#6c5ce7" stopOpacity="0.1" />
-          </LinearGradient>
-          <LinearGradient id="needleGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <Stop offset="0%" stopColor="#FF6B6B" />
-            <Stop offset="100%" stopColor="#FFD93D" />
-          </LinearGradient>
-        </Defs>
-
-        {/* Outer ring */}
-        <Circle
-          cx={cx}
-          cy={cy}
-          r={outerRadius}
-          fill="none"
-          stroke="#E8E6F5"
-          strokeWidth="2"
-        />
-
-        {/* Progress ring */}
-        <Circle
-          cx={cx}
-          cy={cy}
-          r={outerRadius}
-          fill="none"
-          stroke="url(#ringGrad)"
-          strokeWidth="8"
-          strokeDasharray={`${(progress / 100) * 2 * Math.PI * outerRadius} ${
-            2 * Math.PI * outerRadius
-          }`}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${cx} ${cy})`}
-        />
-
-        {/* Inner circle */}
-        <Circle
-          cx={cx}
-          cy={cy}
-          r={innerRadius}
-          fill="#fff"
-          stroke="#E8E6F5"
-          strokeWidth="1"
-        />
-
-        {/* Cardinal directions */}
-        {directions.map((dir, i) => {
-          const angle = (dir.angle * Math.PI) / 180;
-          const x = cx + (outerRadius - 15) * Math.cos(angle);
-          const y = cy + (outerRadius - 15) * Math.sin(angle);
-          return (
-            <SvgText
-              key={i}
-              x={x}
-              y={y}
-              textAnchor="middle"
-              fontSize="14"
-              fontWeight="bold"
-              fill="#6c5ce7">
-              {dir.label}
-            </SvgText>
-          );
-        })}
-
-        {/* Degree markers */}
-        {Array.from({length: 37}).map((_, i) => {
-          const angle = (i * 10 - 90) * (Math.PI / 180);
-          const x1 = cx + (outerRadius - 5) * Math.cos(angle);
-          const y1 = cy + (outerRadius - 5) * Math.sin(angle);
-          const x2 = cx + (outerRadius - 12) * Math.cos(angle);
-          const y2 = cy + (outerRadius - 12) * Math.sin(angle);
-          return (
-            <Line
-              key={i}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke="#D0CDE8"
-              strokeWidth="1"
-            />
-          );
-        })}
-
-        {/* Needle */}
-        <Line
-          x1={cx}
-          y1={cy}
-          x2={needleEndX}
-          y2={needleEndY}
-          stroke="url(#needleGrad)"
-          strokeWidth="4"
-          strokeLinecap="round"
-        />
-
-        {/* Needle base circle */}
-        <Circle cx={cx} cy={cy} r="6" fill="#2d3436" />
-        <Circle cx={cx} cy={cy} r="3" fill="#fff" />
-
-        {/* Center percentage */}
-        <SvgText
-          x={cx}
-          y={cy + 35}
-          textAnchor="middle"
-          fontSize="24"
-          fontWeight="bold"
-          fill="#2d3436">
-          {Math.round(progress)}%
-        </SvgText>
-      </Svg>
-    );
-  };
-
-  const needleRotation = needleAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '270deg'],
+  const dashOffset = animVal.interpolate({
+    inputRange: [0, 100],
+    outputRange: [circumference, 0],
   });
 
   return (
+    <View style={{width: size, height: size}}>
+      <Svg width={size} height={size}>
+        <Defs>
+          <LinearGradient id="progGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor={color} stopOpacity="1" />
+            <Stop offset="100%" stopColor={color + 'AA'} stopOpacity="1" />
+          </LinearGradient>
+        </Defs>
+        {/* Track */}
+        <Circle
+          cx={cx} cy={cy} r={radius}
+          fill="none"
+          stroke="#EDE9FF"
+          strokeWidth={strokeWidth}
+        />
+        {/* Progress */}
+        <AnimatedCircle
+          cx={cx} cy={cy} r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${cx} ${cy})`}
+        />
+      </Svg>
+      {/* Center content */}
+      <View style={styles.ringCenter}>
+        <Text style={[styles.ringPercent, {color}]}>{Math.round(progress)}%</Text>
+        <Text style={styles.ringLabel}>aligned</Text>
+      </View>
+    </View>
+  );
+};
+
+const GoalAlignmentRing = ({moodGoal, analyticsData, onGoalUpdate}) => {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!moodGoal?.vibes && !moodGoal?.vibe) {
+      setProgress(0);
+      return;
+    }
+    const goalVibes = Array.isArray(moodGoal.vibes)
+      ? moodGoal.vibes
+      : [moodGoal.vibe].filter(Boolean);
+
+    const freqData = analyticsData?.mood_frequency || {};
+    const vibeBreakdown = analyticsData?.vibe_breakdown || [];
+    const totalEntries = analyticsData?.total_entries || 1;
+
+    // Count matching entries from vibe_breakdown or mood_frequency
+    let goalEntries = vibeBreakdown
+      .filter(v => goalVibes.includes(v.label?.toLowerCase()))
+      .reduce((sum, v) => sum + (v.count || 0), 0);
+
+    if (goalEntries === 0) {
+      goalEntries = goalVibes.reduce((sum, v) => sum + (freqData[v] || 0), 0);
+    }
+
+    const calculated = Math.min((goalEntries / Math.max(totalEntries * 0.5, 5)) * 100, 100);
+    setProgress(calculated);
+  }, [moodGoal, analyticsData]);
+
+  const {daysElapsed, daysRemaining} = getGoalWindowStatus(moodGoal);
+
+  const goalVibes = Array.isArray(moodGoal?.vibes)
+    ? moodGoal.vibes
+    : [moodGoal?.vibe].filter(Boolean);
+
+  const getStatusInfo = p => {
+    if (!moodGoal?.vibe && !moodGoal?.vibes?.length)
+      return {emoji: '🎯', text: 'No goal set yet', color: '#aaa', tip: 'Tap the goal button above to set a mood goal'};
+    if (p >= 100)
+      return {emoji: '🏆', text: 'Goal achieved!', color: '#00b894', tip: "You've hit your target. Incredible work!"};
+    if (p >= 70)
+      return {emoji: '🔥', text: 'Almost there', color: '#f39c12', tip: 'Keep it up — you\'re so close!'};
+    if (p >= 40)
+      return {emoji: '💪', text: 'Good progress', color: '#6c5ce7', tip: 'You\'re on track. Log more to keep momentum.'};
+    return {emoji: '🌱', text: 'Just starting', color: '#74b9ff', tip: 'Every entry counts. You\'ve got this!'};
+  };
+
+  const status = getStatusInfo(progress);
+
+  // Day dots
+  const dayDots = Array.from({length: GOAL_WINDOW_DAYS}, (_, i) => i < daysElapsed);
+
+  return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Icon name="compass-outline" size={24} color="#6c5ce7" />
-        <Text style={styles.title}>Goal Alignment Ring</Text>
-        <Text style={styles.subtitle}>{moodGoal?.vibe || 'Set a goal'}</Text>
+        <View style={styles.headerIconWrap}>
+          <Icon name="flag-checkered" size={18} color="#6c5ce7" />
+        </View>
+        <View style={{flex: 1}}>
+          <Text style={styles.title}>Mood Goal</Text>
+          <Text style={styles.subtitle}>
+            {goalVibes.length > 0 ? goalVibes.join(' · ') : 'Not set'}
+          </Text>
+        </View>
+        {onGoalUpdate && (
+          <TouchableOpacity style={styles.editBtn} onPress={onGoalUpdate}>
+            <Icon name="pencil-outline" size={15} color="#6c5ce7" />
+            <Text style={styles.editBtnText}>Edit</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      <View style={styles.compassSection}>
-        <Animated.View
-          style={[
-            styles.compassWrapper,
-            {
-              opacity: ringAnim,
-              transform: [{scale: ringAnim}],
-            },
-          ]}>
-          <CompassRing progress={progress} />
-        </Animated.View>
+      {/* Main content */}
+      <View style={styles.body}>
+        {/* Progress ring */}
+        <View style={styles.ringWrap}>
+          <ProgressRing progress={progress} color={status.color} />
+        </View>
 
-        <Text style={styles.compassMessage}>{getCompassMessage(progress)}</Text>
-      </View>
-
-      {/* Next Steps */}
-      <View style={styles.stepsSection}>
-        <Text style={styles.stepsTitle}>Next Steps</Text>
-        {nextSteps.map((step, idx) => (
-          <View key={idx} style={styles.stepCard}>
-            <Text style={styles.stepEmoji}>{step.emoji}</Text>
-            <View style={styles.stepContent}>
-              <Text style={styles.stepText}>{step.text}</Text>
-              <Text style={styles.stepAction}>{step.action}</Text>
-            </View>
+        {/* Right side info */}
+        <View style={styles.infoCol}>
+          <View style={[styles.statusChip, {backgroundColor: status.color + '18', borderColor: status.color + '40'}]}>
+            <Text style={styles.statusEmoji}>{status.emoji}</Text>
+            <Text style={[styles.statusText, {color: status.color}]}>{status.text}</Text>
           </View>
-        ))}
-      </View>
 
-      {/* Goal Details */}
-      <TouchableOpacity
-        style={styles.detailsButton}
-        onPress={() => setShowDetails(true)}>
-        <Icon name="information-outline" size={16} color="#6c5ce7" />
-        <Text style={styles.detailsButtonText}>View Goal Details</Text>
-      </TouchableOpacity>
+          <Text style={styles.tip}>{status.tip}</Text>
 
-      {/* Details Modal */}
-      <Modal
-        visible={showDetails}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDetails(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Goal Alignment</Text>
-              <TouchableOpacity
-                onPress={() => setShowDetails(false)}
-                style={styles.closeButton}>
-                <Icon name="close" size={24} color="#2d3436" />
-              </TouchableOpacity>
+          {/* 7-day progress dots */}
+          <View style={styles.dotsSection}>
+            <Text style={styles.dotsLabel}>7-day window</Text>
+            <View style={styles.dots}>
+              {dayDots.map((filled, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.dot,
+                    {backgroundColor: filled ? status.color : '#EDE9FF'},
+                    i === daysElapsed - 1 && filled && {borderWidth: 2, borderColor: status.color},
+                  ]}
+                />
+              ))}
             </View>
-
-            <View style={styles.detailsGrid}>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Current Goal</Text>
-                <Text style={styles.detailValue}>
-                  {moodGoal?.vibe || 'Not set'}
-                </Text>
-              </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Progress</Text>
-                <Text style={[styles.detailValue, {color: '#6c5ce7'}]}>
-                  {Math.round(progress)}%
-                </Text>
-              </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Total Entries</Text>
-                <Text style={styles.detailValue}>
-                  {analyticsData?.total_entries || 0}
-                </Text>
-              </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Goal Vibes</Text>
-                <Text style={styles.detailValue}>
-                  {moodGoal?.vibes?.join(', ') || 'None'}
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => setShowDetails(false)}>
-              <Text style={styles.modalButtonText}>Close</Text>
-            </TouchableOpacity>
+            <Text style={styles.daysText}>
+              {daysRemaining > 0 ? `${daysRemaining}d remaining` : 'Window complete'}
+            </Text>
           </View>
         </View>
-      </Modal>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
-    backgroundColor: '#F8F7FF',
-    borderRadius: 16,
-    marginVertical: 12,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 18,
+    marginVertical: 8,
+    shadowColor: '#6c5ce7',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
     gap: 10,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#2d3436',
-    flex: 1,
-  },
-  subtitle: {
-    fontSize: 12,
-    color: '#888',
-    fontWeight: '500',
-  },
-  compassSection: {
-    alignItems: 'center',
-    paddingVertical: 20,
-    backgroundColor: '#fff',
-    borderRadius: 12,
     marginBottom: 16,
   },
-  compassWrapper: {
-    marginBottom: 12,
-  },
-  compassMessage: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6c5ce7',
-  },
-  stepsSection: {
-    marginBottom: 16,
-  },
-  stepsTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 10,
-  },
-  stepCard: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
+  headerIconWrap: {
+    width: 36,
+    height: 36,
     borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    alignItems: 'flex-start',
-    gap: 10,
+    backgroundColor: '#6c5ce710',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  stepEmoji: {
-    fontSize: 18,
-    marginTop: 2,
-  },
-  stepContent: {
-    flex: 1,
-  },
-  stepText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#2d3436',
-    marginBottom: 4,
-  },
-  stepAction: {
-    fontSize: 11,
-    color: '#888',
-    fontWeight: '500',
-  },
-  detailsButton: {
+  title: {fontSize: 15, fontWeight: '800', color: '#2d3436'},
+  subtitle: {fontSize: 12, color: '#888', fontWeight: '600', marginTop: 1},
+  editBtn: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#6c5ce710',
+    borderWidth: 1,
+    borderColor: '#6c5ce720',
+  },
+  editBtnText: {fontSize: 12, color: '#6c5ce7', fontWeight: '700'},
+  body: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
+  ringWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+  },
+  ringCenter: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ringPercent: {fontSize: 26, fontWeight: '900'},
+  ringLabel: {fontSize: 11, color: '#aaa', fontWeight: '600', marginTop: -2},
+  infoCol: {flex: 1, gap: 10},
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
   },
-  detailsButtonText: {
-    color: '#6c5ce7',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    width: '85%',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#2d3436',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  detailsGrid: {
-    marginBottom: 20,
-  },
-  detailItem: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0EFF8',
-  },
-  detailLabel: {
-    fontSize: 11,
-    color: '#888',
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#2d3436',
-  },
-  modalButton: {
-    backgroundColor: '#6c5ce7',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  modalButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  statusEmoji: {fontSize: 16},
+  statusText: {fontSize: 13, fontWeight: '800'},
+  tip: {fontSize: 12, color: '#666', fontWeight: '500', lineHeight: 17},
+  dotsSection: {gap: 5},
+  dotsLabel: {fontSize: 10, color: '#aaa', fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase'},
+  dots: {flexDirection: 'row', gap: 5},
+  dot: {width: 10, height: 10, borderRadius: 5},
+  daysText: {fontSize: 11, color: '#aaa', fontWeight: '600'},
 });
 
 export default GoalAlignmentRing;

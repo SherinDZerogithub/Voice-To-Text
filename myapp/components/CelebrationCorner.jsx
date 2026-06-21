@@ -111,6 +111,9 @@ const CelebrationCorner = ({analyticsData, moodHistory = []}) => {
 
   const celebrationAnim = useRef(new Animated.Value(0)).current;
   const badgeAnimRefs = useRef({});
+  const unlockedBadgeIdsRef = useRef(new Set());
+  const celebrationTimeoutRef = useRef(null);
+  const celebrationAnimationRef = useRef(null);
 
   // Calculate badge unlock conditions
   useEffect(() => {
@@ -133,31 +136,50 @@ const CelebrationCorner = ({analyticsData, moodHistory = []}) => {
     const unlocked = BADGES.filter(badge => badge.condition(data));
     setUnlockedBadges(unlocked);
 
-    // Animate new unlocks
-    if (unlocked.length > 0 && !badgeAnimRefs.current[unlocked[0].id]) {
+    const previousIds = unlockedBadgeIdsRef.current;
+    const hasNewUnlock = unlocked.some(badge => !previousIds.has(badge.id));
+    unlockedBadgeIdsRef.current = new Set(unlocked.map(badge => badge.id));
+
+    if (hasNewUnlock) {
       triggerCelebration();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analyticsData, moodHistory]);
 
   const triggerCelebration = () => {
+    if (celebrationTimeoutRef.current) {
+      clearTimeout(celebrationTimeoutRef.current);
+    }
+    celebrationAnimationRef.current?.stop();
     celebrationAnim.setValue(0);
-    Animated.sequence([
+    celebrationAnimationRef.current = Animated.sequence([
       Animated.spring(celebrationAnim, {
         toValue: 1,
         friction: 4,
         tension: 40,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
       Animated.timing(celebrationAnim, {
         toValue: 0,
         duration: 2000,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]).start();
     setShowCelebration(true);
-    setTimeout(() => setShowCelebration(false), 2500);
+    celebrationTimeoutRef.current = setTimeout(() => {
+      setShowCelebration(false);
+      celebrationTimeoutRef.current = null;
+    }, 2500);
   };
+
+  useEffect(() => {
+    return () => {
+      celebrationAnimationRef.current?.stop();
+      if (celebrationTimeoutRef.current) {
+        clearTimeout(celebrationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const BadgeIcon = ({badge, isUnlocked, index}) => {
     if (!badgeAnimRefs.current[badge.id]) {
@@ -167,16 +189,19 @@ const CelebrationCorner = ({analyticsData, moodHistory = []}) => {
 
     useEffect(() => {
       if (isUnlocked) {
-        Animated.sequence([
+        const animation = Animated.sequence([
           Animated.delay(index * 100),
           Animated.spring(anim, {
             toValue: 1,
             friction: 5,
             tension: 35,
-            useNativeDriver: true,
+            useNativeDriver: false,
           }),
-        ]).start();
+        ]);
+        animation.start();
+        return () => animation.stop();
       }
+      anim.setValue(0);
     }, [anim, isUnlocked, index]);
 
     return (
