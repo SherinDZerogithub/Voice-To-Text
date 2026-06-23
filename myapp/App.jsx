@@ -9,6 +9,7 @@ import {
   Text,
   NativeModules,
   Animated,
+  Easing,
   TouchableOpacity,
 } from 'react-native';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
@@ -77,6 +78,45 @@ const App = () => {
   const [isListening, setIsListening] = useState(false);
   const [text, setText] = useState('');
   const [appBgColor, setAppBgColor] = useState('#f5f5f5');
+  // Smooth, cinematic background color transitions.
+  // Plain `backgroundColor: appBgColor` snaps instantly on every mood change.
+  // Instead we cross-fade between the previous and next color with a slow,
+  // dramatic tween, rebuilding the interpolation each time the target color
+  // changes so it always animates from wherever it currently is.
+  const bgPrevColorRef = useRef(appBgColor);
+  const bgProgress = useRef(new Animated.Value(1)).current;
+  const [animatedAppBgColor, setAnimatedAppBgColor] = useState(() =>
+    bgProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [appBgColor, appBgColor],
+    }),
+  );
+
+  useEffect(() => {
+    const fromColor = bgPrevColorRef.current;
+    const toColor = appBgColor;
+
+    if (fromColor === toColor) {
+      return;
+    }
+
+    bgProgress.setValue(0);
+    setAnimatedAppBgColor(
+      bgProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [fromColor, toColor],
+      }),
+    );
+
+    Animated.timing(bgProgress, {
+      toValue: 1,
+      duration: 2200, // slow, cinematic fade between mood colors
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: false, // color interpolation requires the JS driver
+    }).start();
+
+    bgPrevColorRef.current = toColor;
+  }, [appBgColor, bgProgress]);
   const [moodGoal, setMoodGoal] = useState(null); // { vibe: string, vibes: string[] }
   const [analyticsData, setAnalyticsData] = useState(null); // New state for analytics
   const [crisisAlert, setCrisisAlert] = useState(null);
@@ -1236,7 +1276,6 @@ const App = () => {
     container: {
       flex: 1,
       padding: 20,
-      backgroundColor: appBgColor,
     },
     content: {
       paddingVertical: 40,
@@ -1862,7 +1901,7 @@ const App = () => {
   };
 
   return (
-    <View style={{flex: 1, backgroundColor: appBgColor}}>
+    <Animated.View style={{flex: 1, backgroundColor: animatedAppBgColor}}>
       {activeTab === 'chat' ? (
         // TherapistChat contains a FlatList — must NOT be inside a ScrollView
         <TherapistChat
@@ -1969,7 +2008,7 @@ const App = () => {
           );
         })}
       </View>
-    </View>
+    </Animated.View>
   );
 };
 

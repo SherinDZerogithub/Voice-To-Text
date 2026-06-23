@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import Tts from 'react-native-tts';
+import Clipboard from '@react-native-clipboard/clipboard';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import PlaylistSuggestions from './PlaylistSuggestions';
 
@@ -201,6 +202,7 @@ const MoodResult = ({
   onTagPress,
 }) => {
   const [isSpeaking, setIsSpeaking] = React.useState(false);
+  const [isCopied, setIsCopied] = React.useState(false);
   const [containerWidth, setContainerWidth] = React.useState(0);
   const [lineMetadata, setLineMetadata] = React.useState([]);
   const [activeLineIndex, setActiveLineIndex] = React.useState(-1);
@@ -209,8 +211,27 @@ const MoodResult = ({
   const highlightOpacity = React.useRef(new Animated.Value(0)).current;
   const lineMetadataRef = React.useRef([]);
   const activeLineIndexRef = React.useRef(-1);
+  const copiedTimeoutRef = React.useRef(null);
   const contrastColor = getContrastColor(appBgColor);
   const isDarkBg = contrastColor === '#ffffff';
+
+  const handleCopyNarrative = React.useCallback(() => {
+    if (!moodData?.description) return;
+    Clipboard.setString(moodData.description);
+    setIsCopied(true);
+    if (copiedTimeoutRef.current) {
+      clearTimeout(copiedTimeoutRef.current);
+    }
+    copiedTimeoutRef.current = setTimeout(() => setIsCopied(false), 1800);
+  }, [moodData?.description]);
+
+  React.useEffect(() => {
+    return () => {
+      if (copiedTimeoutRef.current) {
+        clearTimeout(copiedTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Determine if a "Cheer Up" note should be shown based on valence
   const showSupportiveNote = React.useMemo(() => {
@@ -540,24 +561,44 @@ const MoodResult = ({
                     <Text style={styles.designCardIcon}>*</Text>
                     <Text style={[styles.designCardTitle, textStyle]}>Cinematic Narrative</Text>
                   </View>
-                  <TouchableOpacity
-                    style={[
-                      styles.speakerButton,
-                      isSpeaking && styles.speakerButtonActive,
-                      isDarkBg && {
-                        backgroundColor: 'rgba(255,255,255,0.1)',
-                        borderColor: 'rgba(255,255,255,0.2)',
-                      },
-                    ]}
-                    onPress={handleSpeak}
-                    activeOpacity={0.6}
-                  >
-                    <Icon
-                      name={isSpeaking ? 'stop-circle' : 'volume-high'}
-                      size={24}
-                      color={isSpeaking ? '#ff4757' : moodData.color || '#3498db'}
-                    />
-                  </TouchableOpacity>
+                  <View style={styles.narrativeActionsRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.speakerButton,
+                        isCopied && styles.speakerButtonActive,
+                        isDarkBg && {
+                          backgroundColor: 'rgba(255,255,255,0.1)',
+                          borderColor: 'rgba(255,255,255,0.2)',
+                        },
+                      ]}
+                      onPress={handleCopyNarrative}
+                      activeOpacity={0.6}
+                    >
+                      <Icon
+                        name={isCopied ? 'check' : 'content-copy'}
+                        size={20}
+                        color={isCopied ? '#2ecc71' : moodData.color || '#3498db'}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.speakerButton,
+                        isSpeaking && styles.speakerButtonActive,
+                        isDarkBg && {
+                          backgroundColor: 'rgba(255,255,255,0.1)',
+                          borderColor: 'rgba(255,255,255,0.2)',
+                        },
+                      ]}
+                      onPress={handleSpeak}
+                      activeOpacity={0.6}
+                    >
+                      <Icon
+                        name={isSpeaking ? 'stop-circle' : 'volume-high'}
+                        size={24}
+                        color={isSpeaking ? '#ff4757' : moodData.color || '#3498db'}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 <View
                   style={styles.textContainer}
@@ -850,6 +891,11 @@ const styles = StyleSheet.create({
   designCardHeaderMain: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  narrativeActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   speakerButton: {
     width: 44,

@@ -24,6 +24,7 @@ import {getContrastColor} from '../utils/colors';
 import GoalCompletionModal, {COMPLETION_THRESHOLD} from './GoalCompletionModal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import VibeRadarChart from './VibeRadarChart';
+import StoryJournalBook from './StoryJournalBook';
 
 const ANALYTICS_HORIZONTAL_PADDING = 20;
 const CHART_HEIGHT = 180;
@@ -787,45 +788,6 @@ const TYPE_BADGE = {
   movie: {label: 'Movie', color: '#fd79a8', bg: '#fd79a820'},
 };
 
-const STORY_ARCS = [
-  {
-    id: 'hero',
-    title: 'The Hero\'s Journey',
-    description: 'You\'ve been riding a wave of high energy — this is your training arc. Think Naruto before the chunin exams.',
-    condition: d => (d.find(x => x.label === 'energetic' || x.label === 'happy')?.count || 0) / (d.reduce((a,b)=>a+b.count,0)||1) > 0.4,
-    emoji: '⚡',
-    color: '#fdcb6e',
-    character: {name: 'Naruto Uzumaki', show: 'Naruto', line: '"I never go back on my word — that\'s my nindo!"'},
-  },
-  {
-    id: 'healing',
-    title: 'The Healing Arc',
-    description: 'Your mood shows softness and introspection. Like Violet Evergarden learning to feel again, you\'re processing.',
-    condition: d => (d.find(x => x.label === 'sad' || x.label === 'lonely' || x.label === 'pensive')?.count || 0) / (d.reduce((a,b)=>a+b.count,0)||1) > 0.35,
-    emoji: '💜',
-    color: '#a29bfe',
-    character: {name: 'Violet Evergarden', show: 'Violet Evergarden', line: '"I want to understand these human emotions."'},
-  },
-  {
-    id: 'slowburn',
-    title: 'The Slow Burn',
-    description: 'Calm and steady — you\'re in your cozy kdrama era. Building something beautiful without rushing.',
-    condition: d => (d.find(x => x.label === 'calm' || x.label === 'cozy')?.count || 0) / (d.reduce((a,b)=>a+b.count,0)||1) > 0.35,
-    emoji: '🕯️',
-    color: '#fd79a8',
-    character: {name: 'Ri Jeong-hyeok', show: 'Crash Landing on You', line: '"Even if I can\'t have you, the world you\'re in is enough."'},
-  },
-  {
-    id: 'chaos',
-    title: 'The Chaotic Arc',
-    description: 'Mixed signals, big feelings — you\'re in a plot twist episode. Even Gintoki would respect the chaos.',
-    condition: () => true,
-    emoji: '🌀',
-    color: '#00b894',
-    character: {name: 'Gintoki Sakata', show: 'Gintama', line: '"If you can\'t fight back tears, fight with them flowing."'},
-  },
-];
-
 const FandomCharacterMatch = ({topMood, distribution, totalLogs}) => {
   const [selectedType, setSelectedType] = useState(null);
   const [expanded, setExpanded] = useState(false);
@@ -955,150 +917,52 @@ const fanStyles = StyleSheet.create({
   miniChar: {fontSize: 11, color: '#888'},
 });
 
-// ─── Mood Story Arc ────────────────────────────────────────────────────────────
+// ─── Story Journal entry point ───────────────────────────────────────────────
+// A simple, inviting card. The real journal — writing, drawing, stickers,
+// photos, page after page — lives in its own full-screen book (StoryJournalBook),
+// opened with the button below.
 
-const MoodStoryArc = ({distribution, totalLogs, weeklyBreakdown}) => {
-  const [currentArcIdx, setCurrentArcIdx] = useState(0);
-  const [showQuote, setShowQuote] = useState(false);
-  const quoteAnim = useRef(new Animated.Value(0)).current;
-
-  const arc = useMemo(() => {
-    const found = STORY_ARCS.find(a => a.condition(distribution));
-    return found || STORY_ARCS[STORY_ARCS.length - 1];
-  }, [distribution]);
-
-  const toggleQuote = () => {
-    const next = !showQuote;
-    setShowQuote(next);
-    Animated.spring(quoteAnim, {toValue: next ? 1 : 0, friction: 8, useNativeDriver: true}).start();
-  };
-
-  // Build 7-day vibe timeline
-  const timeline = (weeklyBreakdown || []).slice(-7).map(day => {
-    const top = Object.entries(day.mood_frequency || {}).sort((a, b) => b[1] - a[1])[0];
-    return {date: day.date, mood: top?.[0] || null};
-  });
-
-  const scaleY = quoteAnim.interpolate({inputRange: [0, 1], outputRange: [0, 1]});
+const StoryJournal = ({token}) => {
+  const [showBook, setShowBook] = useState(false);
 
   return (
-    <SectionCard title="Your Story Arc" icon="book-open-variant" iconColor="#a29bfe" accentColor="#a29bfe">
-      {/* Arc card */}
-      <View style={[arcStyles.arcCard, {borderColor: arc.color + '50', backgroundColor: arc.color + '0A'}]}>
-        <Text style={arcStyles.arcEmoji}>{arc.emoji}</Text>
-        <View style={{flex: 1}}>
-          <Text style={[arcStyles.arcTitle, {color: arc.color}]}>{arc.title}</Text>
-          <Text style={arcStyles.arcDesc}>{arc.description}</Text>
-        </View>
-      </View>
-
-      {/* Character quote toggle */}
-      <TouchableOpacity style={[arcStyles.quoteToggle, {borderColor: arc.color + '40'}]} onPress={toggleQuote}>
-        <Icon name="format-quote-open" size={16} color={arc.color} />
-        <Text style={[arcStyles.quoteToggleText, {color: arc.color}]}>
-          {showQuote ? 'Hide' : `What would ${arc.character.name} say?`}
+    <>
+      <SectionCard title="Your Story Journal" icon="book-open-page-variant" iconColor="#a29bfe" accentColor="#a29bfe">
+        <Text style={journalEntryStyles.intro}>
+          Every mood entry writes a page. Write, draw, add stickers, or drop in a photo — flip through your story anytime.
         </Text>
-        <Icon name={showQuote ? 'chevron-up' : 'chevron-down'} size={16} color={arc.color} />
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={journalEntryStyles.openBtn}
+          onPress={() => setShowBook(true)}
+          activeOpacity={0.85}>
+          <Icon name="book-open-page-variant" size={18} color="#fff" />
+          <Text style={journalEntryStyles.openBtnText}>Open your journal</Text>
+          <Icon name="arrow-right" size={16} color="#fff" />
+        </TouchableOpacity>
+      </SectionCard>
 
-      {showQuote && (
-        <Animated.View style={[arcStyles.quoteBox, {borderLeftColor: arc.color, transform: [{scaleY}]}]}>
-          <Text style={arcStyles.quoteChar}>— {arc.character.name}, {arc.character.show}</Text>
-          <Text style={arcStyles.quoteText}>{arc.character.line}</Text>
-        </Animated.View>
-      )}
-
-      {/* 7-day mood timeline */}
-      {timeline.length > 0 && (
-        <View style={arcStyles.timeline}>
-          <Text style={arcStyles.timelineTitle}>This week's plot</Text>
-          <View style={arcStyles.timelineDots}>
-            {timeline.map((day, i) => (
-              <View key={i} style={arcStyles.timelineItem}>
-                <View style={[arcStyles.timelineDot, {backgroundColor: day.mood ? getMoodColor(day.mood) + '30' : '#f0f0f0', borderColor: day.mood ? getMoodColor(day.mood) : '#ddd'}]}>
-                  <Text style={arcStyles.timelineMoodEmoji}>{day.mood ? getMoodEmoji(day.mood) : '·'}</Text>
-                </View>
-                <Text style={arcStyles.timelineDayLabel}>
-                  {day.date ? new Date(day.date + 'T00:00:00').toLocaleDateString([], {weekday: 'narrow'}) : '·'}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* Story prompt */}
-      <View style={arcStyles.promptBox}>
-        <Icon name="pencil-box-outline" size={15} color="#a29bfe" />
-        <Text style={arcStyles.promptText}>
-          <Text style={{fontWeight: '800', color: '#a29bfe'}}>Journal prompt: </Text>
-          {arc.id === 'hero' && "What challenge are you training to overcome right now?"}
-          {arc.id === 'healing' && "What emotion have you been avoiding, and what might it be telling you?"}
-          {arc.id === 'slowburn' && "What are you quietly building for yourself these days?"}
-          {arc.id === 'chaos' && "If your life were a drama, what episode title would this week be?"}
-        </Text>
-      </View>
-    </SectionCard>
+      <StoryJournalBook
+        visible={showBook}
+        onClose={() => setShowBook(false)}
+        token={token}
+        accentColor="#a29bfe"
+      />
+    </>
   );
 };
 
-const arcStyles = StyleSheet.create({
-  arcCard: {
+const journalEntryStyles = StyleSheet.create({
+  intro: {fontSize: 13, color: '#666', lineHeight: 19, marginBottom: 14},
+  openBtn: {
     flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#a29bfe',
     borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    marginBottom: 12,
-    alignItems: 'flex-start',
+    paddingVertical: 14,
   },
-  arcEmoji: {fontSize: 30},
-  arcTitle: {fontSize: 15, fontWeight: '900', marginBottom: 4},
-  arcDesc: {fontSize: 12, color: '#555', lineHeight: 18},
-  quoteToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 8,
-    justifyContent: 'center',
-  },
-  quoteToggleText: {fontSize: 12, fontWeight: '700', flex: 1, textAlign: 'center'},
-  quoteBox: {
-    borderLeftWidth: 3,
-    paddingLeft: 12,
-    paddingVertical: 8,
-    marginBottom: 14,
-    backgroundColor: '#fafafa',
-    borderRadius: 8,
-  },
-  quoteChar: {fontSize: 10, color: '#aaa', fontWeight: '700', marginBottom: 4},
-  quoteText: {fontSize: 13, color: '#444', fontStyle: 'italic', lineHeight: 20},
-  timeline: {marginBottom: 14},
-  timelineTitle: {fontSize: 11, color: '#aaa', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10},
-  timelineDots: {flexDirection: 'row', justifyContent: 'space-between'},
-  timelineItem: {alignItems: 'center', gap: 4},
-  timelineDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-  },
-  timelineMoodEmoji: {fontSize: 16},
-  timelineDayLabel: {fontSize: 9, color: '#bbb', fontWeight: '700'},
-  promptBox: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: '#f0ecff',
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'flex-start',
-  },
-  promptText: {flex: 1, fontSize: 12, color: '#555', lineHeight: 18},
+  openBtnText: {fontSize: 14, fontWeight: '800', color: '#fff'},
 });
 
  // ─── Section Card ─────────────────────────────────────────────────────────────
@@ -1666,10 +1530,8 @@ const AnalyticsDisplay = ({
         <FandomCharacterMatch topMood={topMood} distribution={distribution} totalLogs={totalLogs} />
       )}
 
-      {/* ── Story Arc Section ── */}
-      {distribution.length > 0 && (
-        <MoodStoryArc distribution={distribution} totalLogs={totalLogs} weeklyBreakdown={weeklyBreakdown} />
-      )}
+      {/* ── Story Journal Section ── */}
+      <StoryJournal token={token} />
 
        {/* Refresh */}
        {onRefresh && (

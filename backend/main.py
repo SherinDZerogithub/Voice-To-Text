@@ -1791,6 +1791,82 @@ Example format: ["Question one?", "Question two?", "Question three?"]"""
     return {"prompts": prompts, "source": "static"}
 
 
+STORY_JOURNAL_PROMPT_TEMPLATE = """You are an expert cinematic storyteller and novelist, continuing a personal storybook built from someone's real mood journal entries.
+
+Here are excerpts from their recent cinematic narrative entries, in chronological order:
+{entries_block}
+
+{user_request_block}
+
+Write the next chapter of their story (2-3 paragraphs).
+
+Rules:
+- Write in present or near-present tense, second person ("you") or as a close third-person narrator following them, matching the tone of the excerpts above.
+- Treat the excerpts as real chapters in an ongoing personal story — weave in a sense of continuity and emotional arc across them.
+- Be evocative, literary, and cinematic, like a novelist writing a pivotal chapter.
+- Do not summarize or list the entries; write a flowing narrative scene.
+- Never say "based on the entries" or "the journal shows" — just tell the story.
+- Return ONLY the story text, no titles, no preamble, no markdown."""
+
+DEFAULT_STORY_JOURNAL_FALLBACK = (
+    "The story pauses here for a quiet moment \u2014 not every chapter needs to be written "
+    "right away. Log a few more moods, or add your own prompt above, and the next page "
+    "will find its voice."
+)
+
+
+@app.post("/story-journal")
+async def generate_story_journal(
+    request: schemas.StoryJournalRequest,
+    current_user: str = Depends(auth.get_current_user),
+):
+    """
+    Generates the next chapter of the user's personal 'Story Journal' by weaving
+    together their existing cinematic narrative entries (and an optional prompt
+    from the user) into a new piece of continuous, copyable cinematic narrative.
+    """
+    entries = [e for e in (request.entries or []) if e.description and e.description.strip()]
+
+    if not entries:
+        return {
+            "story": DEFAULT_STORY_JOURNAL_FALLBACK,
+            "source": "static",
+        }
+
+    # Keep the prompt a reasonable size: most recent entries, trimmed.
+    recent_entries = entries[-8:]
+    entries_block = "\n\n".join(
+        f"[{e.vibe or 'unknown mood'}] {e.description[:500]}" for e in recent_entries
+    )
+
+    user_request_block = (
+        f'The user specifically asked for this chapter to explore: "{request.user_prompt.strip()}"'
+        if request.user_prompt and request.user_prompt.strip()
+        else "The user did not give a specific direction, so continue the story naturally from where the last entry leaves off."
+    )
+
+    if gemini_model:
+        try:
+            prompt = STORY_JOURNAL_PROMPT_TEMPLATE.format(
+                entries_block=entries_block,
+                user_request_block=user_request_block,
+            )
+            response = await asyncio.to_thread(gemini_model.generate_content, prompt)
+            story = response.text.strip()
+            if story:
+                return {"story": story, "source": "ai"}
+        except Exception as e:
+            print(f"[Story Journal Gemini Error] {e}")
+
+    # Static fallback: stitch the most recent entry into a gentle continuation note.
+    last = recent_entries[-1]
+    fallback = (
+        f"{last.description.strip()}\n\nThe story continues here, even when the words "
+        "haven't caught up yet. Come back to add the next page when you're ready."
+    )
+    return {"story": fallback, "source": "static"}
+
+
 @app.post("/affirmation")
 async def get_affirmation(
     request: schemas.AffirmationRequest,
