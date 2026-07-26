@@ -130,7 +130,7 @@ const AffirmationBanner = forwardRef(({vibe, moodColor, token, backendUrl, saved
           <Icon name="heart-outline" size={16} color={color} />
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.headerTitle}>A gentle reminder</Text>
+          <Text style={styles.headerTitle}>A Little Kindness for You</Text>
           <Text style={styles.headerSub}>
             {source === 'ai'
               ? '✦ Personalized affirmation'

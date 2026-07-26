@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, {useState, useRef, useCallback, useEffect} from 'react';
 import {
   View,
   Text,
@@ -15,26 +15,36 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import {
+  cacheResponsesFromHistory,
+  findPromptResponse,
+  rememberPromptResponse,
+} from './therapistPromptCache';
 
 // ─── Constants ───────────────────────────────────────────────
-const SAGE_COLOR   = '#7c6ff7';
-const SAGE_LIGHT   = '#ede9fe';
-const SAGE_DARK    = '#5b4fd4';
-const SCREEN_W     = Dimensions.get('window').width;
+const SAGE_COLOR = '#7c6ff7';
+const SAGE_LIGHT = '#ede9fe';
+const SAGE_DARK = '#5b4fd4';
+const SCREEN_W = Dimensions.get('window').width;
 const CHAT_STORAGE_KEY = 'therapist_chat_history';
 
 const STARTER_PROMPTS = [
-  { icon: 'emoticon-sad-outline',      label: "I've been feeling overwhelmed lately…" },
-  { icon: 'lightning-bolt-outline',    label: "I'm struggling to find motivation" },
-  { icon: 'chat-question-outline',     label: "Something is bothering me" },
-  { icon: 'heart-pulse',               label: "I feel anxious and I'm not sure why" },
+  {
+    icon: 'emoticon-sad-outline',
+    label: "I've been feeling overwhelmed lately…",
+  },
+  {icon: 'lightning-bolt-outline', label: "I'm struggling to find motivation"},
+  {icon: 'chat-question-outline', label: 'Something is bothering me'},
+  {icon: 'heart-pulse', label: "I feel anxious and I'm not sure why"},
 ];
 
 // ─── Typing Indicator ─────────────────────────────────────────────────────────
 const TypingIndicator = () => {
-  const dots  = [useRef(new Animated.Value(0)).current,
-                 useRef(new Animated.Value(0)).current,
-                 useRef(new Animated.Value(0)).current];
+  const dots = [
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+  ];
   const loops = useRef([]);
 
   useEffect(() => {
@@ -42,16 +52,24 @@ const TypingIndicator = () => {
       const loop = Animated.loop(
         Animated.sequence([
           Animated.delay(i * 140),
-          Animated.timing(dot, { toValue: -6, duration: 280, useNativeDriver: true }),
-          Animated.timing(dot, { toValue:  0, duration: 280, useNativeDriver: true }),
+          Animated.timing(dot, {
+            toValue: -6,
+            duration: 280,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot, {
+            toValue: 0,
+            duration: 280,
+            useNativeDriver: true,
+          }),
           Animated.delay(560),
-        ])
+        ]),
       );
       loop.start();
       return loop;
     });
     return () => loops.current.forEach(l => l.stop());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -59,7 +77,7 @@ const TypingIndicator = () => {
       {dots.map((dot, i) => (
         <Animated.View
           key={i}
-          style={[styles.typingDot, { transform: [{ translateY: dot }] }]}
+          style={[styles.typingDot, {transform: [{translateY: dot}]}]}
         />
       ))}
     </View>
@@ -67,17 +85,26 @@ const TypingIndicator = () => {
 };
 
 // ─── Message Bubble ───────────────────────────────────────────────────────────
-const MessageBubble = React.memo(({ message }) => {
-  const isUser   = message.role === 'user';
+const MessageBubble = React.memo(({message}) => {
+  const isUser = message.role === 'user';
   const slideAnim = useRef(new Animated.Value(isUser ? 20 : -20)).current;
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(slideAnim, { toValue: 0, tension: 60, friction: 10, useNativeDriver: true }),
-      Animated.timing(fadeAnim,  { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 60,
+        friction: 10,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }),
     ]).start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -85,15 +112,15 @@ const MessageBubble = React.memo(({ message }) => {
       style={[
         styles.messageRow,
         isUser ? styles.messageRowUser : styles.messageRowSage,
-        { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
-      ]}
-    >
+        {opacity: fadeAnim, transform: [{translateX: slideAnim}]},
+      ]}>
       {!isUser && (
         <View style={styles.sageAvatar}>
           <Text style={styles.sageAvatarEmoji}>🌿</Text>
         </View>
       )}
-      <View style={[styles.bubble, isUser ? styles.userBubble : styles.sageBubble]}>
+      <View
+        style={[styles.bubble, isUser ? styles.userBubble : styles.sageBubble]}>
         <Text style={[styles.bubbleText, isUser && styles.userBubbleText]}>
           {message.text}
         </Text>
@@ -108,19 +135,26 @@ const MessageBubble = React.memo(({ message }) => {
 });
 
 // ─── Starter Prompt Chip ──────────────────────────────────────────────────────
-const StarterChip = ({ item, onPress, delay }) => {
+const StarterChip = ({item, onPress, delay}) => {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.spring(anim, {
-      toValue: 1, tension: 50, friction: 9, delay, useNativeDriver: true,
+      toValue: 1,
+      tension: 50,
+      friction: 9,
+      delay,
+      useNativeDriver: true,
     }).start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <Animated.View style={{ opacity: anim, transform: [{ scale: anim }] }}>
-      <TouchableOpacity style={styles.starterChip} onPress={onPress} activeOpacity={0.75}>
+    <Animated.View style={{opacity: anim, transform: [{scale: anim}]}}>
+      <TouchableOpacity
+        style={styles.starterChip}
+        onPress={onPress}
+        activeOpacity={0.75}>
         <View style={styles.starterChipIcon}>
           <Icon name={item.icon} size={18} color={SAGE_COLOR} />
         </View>
@@ -132,11 +166,18 @@ const StarterChip = ({ item, onPress, delay }) => {
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose }) => {
-  const isMounted     = useRef(true);
-  const flatListRef   = useRef(null);
-  const inputRef      = useRef(null);
-  const headerAnim    = useRef(new Animated.Value(0)).current;
+const TherapistChat = ({
+  token,
+  backendUrl,
+  vibeContext,
+  initialPrompt,
+  onClose,
+}) => {
+  const isMounted = useRef(true);
+  const flatListRef = useRef(null);
+  const inputRef = useRef(null);
+  const promptCacheRef = useRef([]);
+  const headerAnim = useRef(new Animated.Value(0)).current;
 
   const [messages, setMessages] = useState([
     {
@@ -148,22 +189,29 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
       time: formatTime(new Date()),
     },
   ]);
-  const [input,     setInput]     = useState('');
+  const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error,     setError]     = useState('');
+  const [error, setError] = useState('');
   const [retryText, setRetryText] = useState('');
   const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
   const [initialPromptSent, setInitialPromptSent] = useState(false);
 
   useEffect(() => {
     isMounted.current = true;
-    Animated.spring(headerAnim, { toValue: 1, tension: 50, friction: 9, useNativeDriver: true }).start();
-    return () => { isMounted.current = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    Animated.spring(headerAnim, {
+      toValue: 1,
+      tension: 50,
+      friction: 9,
+      useNativeDriver: true,
+    }).start();
+    return () => {
+      isMounted.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function formatTime(date) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
   }
 
   const loadChatHistory = useCallback(async () => {
@@ -173,13 +221,14 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
         setMessages(parsed);
+        cacheResponsesFromHistory(promptCacheRef.current, parsed, vibeContext);
       }
     } catch (err) {
       console.warn('Failed to load therapist chat history', err);
     } finally {
       setIsHistoryLoaded(true);
     }
-  }, []);
+  }, [vibeContext]);
 
   useEffect(() => {
     loadChatHistory();
@@ -187,35 +236,53 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
 
   useEffect(() => {
     if (!isHistoryLoaded) return;
-    AsyncStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages)).catch((err) => {
-      console.warn('Failed to save therapist chat history', err);
-    });
+    AsyncStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages)).catch(
+      err => {
+        console.warn('Failed to save therapist chat history', err);
+      },
+    );
   }, [messages, isHistoryLoaded]);
 
-  useEffect(() => {
-    if (!isHistoryLoaded || initialPromptSent) return;
-    if (!initialPrompt?.trim()) return;
-    if (messages.length <= 1) {
-      sendMessage(initialPrompt);
-      setInitialPromptSent(true);
-    }
-  }, [initialPrompt, initialPromptSent, isHistoryLoaded, messages.length, sendMessage]);
-
   const scrollToBottom = useCallback(() => {
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
+    setTimeout(() => flatListRef.current?.scrollToEnd({animated: true}), 80);
   }, []);
 
   const sendMessage = useCallback(
-    async (textOverride) => {
+    async textOverride => {
       const text = (textOverride ?? input).trim();
       if (!text || isLoading) return;
 
       const userMsg = {
-        id:   Date.now().toString(),
+        id: Date.now().toString(),
         role: 'user',
         text,
         time: formatTime(new Date()),
       };
+
+      const cachedReply = findPromptResponse(
+        promptCacheRef.current,
+        text,
+        vibeContext,
+      );
+
+      if (cachedReply) {
+        const sageMsg = {
+          id: `sage-cached-${Date.now()}`,
+          role: 'model',
+          text: cachedReply,
+          time: formatTime(new Date()),
+        };
+
+        if (isMounted.current) {
+          setMessages(prev => [...prev, userMsg, sageMsg]);
+          setInput('');
+          setError('');
+          setRetryText('');
+          setTimeout(scrollToBottom, 120);
+        }
+        return;
+      }
+
       const nextMessages = [...messages, userMsg];
 
       if (isMounted.current) {
@@ -232,7 +299,7 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
       try {
         const history = nextMessages
           .filter(m => m.id !== 'intro')
-          .map(m => ({ role: m.role, text: m.text }));
+          .map(m => ({role: m.role, text: m.text}));
 
         const res = await fetch(`${backendUrl}/chat`, {
           method: 'POST',
@@ -251,9 +318,15 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
           throw new Error(errData.detail || `Server error ${res.status}`);
         }
 
-        const data   = await res.json();
+        const data = await res.json();
+        rememberPromptResponse(
+          promptCacheRef.current,
+          text,
+          vibeContext,
+          data.reply,
+        );
         const sageMsg = {
-          id:   `sage-${Date.now()}`,
+          id: `sage-${Date.now()}`,
           role: 'model',
           text: data.reply,
           time: formatTime(new Date()),
@@ -272,12 +345,35 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
         if (isMounted.current) setIsLoading(false);
       }
     },
-    [input, messages, isLoading, backendUrl, token, vibeContext, scrollToBottom]
+    [
+      input,
+      messages,
+      isLoading,
+      backendUrl,
+      token,
+      vibeContext,
+      scrollToBottom,
+    ],
   );
+
+  useEffect(() => {
+    if (!isHistoryLoaded || initialPromptSent) return;
+    if (!initialPrompt?.trim()) return;
+    if (messages.length <= 1) {
+      sendMessage(initialPrompt);
+      setInitialPromptSent(true);
+    }
+  }, [
+    initialPrompt,
+    initialPromptSent,
+    isHistoryLoaded,
+    messages.length,
+    sendMessage,
+  ]);
 
   const clearChat = async () => {
     const freshIntro = {
-      id:   'intro',
+      id: 'intro',
       role: 'model',
       text: "Let's start fresh. I'm here whenever you're ready. 🌿",
       time: formatTime(new Date()),
@@ -287,6 +383,7 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
     setInput('');
     setError('');
     setRetryText('');
+    promptCacheRef.current = [];
 
     try {
       await AsyncStorage.removeItem(CHAT_STORAGE_KEY);
@@ -296,58 +393,60 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
   };
 
   // ── Render helpers ──────────────────────────────────────────────
-  const renderItem = useCallback(({ item }) => {
-    if (item.id === '_starters') {
-      return (
-        <View style={styles.starterSection}>
-          <Text style={styles.starterLabel}>Try saying…</Text>
-          {STARTER_PROMPTS.map((prompt, i) => (
-            <StarterChip
-              key={i}
-              item={prompt}
-              delay={i * 80}
-              onPress={() => sendMessage(prompt.label)}
-            />
-          ))}
-        </View>
-      );
-    }
-    if (item.id === '_typing') {
-      return (
-        <View style={styles.messageRowSage}>
-          <View style={styles.sageAvatar}>
-            <Text style={styles.sageAvatarEmoji}>🌿</Text>
+  const renderItem = useCallback(
+    ({item}) => {
+      if (item.id === '_starters') {
+        return (
+          <View style={styles.starterSection}>
+            <Text style={styles.starterLabel}>Try saying…</Text>
+            {STARTER_PROMPTS.map((prompt, i) => (
+              <StarterChip
+                key={i}
+                item={prompt}
+                delay={i * 80}
+                onPress={() => sendMessage(prompt.label)}
+              />
+            ))}
           </View>
-          <TypingIndicator />
-        </View>
-      );
-    }
-    if (item.id === '_error') {
-      return (
-        <View style={styles.errorCard}>
-          <Icon name="alert-circle-outline" size={16} color="#e17055" />
-          <Text style={styles.errorText}>{item.text}</Text>
-          {item.retryText ? (
-            <TouchableOpacity
-              style={styles.retryBtn}
-              onPress={() => sendMessage(item.retryText)}
-            >
-              <Icon name="refresh" size={14} color="#fff" />
-              <Text style={styles.retryBtnText}>Retry</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      );
-    }
-    return <MessageBubble message={item} />;
-  }, [sendMessage]);
+        );
+      }
+      if (item.id === '_typing') {
+        return (
+          <View style={styles.messageRowSage}>
+            <View style={styles.sageAvatar}>
+              <Text style={styles.sageAvatarEmoji}>🌿</Text>
+            </View>
+            <TypingIndicator />
+          </View>
+        );
+      }
+      if (item.id === '_error') {
+        return (
+          <View style={styles.errorCard}>
+            <Icon name="alert-circle-outline" size={16} color="#e17055" />
+            <Text style={styles.errorText}>{item.text}</Text>
+            {item.retryText ? (
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => sendMessage(item.retryText)}>
+                <Icon name="refresh" size={14} color="#fff" />
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        );
+      }
+      return <MessageBubble message={item} />;
+    },
+    [sendMessage],
+  );
 
   // Build data array for FlatList
   const listData = [
-    ...(messages.length === 1 ? [{ id: '_starters' }] : []),
+    ...(messages.length === 1 ? [{id: '_starters'}] : []),
     ...messages,
-    ...(isLoading          ? [{ id: '_typing'   }] : []),
-    ...(error              ? [{ id: '_error', text: error, retryText }] : []),
+    ...(isLoading ? [{id: '_typing'}] : []),
+    ...(error ? [{id: '_error', text: error, retryText}] : []),
   ];
 
   const canSend = input.trim().length > 0 && !isLoading;
@@ -356,8 +455,7 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
     <KeyboardAvoidingView
       style={styles.screen}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-    >
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
       <StatusBar barStyle="dark-content" />
 
       {/* ── Header ─────────────────────────────────────────────── */}
@@ -366,11 +464,20 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
           styles.header,
           {
             opacity: headerAnim,
-            transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }],
+            transform: [
+              {
+                translateY: headerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-20, 0],
+                }),
+              },
+            ],
           },
-        ]}
-      >
-        <TouchableOpacity onPress={onClose} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        ]}>
+        <TouchableOpacity
+          onPress={onClose}
+          style={styles.headerBtn}
+          hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
           <Icon name="arrow-left" size={22} color="#444" />
         </TouchableOpacity>
 
@@ -381,11 +488,16 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
           </View>
           <View>
             <Text style={styles.headerName}>Sage</Text>
-            <Text style={styles.headerSub}>{isLoading ? 'Thinking…' : 'AI Companion · Always here'}</Text>
+            <Text style={styles.headerSub}>
+              {isLoading ? 'Thinking…' : 'AI Companion · Always here'}
+            </Text>
           </View>
         </View>
 
-        <TouchableOpacity onPress={clearChat} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity
+          onPress={clearChat}
+          style={styles.headerBtn}
+          hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
           <Icon name="refresh" size={20} color="#999" />
         </TouchableOpacity>
       </Animated.View>
@@ -432,8 +544,7 @@ const TherapistChat = ({ token, backendUrl, vibeContext, initialPrompt, onClose 
           style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
           onPress={() => sendMessage()}
           disabled={!canSend}
-          activeOpacity={0.8}
-        >
+          activeOpacity={0.8}>
           {isLoading ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
@@ -465,7 +576,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e8e4fe',
     elevation: 4,
     shadowColor: SAGE_COLOR,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.08,
     shadowRadius: 8,
   },
@@ -492,7 +603,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#d6d0fc',
   },
-  headerAvatarEmoji: { fontSize: 22 },
+  headerAvatarEmoji: {fontSize: 22},
   onlineDot: {
     position: 'absolute',
     bottom: 1,
@@ -536,7 +647,7 @@ const styles = StyleSheet.create({
   },
 
   // List
-  list: { flex: 1 },
+  list: {flex: 1},
   listContent: {
     paddingHorizontal: 14,
     paddingTop: 16,
@@ -576,7 +687,7 @@ const styles = StyleSheet.create({
     borderColor: '#d6d0fc',
     flexShrink: 0,
   },
-  sageAvatarEmoji: { fontSize: 16 },
+  sageAvatarEmoji: {fontSize: 16},
 
   // Bubble
   bubble: {
@@ -591,7 +702,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 5,
     elevation: 1,
     shadowColor: SAGE_COLOR,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.07,
     shadowRadius: 4,
   },
@@ -600,7 +711,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 5,
     elevation: 3,
     shadowColor: SAGE_DARK,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.25,
     shadowRadius: 6,
   },
@@ -609,14 +720,14 @@ const styles = StyleSheet.create({
     color: '#2d3436',
     lineHeight: 22,
   },
-  userBubbleText: { color: '#fff' },
+  userBubbleText: {color: '#fff'},
   bubbleTime: {
     fontSize: 10,
     color: '#bbb',
     marginTop: 4,
     alignSelf: 'flex-end',
   },
-  bubbleTimeUser: { color: 'rgba(255,255,255,0.55)' },
+  bubbleTimeUser: {color: 'rgba(255,255,255,0.55)'},
 
   // Typing
   typingBubble: {
@@ -632,7 +743,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     elevation: 1,
     shadowColor: SAGE_COLOR,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.07,
     shadowRadius: 4,
   },
@@ -645,7 +756,7 @@ const styles = StyleSheet.create({
   },
 
   // Starters
-  starterSection: { gap: 8, marginBottom: 6 },
+  starterSection: {gap: 8, marginBottom: 6},
   starterLabel: {
     fontSize: 11,
     color: '#aaa',
@@ -667,7 +778,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     elevation: 1,
     shadowColor: SAGE_COLOR,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.06,
     shadowRadius: 4,
   },
@@ -736,7 +847,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#e8e4fe',
     elevation: 8,
     shadowColor: SAGE_COLOR,
-    shadowOffset: { width: 0, height: -3 },
+    shadowOffset: {width: 0, height: -3},
     shadowOpacity: 0.06,
     shadowRadius: 8,
   },
@@ -767,7 +878,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     elevation: 4,
     shadowColor: SAGE_DARK,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.3,
     shadowRadius: 6,
   },

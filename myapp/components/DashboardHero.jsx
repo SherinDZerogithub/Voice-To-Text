@@ -76,11 +76,11 @@ const DashboardHero = ({
           <View style={styles.quickStats}>
             <View style={[styles.quickStatPill, {backgroundColor: accentColor + '15', borderColor: accentColor + '25'}]}>
               <Icon name="microphone-outline" size={11} color={accentColor} />
-              <Text style={[styles.quickStatText, {color: accentColor}]}>Voice Log</Text>
+              <Text style={[styles.quickStatText, {color: accentColor}]}>Voice Check-in</Text>
             </View>
             <View style={[styles.quickStatPill, {backgroundColor: accentColor + '15', borderColor: accentColor + '25'}]}>
               <Icon name="emoticon-happy-outline" size={11} color={accentColor} />
-              <Text style={[styles.quickStatText, {color: accentColor}]}>Mood Track</Text>
+              <Text style={[styles.quickStatText, {color: accentColor}]}>Mood Trail</Text>
             </View>
           </View>
         </View>

@@ -130,8 +130,8 @@ const PlaylistSuggestions = ({
           <Icon name="playlist-music" size={22} color={accentColor} />
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Playlist Suggestions</Text>
-          <Text style={styles.subtitle}>For your {normalizedVibe} vibe</Text>
+          <Text style={styles.title}>Music for This Moment</Text>
+          <Text style={styles.subtitle}>A soundtrack for your {normalizedVibe} mood</Text>
         </View>
       </View>
 

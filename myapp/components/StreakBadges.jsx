@@ -463,7 +463,7 @@ const StreakBadges = ({moodHistory, userName, onPressBadge}) => {
       )}
 
       {/* Section title */}
-      <Text style={mainStyles.sectionTitle}>Your Progress</Text>
+      <Text style={mainStyles.sectionTitle}>Your Momentum</Text>
 
       {/* Stats row */}
       <View style={mainStyles.statsRow}>
@@ -518,7 +518,7 @@ const StreakBadges = ({moodHistory, userName, onPressBadge}) => {
       {/* Badges section */}
       <View style={mainStyles.badgesHeader}>
         <View>
-          <Text style={mainStyles.badgesTitle}>Badges</Text>
+          <Text style={mainStyles.badgesTitle}>Milestones</Text>
           <Text style={mainStyles.badgesSubtitle}>{earnedBadges.length}/{BADGES.length} earned</Text>
         </View>
         <TouchableOpacity style={mainStyles.seeAllBtn} onPress={() => setShowAllBadges(v => !v)}>

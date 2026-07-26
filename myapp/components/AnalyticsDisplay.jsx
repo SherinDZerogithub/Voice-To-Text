@@ -812,7 +812,7 @@ const FandomCharacterMatch = ({topMood, distribution, totalLogs}) => {
   const types = [...new Set(chars.map(c => c.type))];
 
   return (
-    <SectionCard title="Your Fandom Twin" icon="account-star" iconColor="#fd79a8" accentColor="#fd79a8">
+    <SectionCard title="Characters Who Get Your Vibe" icon="account-star" iconColor="#fd79a8" accentColor="#fd79a8">
       <Text style={fanStyles.intro}>
         Your dominant mood is <Text style={{fontWeight:'800', color: getMoodColor(topMood)}}>{topMood}</Text> — here are the characters who get you:
       </Text>
@@ -865,7 +865,7 @@ const FandomCharacterMatch = ({topMood, distribution, totalLogs}) => {
 
       {expanded && (
         <View style={fanStyles.expandedSection}>
-          <Text style={fanStyles.expandedTitle}>What this means for you</Text>
+          <Text style={fanStyles.expandedTitle}>What This Says About You</Text>
           {distribution.slice(0, 4).map((item, i) => {
             const chars2 = FANDOM_CHARACTERS[item.label?.toLowerCase()];
             if (!chars2) return null;
@@ -933,7 +933,7 @@ const StoryJournal = ({token}) => {
 
   return (
     <>
-      <SectionCard title="Your Story Journal" icon="book-open-page-variant" iconColor="#a29bfe" accentColor="#a29bfe">
+      <SectionCard title="Turn Moods Into Stories" icon="book-open-page-variant" iconColor="#a29bfe" accentColor="#a29bfe">
         <Text style={journalEntryStyles.intro}>
           Every mood entry writes a page. Write, draw, add stickers, or drop in a photo — flip through your story anytime.
         </Text>
@@ -1195,7 +1195,7 @@ const AnalyticsDisplay = ({
         <View style={styles.pageHeader}>
           <View>
             <Text style={[styles.pageTitle, {color: contrastColor}]}>
-              Emotional Journey
+              Your Feelings, Over Time
             </Text>
             <Text style={[styles.pageSubtitle, {color: contrastColor, opacity: 0.5}]}>
               Last 30 days · {totalLogs} {totalLogs === 1 ? 'entry' : 'entries'}
@@ -1210,7 +1210,7 @@ const AnalyticsDisplay = ({
       {/* Stat cards */}
       <View style={styles.statsGrid}>
         <StatCard
-          title="Entries"
+          title="Moments Logged"
           value={totalLogs}
           icon="notebook-check-outline"
           color="#6c5ce7"
@@ -1227,7 +1227,7 @@ const AnalyticsDisplay = ({
               ]}>
               <Icon name="emoticon-happy-outline" size={22} color="#fd79a8" />
             </View>
-            <Text style={styles.statTitle}>Top Mood</Text>
+            <Text style={styles.statTitle}>Mood That Stood Out</Text>
             <Text
               style={[styles.statValueText, {color: '#fd79a8'}]}
               numberOfLines={1}>
@@ -1246,7 +1246,7 @@ const AnalyticsDisplay = ({
         ]}>
         <Text style={styles.topMoodEmoji}>{getMoodEmoji(topMood)}</Text>
         <View style={{flex: 1}}>
-          <Text style={styles.topMoodLabel}>Dominant Vibe</Text>
+          <Text style={styles.topMoodLabel}>Your Vibe Right Now</Text>
           <Text style={[styles.topMoodName, {color: getMoodColor(topMood)}]}>
             {topMood.charAt(0).toUpperCase() + topMood.slice(1)}
           </Text>
@@ -1265,7 +1265,7 @@ const AnalyticsDisplay = ({
 
       {/* Weekly Goal Section */}
       <SectionCard
-        title="Weekly Focus"
+        title="Your Feel-Good Focus"
         icon="target"
         iconColor="#e17055"
         accentColor="#e17055">
@@ -1273,7 +1273,7 @@ const AnalyticsDisplay = ({
           <View style={styles.goalActiveContainer}>
             <View style={styles.goalInfoRow}>
               <Text style={styles.goalText}>
-                Target Vibes
+                Your Chosen Vibes
               </Text>
               <TouchableOpacity onPress={() => setShowGoalPicker(true)}>
                 <Text style={styles.goalChangeBtn}>Change</Text>
@@ -1369,7 +1369,7 @@ const AnalyticsDisplay = ({
             {savedInsights.length > 0 && (
               <View style={goalReactionStyles.savedList}>
                 <Text style={goalReactionStyles.savedTitle}>
-                  Saved Insights
+                  Keep These Little Insights
                 </Text>
                 {savedInsights.map((ins, i) => (
                   <View key={i} style={goalReactionStyles.savedItem}>
@@ -1427,7 +1427,7 @@ const AnalyticsDisplay = ({
           onPress={handleCancelGoalPicker}>
           <TouchableOpacity activeOpacity={1} onPress={() => {}}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Choose your Focus</Text>
+              <Text style={styles.modalTitle}>Choose Your Feel-Good Focus</Text>
               <Text style={styles.modalSub}>
                 Pick 1 to 3 feel-good vibes to keep as this week's focus.
               </Text>
@@ -1533,7 +1533,7 @@ const AnalyticsDisplay = ({
        {onRefresh && (
         <TouchableOpacity style={styles.fullRefreshButton} onPress={onRefresh}>
           <Icon name="refresh" size={15} color="#aaa" />
-          <Text style={styles.fullRefreshText}>Sync Latest Data</Text>
+          <Text style={styles.fullRefreshText}>Refresh My Journey</Text>
         </TouchableOpacity>
       )}
       </View>

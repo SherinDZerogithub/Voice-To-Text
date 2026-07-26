@@ -29,6 +29,12 @@ const {width: SCREEN_W, height: SCREEN_H} = Dimensions.get('window');
 // real keepsake book rather than another digital panel.
 const INK = '#3A2E28';
 const PAPER_COLORS = ['#FBF6EC', '#FFF3E0', '#F3F8F0', '#F0F4FB', '#FBEFF2', '#2C2A33'];
+const PAGE_TEMPLATES = [
+  {id: 'lined', label: 'Lined', icon: 'format-align-left'},
+  {id: 'blank', label: 'Blank', icon: 'file-outline'},
+  {id: 'grid', label: 'Grid', icon: 'grid'},
+  {id: 'scrapbook', label: 'Scrapbook', icon: 'shape-outline'},
+];
 const ACCENT = '#a29bfe';
 
 const PAGE_STORAGE_PREFIX = 'story_journal_pages_v1';
@@ -40,6 +46,7 @@ const blankPage = (paperColor) => ({
   createdAt: Date.now(),
   updatedAt: Date.now(),
   paperColor: paperColor || PAPER_COLORS[0],
+  template: 'lined',
   text: '',
   doodle: null, // {paths, stickers, bgColor}
   photos: [], // [{id, uri, x, y, scale}]
@@ -198,25 +205,89 @@ const DoodleLayer = ({doodle}) => {
           </React.Fragment>
         ))}
       </Svg>
-      {(doodle.stickers || []).map(sticker => {
-        const stickerData = STICKERS.find(s => s.id === sticker.stickerId);
-        if (!stickerData) return null;
-        const stickerSize = 60 * sticker.scale;
-        return (
-          <View
-            key={sticker.id}
-            style={[
-              bookStyles.doodleSticker,
-              {left: sticker.x, top: sticker.y, width: stickerSize, height: stickerSize},
-            ]}>
-            <SvgXml
-              xml={getStickerXml(stickerData.svg, sticker.color)}
-              width={stickerSize}
-              height={stickerSize}
-            />
+    </View>
+  );
+};
+
+const DraggableDoodleSticker = ({
+  sticker,
+  isActive,
+  onActivate,
+  onChange,
+  onDelete,
+  locked,
+}) => {
+  const stickerData = STICKERS.find(item => item.id === sticker.stickerId);
+  const posRef = useRef({x: sticker.x, y: sticker.y});
+  const scaleRef = useRef(sticker.scale || 1);
+  if (!stickerData) return null;
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !locked,
+      onMoveShouldSetPanResponder: () => !locked,
+      onPanResponderGrant: () => {
+        onActivate(sticker.id);
+        posRef.current = {x: sticker.x, y: sticker.y};
+      },
+      onPanResponderMove: (_, gesture) => {
+        onChange(sticker.id, {
+          x: posRef.current.x + gesture.dx,
+          y: posRef.current.y + gesture.dy,
+        });
+      },
+      onPanResponderRelease: (_, gesture) => {
+        posRef.current = {
+          x: posRef.current.x + gesture.dx,
+          y: posRef.current.y + gesture.dy,
+        };
+      },
+    }),
+  ).current;
+
+  const resizePan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !locked,
+      onMoveShouldSetPanResponder: () => !locked,
+      onPanResponderGrant: () => {
+        scaleRef.current = sticker.scale || 1;
+      },
+      onPanResponderMove: (_, gesture) => {
+        onChange(sticker.id, {
+          scale: Math.max(0.4, Math.min(3, scaleRef.current + (gesture.dx + gesture.dy) / 160)),
+        });
+      },
+    }),
+  ).current;
+
+  const stickerSize = 60 * (sticker.scale || 1);
+
+  return (
+    <View
+      pointerEvents={locked ? 'none' : 'auto'}
+      style={[
+        bookStyles.doodleSticker,
+        {left: sticker.x, top: sticker.y, width: stickerSize, height: stickerSize},
+        isActive && !locked && bookStyles.doodleStickerActive,
+      ]}
+      {...(!locked ? pan.panHandlers : {})}>
+      <SvgXml
+        xml={getStickerXml(stickerData.svg, sticker.color)}
+        width={stickerSize}
+        height={stickerSize}
+      />
+      {isActive && !locked && (
+        <>
+          <TouchableOpacity
+            style={bookStyles.doodleStickerDelete}
+            onPress={() => onDelete(sticker.id)}>
+            <Icon name="close-circle" size={18} color="#e74c3c" />
+          </TouchableOpacity>
+          <View style={bookStyles.doodleStickerResize} {...resizePan.panHandlers}>
+            <Icon name="arrow-expand" size={11} color={ACCENT} />
           </View>
-        );
-      })}
+        </>
+      )}
     </View>
   );
 };
@@ -232,24 +303,49 @@ const JournalPage = ({
   onActivatePhoto,
   onChangePhoto,
   onDeletePhoto,
+  arrangeMode,
+  activeDoodleStickerId,
+  onActivateDoodleSticker,
+  onChangeDoodleSticker,
+  onDeleteDoodleSticker,
 }) => {
   const isDark = page.paperColor === '#2C2A33';
   const textColor = isDark ? '#F2EEEA' : INK;
+  const template = page.template || 'lined';
 
   return (
     <View style={[bookStyles.page, {backgroundColor: page.paperColor}]}>
-      {/* Paper texture lines for that "real journal" feel */}
-      <View style={bookStyles.paperLines} pointerEvents="none">
-        {Array.from({length: 14}).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              bookStyles.paperLine,
-              {backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(58,46,40,0.06)'},
-            ]}
-          />
-        ))}
-      </View>
+      {template === 'lined' && (
+        <View style={bookStyles.paperLines} pointerEvents="none">
+          {Array.from({length: 14}).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                bookStyles.paperLine,
+                {backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(58,46,40,0.06)'},
+              ]}
+            />
+          ))}
+        </View>
+      )}
+      {template === 'grid' && (
+        <View style={bookStyles.gridLines} pointerEvents="none">
+          {Array.from({length: 12}).map((_, i) => (
+            <View key={`h-${i}`} style={[bookStyles.gridLineHorizontal, {top: `${((i + 1) / 13) * 100}%`, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(58,46,40,0.05)'}]} />
+          ))}
+          {Array.from({length: 8}).map((_, i) => (
+            <View key={`v-${i}`} style={[bookStyles.gridLineVertical, {left: `${((i + 1) / 9) * 100}%`, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(58,46,40,0.05)'}]} />
+          ))}
+        </View>
+      )}
+      {template === 'scrapbook' && (
+        <>
+          <View style={[bookStyles.scrapbookStripe, {backgroundColor: isDark ? '#514957' : '#f2c6b4'}]} pointerEvents="none" />
+          <View style={bookStyles.scrapbookDots} pointerEvents="none">
+            {Array.from({length: 18}).map((_, i) => <View key={i} style={[bookStyles.scrapbookDot, {backgroundColor: isDark ? '#8e7fa1' : '#e7a8a0'}]} />)}
+          </View>
+        </>
+      )}
 
       <View style={bookStyles.pageHeaderRow}>
         <Text style={[bookStyles.pageNumber, {color: textColor, opacity: 0.5}]}>
@@ -287,6 +383,18 @@ const JournalPage = ({
 
       <DoodleLayer doodle={page.doodle} />
 
+      {(page.doodle?.stickers || []).map(sticker => (
+        <DraggableDoodleSticker
+          key={sticker.id}
+          sticker={sticker}
+          isActive={activeDoodleStickerId === sticker.id}
+          onActivate={onActivateDoodleSticker}
+          onChange={onChangeDoodleSticker}
+          onDelete={onDeleteDoodleSticker}
+          locked={!arrangeMode}
+        />
+      ))}
+
       {(page.photos || []).map(photo => (
         <DraggablePhoto
           key={photo.id}
@@ -322,6 +430,7 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
   const [showDoodle, setShowDoodle] = useState(false);
   const [photoMode, setPhotoMode] = useState(false);
   const [activePhotoId, setActivePhotoId] = useState(null);
+  const [activeDoodleStickerId, setActiveDoodleStickerId] = useState(null);
   const [isAddingPhoto, setIsAddingPhoto] = useState(false);
 
   const scrollRef = useRef(null);
@@ -339,6 +448,8 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
       setIsLoaded(true);
       setPageIndex(0);
       setPhotoMode(false);
+      setActivePhotoId(null);
+      setActiveDoodleStickerId(null);
       setIsWriting(false);
     })();
     return () => {
@@ -374,6 +485,7 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
 
   const handleSaveDoodle = (doodleData) => {
     updateCurrentPage({doodle: doodleData});
+    setShowDoodle(false);
   };
 
   const handleAddPhoto = async () => {
@@ -431,6 +543,25 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
     );
   };
 
+  const handleChangeDoodleSticker = (stickerId, updates) => {
+    setPages(prev =>
+      prev.map((p, i) =>
+        i === pageIndex && p.doodle
+          ? {
+              ...p,
+              doodle: {
+                ...p.doodle,
+                stickers: (p.doodle.stickers || []).map(sticker =>
+                  sticker.id === stickerId ? {...sticker, ...updates} : sticker,
+                ),
+              },
+              updatedAt: Date.now(),
+            }
+          : p,
+      ),
+    );
+  };
+
   const handleDeletePhoto = (photoId) => {
     setPages(prev =>
       prev.map((p, i) =>
@@ -442,8 +573,40 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
     setActivePhotoId(null);
   };
 
+  const handleDeleteDoodleSticker = stickerId => {
+    setPages(prev =>
+      prev.map((p, i) =>
+        i === pageIndex && p.doodle
+          ? {
+              ...p,
+              doodle: {
+                ...p.doodle,
+                stickers: (p.doodle.stickers || []).filter(sticker => sticker.id !== stickerId),
+              },
+              updatedAt: Date.now(),
+            }
+          : p,
+      ),
+    );
+    setActiveDoodleStickerId(null);
+  };
+
   const handleChangePaperColor = (c) => {
     updateCurrentPage({paperColor: c});
+  };
+
+  const handleChangeTemplate = template => {
+    updateCurrentPage({template});
+  };
+
+  const handleArrangeElements = () => {
+    const photos = currentPage?.photos || [];
+    const stickers = currentPage?.doodle?.stickers || [];
+    if (photos.length === 0 && stickers.length === 0) return;
+
+    setActivePhotoId(photos.length > 0 ? photos[photos.length - 1].id : null);
+    setActiveDoodleStickerId(stickers.length > 0 ? stickers[stickers.length - 1].id : null);
+    setPhotoMode(true);
   };
 
   const handleNewPage = () => {
@@ -455,6 +618,8 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
     });
     setIsWriting(false);
     setPhotoMode(false);
+    setActivePhotoId(null);
+    setActiveDoodleStickerId(null);
     // Slide to the freshly created page once it's mounted.
     setTimeout(() => {
       scrollRef.current?.scrollTo({x: newIndex * SCREEN_W, animated: true});
@@ -494,6 +659,7 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
       setIsWriting(false);
       setPhotoMode(false);
       setActivePhotoId(null);
+      setActiveDoodleStickerId(null);
       setPageIndex(idx);
     }
   };
@@ -510,7 +676,7 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
           </TouchableOpacity>
           <View style={bookStyles.headerTitleWrap}>
             <Icon name="book-open-page-variant" size={16} color={color} />
-            <Text style={bookStyles.headerTitle}>Your Journal</Text>
+            <Text style={bookStyles.headerTitle}>Your Mood Story</Text>
           </View>
           <TouchableOpacity onPress={handleDeletePage} style={bookStyles.headerBtn}>
             <Icon name="trash-can-outline" size={20} color="#b08968" />
@@ -541,9 +707,20 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
                     onChangeDraftText={setDraftText}
                     photoMode={photoMode && i === pageIndex}
                     activePhotoId={activePhotoId}
-                    onActivatePhoto={setActivePhotoId}
+                    onActivatePhoto={photoId => {
+                      setActivePhotoId(photoId);
+                      setActiveDoodleStickerId(null);
+                    }}
                     onChangePhoto={handleChangePhoto}
                     onDeletePhoto={handleDeletePhoto}
+                    arrangeMode={photoMode && i === pageIndex}
+                    activeDoodleStickerId={activeDoodleStickerId}
+                    onActivateDoodleSticker={stickerId => {
+                      setActiveDoodleStickerId(stickerId);
+                      setActivePhotoId(null);
+                    }}
+                    onChangeDoodleSticker={handleChangeDoodleSticker}
+                    onDeleteDoodleSticker={handleDeleteDoodleSticker}
                   />
                 </View>
               ))}
@@ -553,7 +730,7 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
                 activeOpacity={0.7}
                 onPress={handleNewPage}>
                 <Icon name="plus-circle-outline" size={40} color={color} />
-                <Text style={[bookStyles.newPageText, {color}]}>Start a new page</Text>
+                <Text style={[bookStyles.newPageText, {color}]}>Begin a fresh page</Text>
               </TouchableOpacity>
             </ScrollView>
 
@@ -584,10 +761,14 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
               </View>
             ) : photoMode ? (
               <View style={bookStyles.writingBar}>
-                <Text style={bookStyles.writingHint}>Drag to move • pinch handle to resize</Text>
+                <Text style={bookStyles.writingHint}>Drag photos or stickers • use the corner handle to resize</Text>
                 <TouchableOpacity
                   style={[bookStyles.doneBtn, {backgroundColor: color}]}
-                  onPress={() => {setPhotoMode(false); setActivePhotoId(null);}}>
+                  onPress={() => {
+                    setPhotoMode(false);
+                    setActivePhotoId(null);
+                    setActiveDoodleStickerId(null);
+                  }}>
                   <Icon name="check" size={16} color="#fff" />
                   <Text style={bookStyles.doneBtnText}>Done placing</Text>
                 </TouchableOpacity>
@@ -607,6 +788,25 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
                     />
                   ))}
                 </ScrollView>
+                <View style={bookStyles.sectionLabelRow}>
+                  <Text style={bookStyles.sectionLabel}>Page Style</Text>
+                  <Text style={bookStyles.sectionHint}>Choose a page mood</Text>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={bookStyles.templateRow}>
+                  {PAGE_TEMPLATES.map(template => (
+                    <TouchableOpacity
+                      key={template.id}
+                      style={[
+                        bookStyles.templateChip,
+                        (currentPage?.template || 'lined') === template.id && {backgroundColor: color + '25', borderColor: color},
+                      ]}
+                      onPress={() => handleChangeTemplate(template.id)}>
+                      <Icon name={template.icon} size={15} color={INK} />
+                      <Text style={bookStyles.templateText}>{template.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={bookStyles.toolRowScroll}>
                 <View style={bookStyles.toolRow}>
                   <TouchableOpacity style={bookStyles.toolBtn} onPress={handleStartWriting}>
                     <Icon name="pencil-outline" size={20} color={INK} />
@@ -629,23 +829,19 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={bookStyles.toolBtn}
-                    onPress={() => {
-                      if ((currentPage?.photos || []).length === 0) return;
-                      setActivePhotoId(currentPage.photos[currentPage.photos.length - 1].id);
-                      setPhotoMode(true);
-                    }}
-                    disabled={(currentPage?.photos || []).length === 0}>
+                    onPress={handleArrangeElements}
+                    disabled={(currentPage?.photos || []).length === 0 && (currentPage?.doodle?.stickers || []).length === 0}>
                     <Icon
                       name="cursor-move"
                       size={20}
-                      color={(currentPage?.photos || []).length === 0 ? '#c9bfae' : INK}
+                      color={(currentPage?.photos || []).length === 0 && (currentPage?.doodle?.stickers || []).length === 0 ? '#c9bfae' : INK}
                     />
                     <Text
                       style={[
                         bookStyles.toolBtnText,
-                        (currentPage?.photos || []).length === 0 && {color: '#c9bfae'},
+                        (currentPage?.photos || []).length === 0 && (currentPage?.doodle?.stickers || []).length === 0 && {color: '#c9bfae'},
                       ]}>
-                      Arrange
+                      Move
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={bookStyles.toolBtn} onPress={handleNewPage}>
@@ -653,6 +849,7 @@ const StoryJournalBook = ({visible, onClose, token, accentColor}) => {
                     <Text style={bookStyles.toolBtnText}>New page</Text>
                   </TouchableOpacity>
                 </View>
+                </ScrollView>
               </View>
             )}
           </>
@@ -721,6 +918,30 @@ const bookStyles = StyleSheet.create({
     paddingVertical: 4,
   },
   paperLine: {height: 1, width: '100%'},
+  gridLines: {
+    ...StyleSheet.absoluteFillObject,
+    top: 70,
+  },
+  gridLineHorizontal: {position: 'absolute', left: 0, right: 0, height: 1},
+  gridLineVertical: {position: 'absolute', top: 0, bottom: 0, width: 1},
+  scrapbookStripe: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 12,
+    opacity: 0.7,
+  },
+  scrapbookDots: {
+    position: 'absolute',
+    top: 22,
+    right: 18,
+    width: 54,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  scrapbookDot: {width: 6, height: 6, borderRadius: 3, opacity: 0.7},
   pageHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -781,6 +1002,32 @@ const bookStyles = StyleSheet.create({
   },
   doodleSticker: {
     position: 'absolute',
+    zIndex: 2,
+  },
+  doodleStickerActive: {
+    borderWidth: 1.5,
+    borderColor: ACCENT,
+    borderRadius: 8,
+  },
+  doodleStickerDelete: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+  },
+  doodleStickerResize: {
+    position: 'absolute',
+    bottom: -10,
+    right: -10,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: ACCENT,
   },
 
   newPagePlaceholder: {
@@ -825,10 +1072,28 @@ const bookStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(58,46,40,0.15)',
   },
+  sectionLabelRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  sectionLabel: {fontSize: 11, fontWeight: '800', color: INK, textTransform: 'uppercase', letterSpacing: 0.8},
+  sectionHint: {fontSize: 11, color: INK, opacity: 0.45},
+  templateRow: {gap: 8, paddingRight: 10},
+  templateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(58,46,40,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  templateText: {fontSize: 11, fontWeight: '700', color: INK},
   toolRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 6,
+    minWidth: SCREEN_W - 32,
   },
+  toolRowScroll: {paddingRight: 8},
   toolBtn: {
     alignItems: 'center',
     gap: 4,

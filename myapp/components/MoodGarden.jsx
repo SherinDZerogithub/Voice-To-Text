@@ -146,8 +146,8 @@ const MoodGarden = ({analyticsData, onPlantTap, moodHistory = []}) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Icon name="flower" size={24} color="#6BCB77" />
-        <Text style={styles.title}>Mood Garden</Text>
-        <Text style={styles.subtitle}>{plants.length} moods blooming</Text>
+        <Text style={styles.title}>Your Mood Garden</Text>
+        <Text style={styles.subtitle}>{plants.length} feelings growing</Text>
       </View>
 
       <View style={styles.gardenCanvas}>
@@ -177,17 +177,17 @@ const MoodGarden = ({analyticsData, onPlantTap, moodHistory = []}) => {
 
       <View style={styles.stats}>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Total Entries</Text>
+          <Text style={styles.statLabel}>Moments Planted</Text>
           <Text style={styles.statValue}>
             {analyticsData?.total_entries || 0}
           </Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Unique Moods</Text>
+          <Text style={styles.statLabel}>Colors in Your Garden</Text>
           <Text style={styles.statValue}>{plants.length}</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statLabel}>Garden Health</Text>
+          <Text style={styles.statLabel}>How Your Garden Is Growing</Text>
           <Text style={styles.statValue}>
             {plants.length >= 7 ? '🌟' : '🌱'}
           </Text>

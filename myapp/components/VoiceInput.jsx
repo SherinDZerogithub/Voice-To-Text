@@ -3,6 +3,12 @@ import {View, TextInput, Text, TouchableOpacity, StyleSheet} from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {useTheme} from '../theme/ThemeContext';
 
+const formatDuration = totalSeconds => {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, '0');
+  return `${minutes}:${seconds}`;
+};
+
 const getContrastColor = (hexcolor) => {
   if (!hexcolor || hexcolor === 'transparent') return '#000000';
   const hex = hexcolor.replace('#', '');
@@ -22,6 +28,8 @@ const VoiceInput = ({
   onStopListening,
   onAnalyze,
   isAnalyzing,
+  recordingSeconds = 0,
+  maxRecordingSeconds = 60,
   appBgColor,
   shortDescription,
   longDescription,
@@ -65,6 +73,19 @@ const VoiceInput = ({
         </TouchableOpacity>
       </View>
 
+      <View style={styles.mediaLimitRow}>
+        <Icon
+          name={isListening ? 'record-circle-outline' : 'timer-outline'}
+          size={14}
+          color={isListening ? '#ff4757' : (isDarkBg ? 'rgba(255,255,255,0.65)' : '#8b86c9')}
+        />
+        <Text style={[styles.mediaLimitText, isDarkBg && styles.mediaLimitTextDark]}>
+          {isListening
+            ? `Voice check-in ${formatDuration(recordingSeconds)} / ${formatDuration(maxRecordingSeconds)}`
+            : `Voice check-ins are up to ${formatDuration(maxRecordingSeconds)}`}
+        </Text>
+      </View>
+
 
 
       <TouchableOpacity
@@ -94,6 +115,23 @@ const styles = StyleSheet.create({
     width: '100%',
     position: 'relative',
     marginBottom: 15,
+  },
+  mediaLimitRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: -5,
+    marginBottom: 12,
+  },
+  mediaLimitText: {
+    color: '#8b86c9',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mediaLimitTextDark: {
+    color: 'rgba(255,255,255,0.65)',
   },
   textInput: {
     width: '100%',

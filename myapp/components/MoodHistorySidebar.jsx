@@ -36,7 +36,7 @@ const MoodHistorySidebar = ({
         },
       ]}>
       <View style={styles.sidebarHeader}>
-        <Text style={styles.sidebarTitle}>Mood Journal</Text>
+        <Text style={styles.sidebarTitle}>Your Mood Story</Text>
         <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
           <Icon name="close" size={24} color="#666" />
         </TouchableOpacity>

@@ -313,8 +313,8 @@ const MoodJar = ({gems: controlledGems, onGemAdded, onGemDeleted, onJarFull}) =>
             <Text style={{fontSize: 22}}>🫙</Text>
           </View>
           <View>
-            <Text style={styles.title}>Gratitude Jar</Text>
-            <Text style={styles.subtitle}>Collect your little joys</Text>
+            <Text style={styles.title}>Your Little Joy Jar</Text>
+            <Text style={styles.subtitle}>Collect the small good things</Text>
           </View>
         </View>
         <View style={styles.headerRight}>
@@ -375,7 +375,7 @@ const MoodJar = ({gems: controlledGems, onGemAdded, onGemDeleted, onJarFull}) =>
       {/* Recent gems preview */}
       {gemsToShow.length > 0 && (
         <View style={styles.recentSection}>
-          <Text style={styles.recentTitle}>Recent gems ✨</Text>
+          <Text style={styles.recentTitle}>Fresh Little Joys ✨</Text>
           {gemsToShow.map(gem => (
             <GemCard key={gem.id} gem={gem} onDelete={handleDeleteGem} />
           ))}
@@ -390,7 +390,7 @@ const MoodJar = ({gems: controlledGems, onGemAdded, onGemDeleted, onJarFull}) =>
       {gems.length === 0 && (
         <View style={styles.emptyState}>
           <Text style={styles.emptyEmoji}>🌱</Text>
-          <Text style={styles.emptyText}>Your jar is waiting for your first gratitude!</Text>
+          <Text style={styles.emptyText}>Your jar is waiting for its first little joy!</Text>
           <Text style={styles.emptyHint}>Even the smallest things count — a good coffee, a kind word, sunshine through a window.</Text>
         </View>
       )}
@@ -400,7 +400,7 @@ const MoodJar = ({gems: controlledGems, onGemAdded, onGemDeleted, onJarFull}) =>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add a Gratitude Gem</Text>
+              <Text style={styles.modalTitle}>Add a Little Joy</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)} hitSlop={{top: 8, right: 8, bottom: 8, left: 8}}>
                 <Icon name="close" size={22} color="#888" />
               </TouchableOpacity>

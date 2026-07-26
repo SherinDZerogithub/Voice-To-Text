@@ -74,8 +74,8 @@ const MoodForecastCard = ({token, backendUrl}) => {
           <Icon name="crystal-ball" size={18} color={color} />
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Today's Forecast</Text>
-          <Text style={styles.subtitle}>Based on your mood patterns</Text>
+          <Text style={styles.title}>Today's Emotional Weather</Text>
+          <Text style={styles.subtitle}>A gentle look at your mood patterns</Text>
         </View>
         <TouchableOpacity
           style={[styles.refreshBtn, {backgroundColor: color + '15'}]}

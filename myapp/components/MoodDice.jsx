@@ -278,8 +278,8 @@ const MoodDice = ({onJournalEntry, onTabChange, token}) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Icon name="dice-6" size={24} color="#FFD93D" />
-        <Text style={styles.title}>Mood Dice</Text>
-        <Text style={styles.subtitle}>Roll for a prompt</Text>
+        <Text style={styles.title}>Roll Into Reflection</Text>
+        <Text style={styles.subtitle}>Let chance choose a prompt</Text>
       </View>
 
       <View style={styles.diceSection}>
@@ -311,7 +311,7 @@ const MoodDice = ({onJournalEntry, onTabChange, token}) => {
       {/* Recent Rolls */}
       {rollHistory.length > 0 && (
         <View style={styles.historySection}>
-          <Text style={styles.historyTitle}>Recent Prompts</Text>
+          <Text style={styles.historyTitle}>Prompts You’ve Picked</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}

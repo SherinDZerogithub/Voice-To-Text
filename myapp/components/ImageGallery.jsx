@@ -28,7 +28,7 @@ const ImageGallery = ({
   return (
     <>
       <View style={styles.headerRow}>
-        <Text style={styles.sectionTitle}>Saved Images</Text>
+        <Text style={styles.sectionTitle}>Your Mood Gallery</Text>
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.iconButton, isCapturingImage && styles.disabledButton]}
@@ -78,7 +78,7 @@ const ImageGallery = ({
         ))}
       </View>
 
-      <Text style={[styles.sectionTitle, { marginTop: 40 }]}>App Library Samples</Text>
+      <Text style={[styles.sectionTitle, { marginTop: 40 }]}>Explore Sample Scenes</Text>
       <View style={styles.imageGrid}>
         {sampleImages.map((image) => (
           <View key={image.id} style={styles.imageCard}>

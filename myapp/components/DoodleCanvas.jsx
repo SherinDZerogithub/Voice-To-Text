@@ -73,10 +73,22 @@ export const pointsToPath = points => {
   if (points.length === 1) {
     return `M ${points[0].x} ${points[0].y} L ${points[0].x + 0.1} ${points[0].y}`;
   }
-  let d = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length; i++) {
-    d += ` L ${points[i].x} ${points[i].y}`;
+  if (points.length === 2) {
+    return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
   }
+
+  // Quadratic midpoint smoothing keeps the saved point format unchanged but
+  // removes the sharp joins produced by raw touch-event line segments.
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length - 1; i++) {
+    const midpoint = {
+      x: (points[i].x + points[i + 1].x) / 2,
+      y: (points[i].y + points[i + 1].y) / 2,
+    };
+    d += ` Q ${points[i].x} ${points[i].y} ${midpoint.x} ${midpoint.y}`;
+  }
+  const last = points[points.length - 1];
+  d += ` Q ${last.x} ${last.y} ${last.x} ${last.y}`;
   return d;
 };
 
@@ -121,6 +133,8 @@ export const DoodleCanvas = ({visible, onClose, onSave, accentColor, initialData
       // Load any existing doodle (editing a previously saved page/answer)
       setPaths(initialData?.paths || []);
       setStickers(initialData?.stickers || []);
+      setCurrentPath(null);
+      setActiveSticker(null);
       setBgColor(initialData?.bgColor || '#fffdf7');
       Animated.parallel([
         Animated.spring(scaleAnim, {toValue: 1, tension: 60, friction: 10, useNativeDriver: false}),
@@ -154,6 +168,9 @@ export const DoodleCanvas = ({visible, onClose, onSave, accentColor, initialData
         const {locationX, locationY} = evt.nativeEvent;
         setCurrentPath(prev => {
           if (!prev) return prev;
+          const lastPoint = prev.points[prev.points.length - 1];
+          const distance = Math.hypot(locationX - lastPoint.x, locationY - lastPoint.y);
+          if (distance < 2) return prev;
           return {...prev, points: [...prev.points, {x: locationX, y: locationY}]};
         });
       },
@@ -171,9 +188,15 @@ export const DoodleCanvas = ({visible, onClose, onSave, accentColor, initialData
 
   const shufflePrompt = () => setPrompt(DOODLE_PROMPTS[Math.floor(Math.random() * DOODLE_PROMPTS.length)]);
 
-  const hasDoodleContent = paths.length > 0 || stickers.length > 0;
+  const hasDoodleContent = paths.length > 0 || stickers.length > 0 || !!currentPath;
   const handleUndo = () => {
-    if (stickers.length > 0 && paths.length === 0) {
+    if (currentPath) {
+      setCurrentPath(null);
+      return;
+    }
+    const lastPathId = paths[paths.length - 1]?.id || 0;
+    const lastStickerId = stickers[stickers.length - 1]?.id || 0;
+    if (lastStickerId > lastPathId) {
       setStickers(prev => prev.slice(0, -1));
     } else {
       setPaths(prev => prev.slice(0, -1));
@@ -322,7 +345,11 @@ export const DoodleCanvas = ({visible, onClose, onSave, accentColor, initialData
             </ScrollView>
 
             {/* Brush size */}
-            <View style={doodleStyles.sizeRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={doodleStyles.toolRowScroll}>
+              <View style={doodleStyles.sizeRow}>
               {BRUSH_SIZES.map(s => (
                 <TouchableOpacity
                   key={s}
@@ -356,7 +383,8 @@ export const DoodleCanvas = ({visible, onClose, onSave, accentColor, initialData
                 style={[doodleStyles.sizeBtn, stickerMode && doodleStyles.activeTool]}>
                 <Icon name="cursor-move" size={16} color={stickerMode ? '#6c5ce7' : '#888'} />
               </TouchableOpacity>
-            </View>
+              </View>
+            </ScrollView>
 
             {/* Sticker panel */}
             {showStickerPanel && (
@@ -458,21 +486,32 @@ export const DoodleCanvas = ({visible, onClose, onSave, accentColor, initialData
             )}
           </View>
 
+          <View style={doodleStyles.modeHint}>
+            <Icon
+              name={stickerMode ? 'cursor-move' : 'gesture-swipe'}
+              size={14}
+              color={accentColor || '#6c5ce7'}
+            />
+            <Text style={doodleStyles.modeHintText}>
+              {stickerMode ? 'Move or resize a sticker' : 'Draw freely with your finger'}
+            </Text>
+          </View>
+
           {/* Actions */}
           <View style={doodleStyles.actions}>
-            <TouchableOpacity style={doodleStyles.actionBtn} onPress={handleUndo} disabled={paths.length === 0 && stickers.length === 0}>
-              <Icon name="undo" size={18} color={(paths.length === 0 && stickers.length === 0) ? '#ddd' : '#666'} />
-              <Text style={[doodleStyles.actionText, (paths.length === 0 && stickers.length === 0) && {color: '#ddd'}]}>Undo</Text>
+            <TouchableOpacity style={doodleStyles.actionBtn} onPress={handleUndo} disabled={!hasDoodleContent}>
+              <Icon name="undo" size={18} color={!hasDoodleContent ? '#ddd' : '#666'} />
+              <Text style={[doodleStyles.actionText, !hasDoodleContent && {color: '#ddd'}]}>Undo</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={doodleStyles.actionBtn} onPress={handleClear} disabled={paths.length === 0 && stickers.length === 0}>
-              <Icon name="trash-can-outline" size={18} color={(paths.length === 0 && stickers.length === 0) ? '#ddd' : '#e74c3c'} />
-              <Text style={[doodleStyles.actionText, {color: (paths.length === 0 && stickers.length === 0) ? '#ddd' : '#e74c3c'}]}>Clear</Text>
+            <TouchableOpacity style={doodleStyles.actionBtn} onPress={handleClear} disabled={!hasDoodleContent}>
+              <Icon name="trash-can-outline" size={18} color={!hasDoodleContent ? '#ddd' : '#e74c3c'} />
+              <Text style={[doodleStyles.actionText, {color: !hasDoodleContent ? '#ddd' : '#e74c3c'}]}>Clear</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[doodleStyles.saveBtn, {backgroundColor: accentColor || '#6c5ce7'}]}
               onPress={handleSave}>
               <Icon name="check" size={16} color="#fff" />
-              <Text style={doodleStyles.saveBtnText}>Save Doodle</Text>
+              <Text style={doodleStyles.saveBtnText}>Keep This Creation</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -540,6 +579,7 @@ const doodleStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  toolRowScroll: {paddingRight: 4},
   sizeBtn: {
     width: 32,
     height: 32,
@@ -577,6 +617,15 @@ const doodleStyles = StyleSheet.create({
     gap: 6,
   },
   canvasHintText: {fontSize: 13, color: '#ccc', fontWeight: '600'},
+  modeHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 7,
+    backgroundColor: '#faf9ff',
+  },
+  modeHintText: {fontSize: 11, color: '#777', fontWeight: '600'},
   actions: {
     flexDirection: 'row',
     alignItems: 'center',

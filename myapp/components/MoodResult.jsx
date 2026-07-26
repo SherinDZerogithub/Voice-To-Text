@@ -429,7 +429,7 @@ const MoodResult = ({
 
   return (
     <>
-      <Text style={[styles.sectionTitle, textStyle]}>Mood Analysis</Text>
+      <Text style={[styles.sectionTitle, textStyle]}>A Closer Look at This Feeling</Text>
 
       {isAnalyzing && (
         <View style={styles.loadingState}>
@@ -501,7 +501,7 @@ const MoodResult = ({
                 { borderLeftColor: moodData.color || '#3498db' },
               ]}
             >
-              <Text style={[styles.cardLabel, secondaryTextStyle]}>Environment Type</Text>
+              <Text style={[styles.cardLabel, secondaryTextStyle]}>The World Around You</Text>
               <Text style={[styles.environmentText, textStyle]}>{moodData.environment_type}</Text>
             </View>
           )}
@@ -517,7 +517,7 @@ const MoodResult = ({
                     style={styles.prosodyIcon}
                   />
                   <Text style={[styles.breakdownTitle, styles.prosodyTitle, textStyle]}>
-                    Voice Prosody
+                    How Your Voice Felt
                   </Text>
                 </View>
                 {moodData.audio_path ? (
@@ -533,7 +533,7 @@ const MoodResult = ({
                 <>
                   <View style={styles.prosodyGrid}>
                     <View style={styles.prosodyMetric}>
-                      <Text style={[styles.cardLabel, secondaryTextStyle]}>Pace</Text>
+                      <Text style={[styles.cardLabel, secondaryTextStyle]}>Speaking Rhythm</Text>
                       <Text style={[styles.prosodyValue, textStyle]}>
                         {formatMetric(moodData.prosody_analysis.pace?.label)}
                       </Text>
@@ -544,7 +544,7 @@ const MoodResult = ({
                       </Text>
                     </View>
                     <View style={styles.prosodyMetric}>
-                      <Text style={[styles.cardLabel, secondaryTextStyle]}>Pauses</Text>
+                      <Text style={[styles.cardLabel, secondaryTextStyle]}>Breathing Spaces</Text>
                       <Text style={[styles.prosodyValue, textStyle]}>
                         {formatMetric(moodData.prosody_analysis.pauses?.count)}
                       </Text>
@@ -553,7 +553,7 @@ const MoodResult = ({
                       </Text>
                     </View>
                     <View style={styles.prosodyMetric}>
-                      <Text style={[styles.cardLabel, secondaryTextStyle]}>Volume</Text>
+                      <Text style={[styles.cardLabel, secondaryTextStyle]}>Voice Energy</Text>
                       <Text style={[styles.prosodyValue, textStyle]}>
                         {formatMetric(moodData.prosody_analysis.volume?.label)}
                       </Text>
@@ -568,7 +568,7 @@ const MoodResult = ({
                       { backgroundColor: `${moodData.color || '#6c5ce7'}22` },
                     ]}
                   >
-                    <Text style={[styles.toneLabel, secondaryTextStyle]}>Emotional tone</Text>
+                    <Text style={[styles.toneLabel, secondaryTextStyle]}>Emotional Texture</Text>
                     <Text style={[styles.toneValue, textStyle]}>
                       {formatMetric(moodData.prosody_analysis.emotional_tone?.label)}
                     </Text>
@@ -590,7 +590,7 @@ const MoodResult = ({
                 <View style={styles.designCardHeader}>
                   <View style={styles.designCardHeaderMain}>
                     <Text style={styles.designCardIcon}>*</Text>
-                    <Text style={[styles.designCardTitle, textStyle]}>Description</Text>
+                    <Text style={[styles.designCardTitle, textStyle]}>The Story Behind This Moment</Text>
                   </View>
                   <View style={styles.narrativeActionsRow}>
                     <TouchableOpacity
@@ -688,7 +688,7 @@ const MoodResult = ({
 
           {moodData.color_palette && moodData.color_palette.length > 0 && (
             <View style={[styles.paletteCard, cardStyle]}>
-              <Text style={[styles.cardLabel, secondaryTextStyle]}>Scene Color Palette</Text>
+              <Text style={[styles.cardLabel, secondaryTextStyle]}>Colors From This Moment</Text>
               <View style={styles.paletteRow}>
                 {moodData.color_palette.map((hex, index) => (
                   <TouchableOpacity
@@ -718,7 +718,7 @@ const MoodResult = ({
 
           {moodData.scene_tags && moodData.scene_tags.length > 0 && (
             <View style={[styles.tagsCard, cardStyle]}>
-              <Text style={[styles.cardLabel, secondaryTextStyle]}>Scene Tags</Text>
+              <Text style={[styles.cardLabel, secondaryTextStyle]}>Details That Shaped It</Text>
               <View style={styles.tagsRow}>
                 {moodData.scene_tags.map((tag, index) => (
                   <TouchableOpacity

@@ -23,6 +23,10 @@ import Svg, {
   Stop,
 } from 'react-native-svg';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import {
+  findPromptResponse,
+  rememberPromptResponse,
+} from './therapistPromptCache';
 
 const {width} = Dimensions.get('window');
 const MOOD_TWIN_STORAGE_PREFIX = '@voice_to_text_mood_twin';
@@ -234,6 +238,7 @@ const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl, setAppBgColor, set
   const [step, setStep] = useState('input'); // 'input' | 'breathing' | 'response'
   const [aiResponse, setAiResponse] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const moodResponseCacheRef = useRef([]);
   const [recentCheckIns, setRecentCheckIns] = useState([]);
   const [storageDayKey, setStorageDayKey] = useState(() => getLocalDayKey());
   const [isHydrated, setIsHydrated] = useState(false);
@@ -373,23 +378,53 @@ const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl, setAppBgColor, set
     setDetectedMood(prompt.mood);
   };
 
+  const getCachedResponse = (text, mood) =>
+    findPromptResponse(moodResponseCacheRef.current, text, `mood ${mood}`);
+
   const fetchAIResponse = async (text, mood) => {
     const moodCfgLocal = MOOD_CONFIG[mood] || MOOD_CONFIG.neutral;
+    const cachedResponse = getCachedResponse(text, mood);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    let reply;
     if (!backendUrl || !token) {
-      return `${moodCfgLocal.affirmation} You shared: "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`;
+      reply = `${moodCfgLocal.affirmation} You shared: "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`;
+    } else {
+      try {
+        const res = await fetch(`${backendUrl}/reframe`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+          body: JSON.stringify({text, mood}),
+        });
+        if (!res.ok) throw new Error('Failed');
+        const data = await res.json();
+        reply = data.reframe || data.message || moodCfgLocal.affirmation;
+      } catch {
+        reply = moodCfgLocal.affirmation;
+      }
     }
-    try {
-      const res = await fetch(`${backendUrl}/reframe`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
-        body: JSON.stringify({text, mood}),
-      });
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
-      return data.reframe || data.message || moodCfgLocal.affirmation;
-    } catch {
-      return moodCfgLocal.affirmation;
+
+    rememberPromptResponse(
+      moodResponseCacheRef.current,
+      text,
+      `mood ${mood}`,
+      reply,
+    );
+    return reply;
+  };
+
+  const showCachedResponse = (text, mood) => {
+    const cachedResponse = getCachedResponse(text, mood);
+    if (!cachedResponse) {
+      return false;
     }
+
+    setStep('response');
+    setAiResponse(cachedResponse);
+    setIsLoading(false);
+    return true;
   };
 
   const handleSaveCheckIn = async () => {
@@ -408,11 +443,13 @@ const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl, setAppBgColor, set
     if (['sad', 'anxious', 'angry'].includes(mood)) {
       setStep('breathing');
     } else {
-      setStep('response');
-      setIsLoading(true);
-      const reply = await fetchAIResponse(inputText, mood);
-      setAiResponse(reply);
-      setIsLoading(false);
+      if (!showCachedResponse(inputText, mood)) {
+        setStep('response');
+        setIsLoading(true);
+        const reply = await fetchAIResponse(inputText, mood);
+        setAiResponse(reply);
+        setIsLoading(false);
+      }
     }
 
     // Track recent check-ins
@@ -420,6 +457,9 @@ const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl, setAppBgColor, set
   };
 
   const handleBreathingDone = async () => {
+    if (showCachedResponse(inputText, detectedMood)) {
+      return;
+    }
     setStep('response');
     setIsLoading(true);
     const reply = await fetchAIResponse(inputText, detectedMood);
@@ -443,7 +483,7 @@ const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl, setAppBgColor, set
           <Text style={{fontSize: 16}}>{cfg.emoji}</Text>
         </View>
         <View style={{flex: 1}}>
-          <Text style={styles.title}>Mood Twin</Text>
+          <Text style={styles.title}>Your Mood Twin</Text>
           <Text style={styles.subtitle}>How are you feeling right now?</Text>
         </View>
         {recentCheckIns.length > 0 && (
@@ -477,7 +517,7 @@ const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl, setAppBgColor, set
       {/* CTA */}
       <TouchableOpacity style={[styles.checkInButton, {backgroundColor: cfg.color}]} onPress={() => setShowModal(true)} activeOpacity={0.8}>
         <Icon name="chat-processing-outline" size={18} color="#fff" />
-        <Text style={styles.checkInButtonText}>Check In with Twin</Text>
+        <Text style={styles.checkInButtonText}>Share With Your Twin</Text>
       </TouchableOpacity>
 
       {/* Recent check-ins */}
@@ -570,7 +610,7 @@ const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl, setAppBgColor, set
                   {isLoading ? (
                     <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
                       <ActivityIndicator size="small" color={modalCfg.color} />
-                      <Text style={{color: '#888', fontSize: 13}}>Your twin is thinking…</Text>
+                      <Text style={{color: '#888', fontSize: 13}}>Your twin is listening…</Text>
                     </View>
                   ) : (
                     <Text style={[styles.responseText, {color: '#333'}]}>{aiResponse}</Text>

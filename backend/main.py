@@ -785,6 +785,77 @@ def pcm_rms(frames: bytes, sample_width: int) -> int:
     return int(math.sqrt(square_sum / sample_count))
 
 
+def percentile(values: list[float], fraction: float) -> float:
+    """Return a simple interpolated percentile without requiring another dependency."""
+    if not values:
+        return 0.0
+
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * min(1.0, max(0.0, fraction))
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return float(ordered[lower])
+    weight = position - lower
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * weight
+
+
+def find_pause_segments(
+    rms_values: list[int], window_seconds: float, minimum_seconds: float = 0.35
+) -> list[dict]:
+    """Find internal low-energy gaps while ignoring leading/trailing silence."""
+    if not rms_values or window_seconds <= 0:
+        return []
+
+    average_rms = sum(rms_values) / len(rms_values)
+    peak_rms = max(rms_values)
+    noise_floor = percentile(rms_values, 0.2)
+
+    # Use the quietest fifth of windows as a recording-specific noise floor.
+    # The cap prevents a loud voice from making every quiet window look silent.
+    silence_threshold = max(
+        80.0,
+        noise_floor * 1.5,
+        noise_floor + max(40.0, (peak_rms - noise_floor) * 0.1),
+        average_rms * 0.2,
+    )
+    silence_threshold = min(silence_threshold, max(80.0, peak_rms * 0.6))
+    voiced_windows = [value > silence_threshold for value in rms_values]
+    voiced_indices = [index for index, voiced in enumerate(voiced_windows) if voiced]
+
+    # A recording containing no detectable voice has no conversational pauses.
+    if not voiced_indices:
+        return []
+
+    first_voiced = voiced_indices[0]
+    last_voiced = voiced_indices[-1]
+    minimum_windows = max(1, math.ceil(minimum_seconds / window_seconds))
+    pause_segments = []
+    pause_start = None
+
+    # Only inspect gaps between the first and last voiced windows. This avoids
+    # reporting microphone start/stop silence as a pause in the speaker's voice.
+    for index in range(first_voiced, last_voiced + 2):
+        is_silent = index > last_voiced or not voiced_windows[index]
+        if is_silent and pause_start is None:
+            pause_start = index
+        elif not is_silent and pause_start is not None:
+            pause_windows = index - pause_start
+            if pause_windows >= minimum_windows:
+                start_seconds = pause_start * window_seconds
+                duration_seconds = pause_windows * window_seconds
+                pause_segments.append(
+                    {
+                        "start_seconds": round(start_seconds, 2),
+                        "duration_seconds": round(duration_seconds, 2),
+                        "end_seconds": round(start_seconds + duration_seconds, 2),
+                    }
+                )
+            pause_start = None
+
+    return pause_segments
+
+
 def analyze_wav_prosody(file_bytes: bytes, transcript: Optional[str] = None) -> dict:
     """
     Lightweight local prosody analysis for PCM WAV audio.
@@ -808,7 +879,8 @@ def analyze_wav_prosody(file_bytes: bytes, transcript: Optional[str] = None) -> 
         raise ValueError("Audio duration is empty")
 
     window_ms = 50
-    window_bytes = max(sample_width, int(frame_rate * window_ms / 1000) * sample_width)
+    window_seconds = window_ms / 1000
+    window_bytes = max(sample_width, int(frame_rate * window_seconds) * sample_width)
     rms_values = []
 
     for offset in range(0, len(frames), window_bytes):
@@ -830,34 +902,7 @@ def analyze_wav_prosody(file_bytes: bytes, transcript: Optional[str] = None) -> 
     std_rms = math.sqrt(variance)
     volume_variability_db = 20 * math.log10((mean_rms + std_rms + 1) / (mean_rms + 1))
 
-    silence_threshold = max(80, peak_rms * 0.06, avg_rms * 0.35)
-    silent_windows = [value <= silence_threshold for value in rms_values]
-    pause_segments = []
-    current_start = None
-
-    for index, is_silent in enumerate(silent_windows):
-        if is_silent and current_start is None:
-            current_start = index
-        elif not is_silent and current_start is not None:
-            pause_seconds = (index - current_start) * window_ms / 1000
-            if pause_seconds >= 0.35:
-                pause_segments.append(
-                    {
-                        "start_seconds": round(current_start * window_ms / 1000, 2),
-                        "duration_seconds": round(pause_seconds, 2),
-                    }
-                )
-            current_start = None
-
-    if current_start is not None:
-        pause_seconds = (len(silent_windows) - current_start) * window_ms / 1000
-        if pause_seconds >= 0.35:
-            pause_segments.append(
-                {
-                    "start_seconds": round(current_start * window_ms / 1000, 2),
-                    "duration_seconds": round(pause_seconds, 2),
-                }
-            )
+    pause_segments = find_pause_segments(rms_values, window_seconds)
 
     pause_total = sum(item["duration_seconds"] for item in pause_segments)
     pause_ratio = min(1.0, pause_total / duration_seconds)

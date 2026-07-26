@@ -75,7 +75,7 @@ const WeeklySummaryCard = ({token, backendUrl}) => {
             <Text style={styles.emoji}>{data.emoji || '📊'}</Text>
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.title}>This Week</Text>
+            <Text style={styles.title}>Your Week at a Glance</Text>
             <Text style={styles.subtitle}>
               {data.entry_count} {data.entry_count === 1 ? 'entry' : 'entries'} ·{' '}
               <Text style={{color, fontWeight: '800', textTransform: 'capitalize'}}>
@@ -100,7 +100,7 @@ const WeeklySummaryCard = ({token, backendUrl}) => {
           <>
             {data.highlights?.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Highlights</Text>
+                <Text style={styles.sectionLabel}>Bright Spots</Text>
                 <View style={styles.pillRow}>
                   {data.highlights.map((h, i) => (
                     <Pill key={i} text={h} icon="star-outline" color="#10b981" />
@@ -110,7 +110,7 @@ const WeeklySummaryCard = ({token, backendUrl}) => {
             )}
             {data.patterns?.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Patterns</Text>
+                <Text style={styles.sectionLabel}>Mood Signals</Text>
                 <View style={styles.pillRow}>
                   {data.patterns.map((p, i) => (
                     <Pill key={i} text={p} icon="chart-timeline-variant" color={ACCENT} />
@@ -120,7 +120,7 @@ const WeeklySummaryCard = ({token, backendUrl}) => {
             )}
             {data.next_steps?.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Next Steps</Text>
+                <Text style={styles.sectionLabel}>A Gentle Next Step</Text>
                 <View style={styles.pillRow}>
                   {data.next_steps.map((s, i) => (
                     <Pill key={i} text={s} icon="arrow-right-circle-outline" color="#f59e0b" />

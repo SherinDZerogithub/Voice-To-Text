@@ -65,7 +65,7 @@ const TriggerInsightsCard = ({token, backendUrl, days = 30}) => {
           <Icon name="lightning-bolt-outline" size={18} color="#ef4444" />
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Emotional Patterns</Text>
+          <Text style={styles.title}>What Your Feelings Are Telling You</Text>
           <Text style={styles.subtitle}>
             From {data.entry_count} journal {data.entry_count === 1 ? 'entry' : 'entries'} · last {data.days} days
           </Text>
@@ -83,7 +83,7 @@ const TriggerInsightsCard = ({token, backendUrl, days = 30}) => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Icon name="alert-circle-outline" size={13} color="#ef4444" />
-            <Text style={[styles.sectionLabel, {color: '#ef4444'}]}>Recurring Triggers</Text>
+            <Text style={[styles.sectionLabel, {color: '#ef4444'}]}>What Keeps Showing Up</Text>
           </View>
           <View style={styles.chipRow}>
             {data.triggers.map((t, i) => (
@@ -98,7 +98,7 @@ const TriggerInsightsCard = ({token, backendUrl, days = 30}) => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Icon name="shield-check-outline" size={13} color="#10b981" />
-            <Text style={[styles.sectionLabel, {color: '#10b981'}]}>Coping Strategies</Text>
+            <Text style={[styles.sectionLabel, {color: '#10b981'}]}>What Helps You Through</Text>
           </View>
           <View style={styles.chipRow}>
             {data.coping_themes.map((c, i) => (

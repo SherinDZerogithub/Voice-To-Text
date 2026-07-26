@@ -230,8 +230,8 @@ const HistoryDisplay = ({moodHistory, onSelect, onDelete, initialTagFilter}) => 
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Mood Journal</Text>
-          <Text style={styles.subtitle}>{moodHistory.length} entries recorded</Text>
+          <Text style={styles.title}>Your Mood Story</Text>
+          <Text style={styles.subtitle}>{moodHistory.length} moments captured</Text>
         </View>
         <View style={styles.headerBadge}>
           <Icon name="book-open-page-variant" size={20} color={ACCENT} />

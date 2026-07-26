@@ -573,7 +573,7 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
       {/* Doodle standalone button */}
       {!collapsed && (
          <View style={styles.doodleCard}>
-           <Text style={styles.doodleCardTitle}>Doodle of the Day</Text>
+           <Text style={styles.doodleCardTitle}>A Creative Moment for Today</Text>
            <Text style={styles.doodleCardPrompt}>"{doodlePrompt}"</Text>
            <TouchableOpacity
              style={[styles.doodleCardButton, {backgroundColor: color}]}

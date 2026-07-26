@@ -43,6 +43,10 @@ import GoalAlignmentRing from './components/GoalAlignmentRing';
 import CelebrationCorner from './components/CelebrationCorner';
 import BACKEND_URL, {isBackendConfigured} from './config';
 import {ThemeContext} from './theme/ThemeContext';
+import {
+  findPromptResponse,
+  rememberPromptResponse,
+} from './components/therapistPromptCache';
 
 // RN 0.71+ expects native event modules to expose listener stubs.
 // We stub common module names used by voice libraries to prevent NativeEventEmitter warnings.
@@ -61,6 +65,7 @@ const Voice = require('@react-native-voice/voice').default;
 
 const AUTH_TOKEN_STORAGE_KEY = '@voice_to_text_auth_token';
 const GRATITUDE_GEMS_STORAGE_PREFIX = '@voice_to_text_gratitude_gems';
+const MAX_VOICE_INPUT_SECONDS = 60;
 
 const getLocalDayKey = (date = new Date()) => {
   const year = date.getFullYear();
@@ -93,15 +98,24 @@ const App = () => {
   const [moodData, setMoodData] = useState(null);
   const [isSelectingImage, setIsSelectingImage] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const moodAnalysisCacheRef = useRef([]);
   const imageAnalysisRequestRef = useRef(null);
   const imageAnalysisRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    // Never reuse one account's mood analysis for another account.
+    moodAnalysisCacheRef.current = [];
+  }, [token]);
 
   useEffect(() => {
     return () => imageAnalysisRequestRef.current?.abort?.();
   }, []);
   const [isListening, setIsListening] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [text, setText] = useState('');
   const textRef = useRef('');
+  const recordingTimerRef = useRef(null);
+  const recordingStartedAtRef = useRef(null);
   const [appBgColor, setAppBgColor] = useState('#f5f5f5');
   const [themeColor, setThemeColor] = useState('#7c6ff7');
   const [isAuthHydrated, setIsAuthHydrated] = useState(false);
@@ -840,9 +854,18 @@ const App = () => {
     setErrorMessage('');
   }, []);
 
-  const onSpeechEnd = useCallback(() => {
-    setIsListening(false);
+  const clearRecordingTimer = useCallback(() => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    recordingStartedAtRef.current = null;
   }, []);
+
+  const onSpeechEnd = useCallback(() => {
+    clearRecordingTimer();
+    setIsListening(false);
+  }, [clearRecordingTimer]);
 
   const onSpeechResults = useCallback(event => {
     const transcript =
@@ -885,8 +908,9 @@ const App = () => {
       setErrorMessage(`Error (${code}): ${message}`);
     }
 
+    clearRecordingTimer();
     setIsListening(false);
-  }, []);
+  }, [clearRecordingTimer]);
 
   useEffect(() => {
     Voice.onSpeechStart = onSpeechStart;
@@ -1051,6 +1075,36 @@ const App = () => {
     }
   }, []);
 
+  const startRecordingTimer = useCallback(() => {
+    clearRecordingTimer();
+    recordingStartedAtRef.current = Date.now();
+    setRecordingSeconds(0);
+
+    recordingTimerRef.current = setInterval(() => {
+      if (!recordingStartedAtRef.current) {
+        return;
+      }
+
+      const elapsedSeconds = Math.floor(
+        (Date.now() - recordingStartedAtRef.current) / 1000,
+      );
+      const cappedSeconds = Math.min(
+        elapsedSeconds,
+        MAX_VOICE_INPUT_SECONDS,
+      );
+      setRecordingSeconds(cappedSeconds);
+
+      if (elapsedSeconds >= MAX_VOICE_INPUT_SECONDS) {
+        clearRecordingTimer();
+        setIsListening(false);
+        setErrorMessage(
+          'Voice check-ins are limited to 1 minute. Your text is ready to review.',
+        );
+        Voice.stop().catch(() => {});
+      }
+    }, 250);
+  }, [clearRecordingTimer]);
+
   async function startListening() {
     if (isListening) {
       return;
@@ -1083,11 +1137,13 @@ const App = () => {
         await new Promise(resolve => setTimeout(resolve, 300));
       }
 
+      startRecordingTimer();
       await Voice.start('en-US', {
         EXTRA_PARTIAL_RESULTS: true,
         REQUEST_PERMISSIONS_AUTO: false,
       });
     } catch (e) {
+      clearRecordingTimer();
       setIsListening(false);
       setErrorMessage(
         (e && e.message) ||
@@ -1099,6 +1155,7 @@ const App = () => {
 
   async function stopListening() {
     try {
+      clearRecordingTimer();
       if (isListening) {
         await Voice.stop();
       }
@@ -1127,6 +1184,8 @@ const App = () => {
       return;
     }
 
+    const analysisContext = `avatar ${JSON.stringify(avatarConfig || {})}`;
+
     // Crisis check runs in parallel â€” non-blocking
     fetch(`${BACKEND_URL}/crisis-check`, {
       method: 'POST',
@@ -1144,8 +1203,19 @@ const App = () => {
       })
       .catch(() => {});
 
-    setIsAnalyzing(true);
     setErrorMessage('');
+
+    const cachedAnalysis = findPromptResponse(
+      moodAnalysisCacheRef.current,
+      transcript,
+      analysisContext,
+    );
+    if (cachedAnalysis) {
+      setMoodData(prev => ({...prev, ...cachedAnalysis}));
+      return;
+    }
+
+    setIsAnalyzing(true);
     try {
       const response = await fetch(`${BACKEND_URL}/analyze-mood`, {
         method: 'POST',
@@ -1173,6 +1243,12 @@ const App = () => {
       }
 
       const data = await response.json();
+      rememberPromptResponse(
+        moodAnalysisCacheRef.current,
+        transcript,
+        analysisContext,
+        data,
+      );
       setMoodData(prev => ({...prev, ...data}));
       await saveMoodLog(data, transcript);
     } catch (error) {
@@ -2004,6 +2080,8 @@ ${entry.response}`,
             onStopListening={stopListening}
             onAnalyze={() => analyzeMood(text)}
             isAnalyzing={isAnalyzing}
+            recordingSeconds={recordingSeconds}
+            maxRecordingSeconds={MAX_VOICE_INPUT_SECONDS}
             appBgColor={appBgColor}
             shortDescription={moodData?.short_description}
             longDescription={moodData?.description}
@@ -2149,8 +2227,8 @@ ${entry.response}`,
           {[
             {id: 'home', icon: 'home-variant', label: 'Home'},
             {id: 'chat', icon: 'chat-processing-outline', label: 'Chat'},
-            {id: 'history', icon: 'book-open-page-variant', label: 'Journal'},
-            {id: 'analytics', icon: 'chart-areaspline', label: 'Insights'},
+            {id: 'history', icon: 'book-open-page-variant', label: 'My Story'},
+            {id: 'analytics', icon: 'chart-areaspline', label: 'My Journey'},
           ].map(tab => {
             const active = activeTab === tab.id;
             return (

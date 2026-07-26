@@ -118,7 +118,7 @@ const HabitRecommendations = ({token, backendUrl, moodHistory, moodGoal, onActio
           <Icon name="checkbox-marked-circle-outline" size={18} color={ACCENT} />
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Habit Suggestions</Text>
+          <Text style={styles.title}>Tiny Habits for You</Text>
           <Text style={styles.subtitle}>
             {data.source === 'ai' ? '✦ Personalized for your mood pattern' : 'Evidence-based wellness practices'}
           </Text>

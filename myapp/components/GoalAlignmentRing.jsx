@@ -147,7 +147,7 @@ const GoalAlignmentRing = ({moodGoal, analyticsData, onGoalUpdate}) => {
           <Icon name="flag-checkered" size={18} color="#6c5ce7" />
         </View>
         <View style={{flex: 1}}>
-          <Text style={styles.title}>Mood Goal</Text>
+          <Text style={styles.title}>Your Feel-Good Goal</Text>
           <Text style={styles.subtitle}>
             {goalVibes.length > 0 ? goalVibes.join(' · ') : 'Not set'}
           </Text>

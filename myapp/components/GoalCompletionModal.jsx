@@ -1,26 +1,3 @@
-/**
- * GoalCompletionModal.jsx
- *
- * Handles two states:
- *  - COMPLETE  (goalProgress >= threshold): Animated celebration + AI insight popup + save
- *  - FAILED    (goalProgress < threshold after 7 days): Reflective goal failed popup
- *  - INCOMPLETE (goalProgress < threshold): Warm, contextual encouragement popup
- *
- * Props:
- *  visible         boolean
- *  onClose         () => void
- *  goalVibe        string          e.g. "calm"
- *  goalProgress    number 0–1      e.g. 0.72
- *  goalCount       number          e.g. 14
- *  totalLogs       number          e.g. 20
- *  moodHistory     array           recent mood log items for context
- *  token           string          JWT for Claude API (passed through)
- *  onSaveInsight   (text) => void  called when user saves the insight
- *  goalFailed      boolean         true when the 7-day focus ended below target
- *
- * The COMPLETE threshold is >=30% (goal vibe is at least 30% of all logs).
- */
-
 import React, {
   useCallback,
   useEffect,
@@ -342,7 +319,7 @@ const CompleteContent = ({ goalVibe, goalCount, totalLogs, goalProgress, moodHis
           <View style={[completeStyles.insightIconWrap, { backgroundColor: meta.color + '25' }]}>
             <Icon name="brain" size={18} color={meta.darkColor} />
           </View>
-          <Text style={completeStyles.insightTitle}>Personal Insight</Text>
+          <Text style={completeStyles.insightTitle}>A Little Insight for You</Text>
           <View style={completeStyles.aiBadge}>
             <Text style={completeStyles.aiBadgeText}>AI</Text>
           </View>
@@ -706,7 +683,7 @@ const IncompleteContent = ({
           <Icon name="clipboard-text-search-outline" size={34} color={meta.darkColor} />
         </View>
 
-        <Text style={incompleteStyles.headline}>Your Week in Review</Text>
+        <Text style={incompleteStyles.headline}>Your Week in Feelings</Text>
         <Text style={incompleteStyles.vibe} numberOfLines={1}>
           {goalVibe?.toUpperCase()} goal - {review.percent}% of entries
         </Text>
