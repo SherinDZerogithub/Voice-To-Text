@@ -229,8 +229,8 @@ const MoodJar = ({gems: controlledGems, onGemAdded, onGemDeleted, onJarFull}) =>
 
   const animateJar = () => {
     Animated.sequence([
-      Animated.timing(jarAnim, {toValue: 1, duration: 200, useNativeDriver: true}),
-      Animated.timing(jarAnim, {toValue: 0, duration: 200, useNativeDriver: true}),
+      Animated.timing(jarAnim, {toValue: 1, duration: 200, useNativeDriver: false}),
+      Animated.timing(jarAnim, {toValue: 0, duration: 200, useNativeDriver: false}),
     ]).start();
   };
 

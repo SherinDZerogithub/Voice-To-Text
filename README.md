@@ -23,6 +23,8 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 Required for full AI features:
 
 - `GEMINI_API_KEY` enables Gemini mood analysis, journaling, affirmations, companion questions, and chat. `GOOGLE_API_KEY` is still accepted as a fallback.
+- `GROQ_API_KEY` enables the Groq provider for the same AI features. With `AI_PROVIDER=auto` (the default), Groq is preferred when configured, which avoids relying on exhausted Gemini quotas. Set `AI_PROVIDER=groq` to require Groq or `AI_PROVIDER=gemini` to require Gemini.
+- `GROQ_MODEL` defaults to `llama-3.3-70b-versatile`; `GROQ_VISION_MODEL` defaults to `qwen/qwen3.6-27b` for image analysis.
 - `GEMINI_MODEL` defaults to `gemini-2.5-flash`.
 - `YOUTUBE_API_KEY` enables playlist suggestions.
 - `SECRET_KEY` should be changed before sharing or deployment.
@@ -45,6 +47,10 @@ npm run android
 ```
 
 The app uses `http://10.0.2.2:8000` for Android emulator backend access and `http://localhost:8000` for iOS/simulator.
+
+For an Azure-backed release, set `EXPO_PUBLIC_BACKEND_URL` to the HTTPS App
+Service URL and run `npm run android:release` from `myapp`. The script refuses
+to create a release configuration without an HTTPS backend URL.
 
 ## Main Features
 

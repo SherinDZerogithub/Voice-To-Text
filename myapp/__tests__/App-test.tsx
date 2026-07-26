@@ -11,12 +11,18 @@ jest.mock('react-native-image-picker', () => ({
 }));
 
 jest.mock('@react-native-voice/voice', () => ({
-  isAvailable: jest.fn(() => Promise.resolve(true)),
-  getSpeechRecognitionServices: jest.fn(() =>
-    Promise.resolve(['mock-service']),
-  ),
-  destroy: jest.fn(() => Promise.resolve()),
-  removeAllListeners: jest.fn(),
+  default: {
+    isAvailable: jest.fn(() => Promise.resolve(true)),
+    getSpeechRecognitionServices: jest.fn(() =>
+      Promise.resolve(['mock-service']),
+    ),
+    isRecognizing: jest.fn(() => Promise.resolve(false)),
+    start: jest.fn(() => Promise.resolve()),
+    stop: jest.fn(() => Promise.resolve()),
+    cancel: jest.fn(() => Promise.resolve()),
+    destroy: jest.fn(() => Promise.resolve()),
+    removeAllListeners: jest.fn(),
+  },
 }));
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -30,6 +36,11 @@ jest.mock('react-native-tts', () => ({
   setDefaultPitch: jest.fn(),
   addEventListener: jest.fn(),
   removeEventListener: jest.fn(),
+}));
+
+jest.mock('@react-native-clipboard/clipboard', () => ({
+  setString: jest.fn(),
+  getString: jest.fn(() => Promise.resolve('')),
 }));
 
 jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => {

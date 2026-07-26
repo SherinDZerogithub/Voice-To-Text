@@ -19,7 +19,7 @@ from transformers import BlipProcessor, BlipForConditionalGeneration
 
 import uvicorn
 import torch
-from PIL import Image
+from PIL import Image, ImageOps
 import io
 import os
 import base64
@@ -28,6 +28,7 @@ import math
 import re
 import wave
 from typing import Optional
+from types import SimpleNamespace
 from dotenv import load_dotenv
 import requests
 
@@ -43,6 +44,11 @@ try:
 except ImportError:
     legacy_genai = None
 
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
+
 load_dotenv()
 
 # ── Create uploads directory for storing user photos/audio ──
@@ -57,6 +63,7 @@ load_dotenv()
 UPLOADS_DIR = os.environ.get(
     "UPLOADS_DIR", os.path.join(os.path.dirname(__file__), "uploads")
 )
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 
@@ -72,11 +79,12 @@ def save_user_image(
 
     # Generate unique filename with timestamp
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")[:-3]
-    file_ext = os.path.splitext(filename)[1] or ".jpg"
-    saved_filename = f"photo_{timestamp}{file_ext}"
+    # Images are always encoded as JPEG below, so keep the extension truthful.
+    saved_filename = f"photo_{timestamp}.jpg"
 
     filepath = os.path.join(user_dir, saved_filename)
-    image.convert("RGB").save(filepath, "JPEG", quality=85)
+    image = ImageOps.exif_transpose(image)
+    image.convert("RGB").save(filepath, "JPEG", quality=85, optimize=True)
 
     # Return relative path for storage in database
     relative_path = os.path.join("uploads", f"user_{user_id}", saved_filename)
@@ -145,11 +153,12 @@ _cors_origins = (
     if _cors_origins_env.strip() == "*"
     else [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
 )
+_cors_allow_credentials = _cors_origins != ["*"]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_credentials=True,
+    allow_credentials=_cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -418,18 +427,121 @@ class GeminiClientChat:
         return self.model.generate_content("\n\n".join(transcript))
 
 
+class GroqClientModel:
+    """Adapter exposing the small generate/chat interface used by this app."""
+
+    def __init__(self, api_key: str, model_name: str, vision_model_name: str):
+        self.client = Groq(api_key=api_key)
+        self.model_name = model_name
+        self.vision_model_name = vision_model_name
+
+    @staticmethod
+    def _normalize_content(contents):
+        if not isinstance(contents, list):
+            return contents
+
+        normalized = []
+        for part in contents:
+            if isinstance(part, dict) and part.get("mime_type") and part.get("data"):
+                normalized.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{part['mime_type']};base64,{part['data']}"
+                        },
+                    }
+                )
+            elif isinstance(part, dict) and part.get("type"):
+                normalized.append(part)
+            else:
+                normalized.append({"type": "text", "text": str(part)})
+        return normalized
+
+    @staticmethod
+    def _has_image(messages) -> bool:
+        return any(
+            isinstance(message.get("content"), list)
+            and any(part.get("type") == "image_url" for part in message["content"])
+            for message in messages
+        )
+
+    def _complete(self, messages, json_mode=False):
+        kwargs = {
+            "model": self.vision_model_name if self._has_image(messages) else self.model_name,
+            "messages": messages,
+            "temperature": 0.2,
+            "max_completion_tokens": 1200,
+        }
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        completion = self.client.chat.completions.create(**kwargs)
+        text = completion.choices[0].message.content or ""
+        return SimpleNamespace(text=text)
+
+    def generate_content(self, contents, json_mode=False):
+        message_content = self._normalize_content(contents)
+        return self._complete(
+            [{"role": "user", "content": message_content}], json_mode=json_mode
+        )
+
+    def start_chat(self, history=None):
+        return GroqClientChat(self, history or [])
+
+
+class GroqClientChat:
+    def __init__(self, model: GroqClientModel, history):
+        self.model = model
+        self.history = history
+
+    def send_message(self, message: str):
+        messages = []
+        for item in self.history:
+            role = "assistant" if item.get("role") == "model" else item.get("role", "user")
+            parts = item.get("parts", [])
+            messages.append({"role": role, "content": " ".join(str(part) for part in parts if part)})
+        messages.append({"role": "user", "content": message})
+        return self.model._complete(messages)
+
+
+def generate_model_content(model, contents, json_mode=False):
+    """Call either provider while keeping compatibility with legacy Gemini SDKs."""
+    try:
+        return model.generate_content(contents, json_mode=json_mode)
+    except TypeError:
+        return model.generate_content(contents)
+
+
+AI_PROVIDER = os.environ.get("AI_PROVIDER", "auto").strip().lower()
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL_NAME = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_VISION_MODEL_NAME = os.environ.get("GROQ_VISION_MODEL", "qwen/qwen3.6-27b")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-if GEMINI_API_KEY and genai is not None:
-    gemini_model = GeminiClientModel(GEMINI_API_KEY, GEMINI_MODEL_NAME)
-    print(f"Gemini model initialized with Google GenAI SDK: {GEMINI_MODEL_NAME}")
-elif GEMINI_API_KEY and legacy_genai is not None:
-    legacy_genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = legacy_genai.GenerativeModel(GEMINI_MODEL_NAME)
-    print(f"Gemini model initialized with legacy SDK: {GEMINI_MODEL_NAME}")
-else:
-    print("WARNING: GEMINI_API_KEY/GOOGLE_API_KEY not found or SDK missing. Gemini features will be disabled.")
-    gemini_model = None
+gemini_model = None
+AI_PROVIDER_NAME = "none"
+
+if AI_PROVIDER in ("auto", "groq") and GROQ_API_KEY and Groq is not None:
+    gemini_model = GroqClientModel(
+        GROQ_API_KEY, GROQ_MODEL_NAME, GROQ_VISION_MODEL_NAME
+    )
+    AI_PROVIDER_NAME = "groq"
+    print(f"Groq model initialized: {GROQ_MODEL_NAME} (vision: {GROQ_VISION_MODEL_NAME})")
+elif AI_PROVIDER == "groq" and not GROQ_API_KEY:
+    print("WARNING: AI_PROVIDER=groq but GROQ_API_KEY is not configured.")
+
+if gemini_model is None and AI_PROVIDER in ("auto", "gemini") and GEMINI_API_KEY:
+    if genai is not None:
+        gemini_model = GeminiClientModel(GEMINI_API_KEY, GEMINI_MODEL_NAME)
+        AI_PROVIDER_NAME = "gemini"
+        print(f"Gemini model initialized with Google GenAI SDK: {GEMINI_MODEL_NAME}")
+    elif legacy_genai is not None:
+        legacy_genai.configure(api_key=GEMINI_API_KEY)
+        gemini_model = legacy_genai.GenerativeModel(GEMINI_MODEL_NAME)
+        AI_PROVIDER_NAME = "gemini"
+        print(f"Gemini model initialized with legacy SDK: {GEMINI_MODEL_NAME}")
+
+if gemini_model is None:
+    print("WARNING: No configured AI provider. AI features will use local/static fallbacks.")
 
 VIBE_YOUTUBE_QUERIES = {
     "calm": ["calm piano music playlist", "ambient relaxing music"],
@@ -462,6 +574,12 @@ VIBE_YOUTUBE_QUERIES = {
     "tense": ["tense thriller soundtrack", "suspense music playlist"],
     "hopeful": ["hopeful uplifting music", "morning motivation playlist"],
     "minimalist": ["minimalist piano playlist", "sparse ambient music"],
+}
+
+VIBE_YOUTUBE_ALIASES = {
+    "grateful": "hopeful",
+    "gratitude": "hopeful",
+    "thankful": "hopeful",
 }
 
 VIBE_META = {
@@ -911,11 +1029,10 @@ async def analyze_mood(
     try:
         if gemini_model:
             try:
-                description, structured = await run_advanced_text_analysis(
-                    request.text,
-                    request.avatar_config,
+                description, structured = await run_structured_text_analysis(
+                    request.text
                 )
-                dominant = structured.get("dominant_mood", "")
+                dominant = str(structured.get("dominant_mood") or "").strip().lower()
                 vibe = (
                     dominant
                     if dominant in VIBE_LABELS
@@ -1134,12 +1251,90 @@ async def run_advanced_text_analysis(text: str, avatar_config: Optional[dict] = 
     return description, structured
 
 
+STRUCTURED_ANALYSIS_PROMPT = """Analyze the input and return ONLY one valid JSON object.
+
+Valid mood labels: {labels}
+Input type: {input_type}
+Input:
+{input}
+
+Use only details supported by the input. For images, describe visible facts and do not invent a story, identity, location, or emotion that cannot be observed. For text, preserve the user's meaning and do not turn it into a fictional scene.
+
+Return this exact shape:
+{{
+  "dominant_mood": "one valid label",
+  "confidence": 0.0,
+  "description": "one or two concise sentences explaining the input",
+  "environment_type": "short setting label or empty string",
+  "color_palette": ["#000000"],
+  "poetic_summary": "short supportive sentence or empty string",
+  "short_caption": "short factual caption",
+  "scene_tags": ["tag"]
+}}"""
+
+
+def parse_structured_generation(raw_text: str) -> dict:
+    """Parse JSON even when a model wraps it in markdown or extra text."""
+    text_value = (raw_text or "").strip()
+    if text_value.startswith("```"):
+        text_value = text_value.split("```", 2)[1].strip()
+        if text_value.lower().startswith("json"):
+            text_value = text_value[4:].strip()
+    start = text_value.find("{")
+    end = text_value.rfind("}")
+    if start < 0 or end <= start:
+        raise json.JSONDecodeError("No JSON object returned", text_value, 0)
+    value = json.loads(text_value[start : end + 1])
+    if not isinstance(value, dict):
+        raise json.JSONDecodeError("Expected a JSON object", text_value, 0)
+    return value
+
+
+def get_generated_description(structured: dict, fallback: str) -> str:
+    description = str(structured.get("description") or "").strip()
+    return description or str(structured.get("short_caption") or fallback).strip()
+
+
+async def run_structured_image_analysis(image: Image.Image):
+    image_part = pil_to_gemini_part(image)
+    prompt = STRUCTURED_ANALYSIS_PROMPT.format(
+        labels=", ".join(VIBE_LABELS),
+        input_type="image",
+        input="The attached image",
+    )
+    response = await asyncio.to_thread(
+        generate_model_content,
+        gemini_model,
+        [prompt, image_part],
+        True,
+    )
+    structured = parse_structured_generation(response.text)
+    return get_generated_description(structured, "Image analysis completed."), structured
+
+
+async def run_structured_text_analysis(text: str):
+    prompt = STRUCTURED_ANALYSIS_PROMPT.format(
+        labels=", ".join(VIBE_LABELS),
+        input_type="text",
+        input=text,
+    )
+    response = await asyncio.to_thread(
+        generate_model_content,
+        gemini_model,
+        prompt,
+        True,
+    )
+    structured = parse_structured_generation(response.text)
+    return get_generated_description(structured, text), structured
+
+
 def build_full_response(vibe: str, description: str, structured: Optional[dict] = None):
     """
     Merges Gemini structured output + BERT scores into a unified response
     that the existing MoodResult component can render.
     """
     # Run BERT on the description for the full 20-label breakdown
+    description = (description or "").strip() or "Mood analysis completed."
     bert_labels, bert_scores = build_enriched_scores_from_bert(description)
 
     # Use Gemini's dominant mood if valid, else fall back to BERT top result
@@ -1184,12 +1379,14 @@ def build_full_response(vibe: str, description: str, structured: Optional[dict] 
         else:
             short_desc = description[:100] + "..."
 
+    raw_confidence = bert_scores[bert_labels.index(dominant_label)]
+    normalized_confidence = max(0.0, min(1.0, (raw_confidence + 1.0) / 2.0))
     response = {
         "vibe": dominant_label,
         "description": description,
         "short_description": short_desc,
         "mood": dominant_label,
-        "confidence": f"{round(bert_scores[bert_labels.index(dominant_label)] * 100, 2)}%",
+        "confidence": f"{round(normalized_confidence * 100, 2)}%",
         "emoji": dominant_emoji,
         "color": dominant_color,
         "feedback": dominant_feedback,
@@ -1198,12 +1395,24 @@ def build_full_response(vibe: str, description: str, structured: Optional[dict] 
 
     # Attach Gemini extras if available
     if structured:
-        response["gemini_confidence"] = structured.get("confidence")
-        response["poetic_summary"] = structured.get("poetic_summary", "")
-        response["short_caption"] = structured.get("short_caption", "")
-        response["color_palette"] = structured.get("color_palette", [])
-        response["scene_tags"] = structured.get("scene_tags", [])
-        response["secondary_moods"] = structured.get("secondary_moods", [])
+        try:
+            gemini_confidence = float(structured.get("confidence"))
+            gemini_confidence = max(0.0, min(1.0, gemini_confidence))
+        except (TypeError, ValueError):
+            gemini_confidence = None
+        response["gemini_confidence"] = gemini_confidence
+        response["poetic_summary"] = str(structured.get("poetic_summary") or "")
+        response["short_caption"] = str(structured.get("short_caption") or "")
+        response["color_palette"] = (
+            structured.get("color_palette")
+            if isinstance(structured.get("color_palette"), list)
+            else []
+        )
+        response["scene_tags"] = (
+            [str(tag).strip() for tag in structured.get("scene_tags", []) if str(tag).strip()]
+            if isinstance(structured.get("scene_tags"), list)
+            else []
+        )
         response["environment_type"] = structured.get(
             "environment_type", "Unknown Setting"
         )
@@ -1227,15 +1436,26 @@ async def analyze_image(
     try:
         # ── 1. Receive the image ──
         if file is not None and file.filename:
-            if not file.content_type.startswith("image/"):
+            if not file.content_type or not file.content_type.startswith("image/"):
                 raise HTTPException(
                     status_code=400, detail="File provided is not an image"
                 )
-            image = Image.open(io.BytesIO(await file.read()))
+            file_bytes = await file.read()
+            if len(file_bytes) > MAX_IMAGE_BYTES:
+                raise HTTPException(status_code=413, detail="Image is too large")
+            image = Image.open(io.BytesIO(file_bytes))
+            image.load()
 
         elif base64_data:
             try:
-                image = Image.open(io.BytesIO(base64.b64decode(base64_data)))
+                encoded = base64_data.split(",", 1)[-1]
+                image_bytes = base64.b64decode(encoded, validate=True)
+                if len(image_bytes) > MAX_IMAGE_BYTES:
+                    raise HTTPException(status_code=413, detail="Image is too large")
+                image = Image.open(io.BytesIO(image_bytes))
+                image.load()
+            except HTTPException:
+                raise
             except Exception:
                 raise HTTPException(
                     status_code=400, detail="Invalid base64 image payload"
@@ -1254,6 +1474,8 @@ async def analyze_image(
         else:
             raise HTTPException(status_code=400, detail="No image provided")
 
+        image = ImageOps.exif_transpose(image)
+
         # ── Save image to user's directory ──
         try:
             image_path = save_user_image(image, db_user.id, fileName)
@@ -1264,8 +1486,8 @@ async def analyze_image(
         # ── 2. Advanced Gemini pipeline ──
         if gemini_model:
             try:
-                description, structured = await run_advanced_gemini_analysis(image)
-                dominant = structured.get("dominant_mood", "")
+                description, structured = await run_structured_image_analysis(image)
+                dominant = str(structured.get("dominant_mood") or "").strip().lower()
                 vibe = (
                     dominant
                     if dominant in VIBE_LABELS
@@ -1285,6 +1507,7 @@ async def analyze_image(
                 return response
 
             except json.JSONDecodeError as je:
+                description = generate_local_caption(image)
                 # Stage 2 JSON parse failed — fall back to BERT on Stage 1 description
                 print(f"[Stage 2 JSON Error] {je} — falling back to BERT")
                 bert_labels, _ = build_enriched_scores_from_bert(description)
@@ -1971,6 +2194,8 @@ async def get_playlist_suggestions(
     if not YOUTUBE_API_KEY:
         raise HTTPException(status_code=503, detail="YouTube API not configured")
 
+    vibe = VIBE_YOUTUBE_ALIASES.get(vibe.strip().lower(), vibe.strip().lower())
+
     if vibe not in VIBE_YOUTUBE_QUERIES:
         raise HTTPException(status_code=400, detail="Unknown vibe label")
 
@@ -2377,13 +2602,19 @@ Write a warm, personal weekly summary. Return ONLY valid JSON:
     }
 
 
-@app.get("/")
+@app.get("/health")
 async def health_check():
     return {
-        "status": "online",
-        "message": "Scene Vibe Server is running",
-        "gemini": "enabled" if gemini_model else "disabled (no API key)",
+        "status": "ok",
+        "service": "moodvoice-api",
+        "ai_provider": AI_PROVIDER_NAME,
+        "ai": "enabled" if gemini_model else "disabled (no API key)",
     }
+
+
+@app.get("/")
+async def root_health_check():
+    return await health_check()
 
 
 if __name__ == "__main__":

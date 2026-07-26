@@ -12,6 +12,7 @@ import {
   Easing,
   TouchableOpacity,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 
 // Import Custom Components
@@ -40,7 +41,8 @@ import MoodTwin from './components/MoodTwin';
 import MoodGarden from './components/MoodGarden';
 import GoalAlignmentRing from './components/GoalAlignmentRing';
 import CelebrationCorner from './components/CelebrationCorner';
-import BACKEND_URL from './config';
+import BACKEND_URL, {isBackendConfigured} from './config';
+import {ThemeContext} from './theme/ThemeContext';
 
 // RN 0.71+ expects native event modules to expose listener stubs.
 // We stub common module names used by voice libraries to prevent NativeEventEmitter warnings.
@@ -56,6 +58,22 @@ import BACKEND_URL from './config';
 });
 
 const Voice = require('@react-native-voice/voice').default;
+
+const AUTH_TOKEN_STORAGE_KEY = '@voice_to_text_auth_token';
+const GRATITUDE_GEMS_STORAGE_PREFIX = '@voice_to_text_gratitude_gems';
+
+const getLocalDayKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getTimeUntilNextLocalDay = () => {
+  const nextMidnight = new Date();
+  nextMidnight.setHours(24, 0, 0, 0);
+  return nextMidnight.getTime() - Date.now();
+};
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -75,9 +93,77 @@ const App = () => {
   const [moodData, setMoodData] = useState(null);
   const [isSelectingImage, setIsSelectingImage] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const imageAnalysisRequestRef = useRef(null);
+  const imageAnalysisRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => imageAnalysisRequestRef.current?.abort?.();
+  }, []);
   const [isListening, setIsListening] = useState(false);
   const [text, setText] = useState('');
+  const textRef = useRef('');
   const [appBgColor, setAppBgColor] = useState('#f5f5f5');
+  const [themeColor, setThemeColor] = useState('#7c6ff7');
+  const [isAuthHydrated, setIsAuthHydrated] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydrateAuthToken = async () => {
+      try {
+        const storedToken = await AsyncStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+        if (!isMounted || !storedToken) {
+          return;
+        }
+
+        setToken(storedToken);
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.warn('Failed to restore auth token:', error);
+      } finally {
+        if (isMounted) {
+          setIsAuthHydrated(true);
+        }
+      }
+    };
+
+    hydrateAuthToken();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthHydrated) {
+      return;
+    }
+
+    const persistAuthToken = async () => {
+      try {
+        if (token) {
+          await AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+        } else {
+          await AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+        }
+      } catch (error) {
+        console.warn('Failed to persist auth token:', error);
+      }
+    };
+
+    persistAuthToken();
+  }, [isAuthHydrated, token]);
+
+  const themeContextValue = useMemo(
+    () => ({
+      moodColor: themeColor,
+      moodBackground: appBgColor,
+      contrastText: getContrastColor(appBgColor),
+      setMoodColor: setThemeColor,
+      setMoodBackground: setAppBgColor,
+    }),
+    [themeColor, appBgColor],
+  );
   // Smooth, cinematic background color transitions.
   // Plain `backgroundColor: appBgColor` snaps instantly on every mood change.
   // Instead we cross-fade between the previous and next color with a slow,
@@ -122,6 +208,10 @@ const App = () => {
   const [crisisAlert, setCrisisAlert] = useState(null);
   const [chatInitialPrompt, setChatInitialPrompt] = useState('');
   const [gratitudeGems, setGratitudeGems] = useState([]);
+  const [gratitudeStorageDayKey, setGratitudeStorageDayKey] = useState(() =>
+    getLocalDayKey(),
+  );
+  const [isGratitudeGemsHydrated, setIsGratitudeGemsHydrated] = useState(false);
   const [historyTagFilter, setHistoryTagFilter] = useState(null);
   const moodGoalRequestId = useRef(0);
 
@@ -192,6 +282,76 @@ const App = () => {
     };
   }, [analyticsData, gratitudeGems.length, moodGoal, moodHistory]);
 
+  const gratitudeGemsStorageKey = useMemo(() => {
+    if (!token) {
+      return null;
+    }
+    return `${GRATITUDE_GEMS_STORAGE_PREFIX}:${token}:${gratitudeStorageDayKey}`;
+  }, [gratitudeStorageDayKey, token]);
+
+  useEffect(() => {
+    if (!token || !gratitudeGemsStorageKey) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const hydrateGratitudeGems = async () => {
+      try {
+        const storedGems = await AsyncStorage.getItem(gratitudeGemsStorageKey);
+        if (!isMounted) {
+          return;
+        }
+
+        if (storedGems) {
+          const parsedGems = JSON.parse(storedGems);
+          setGratitudeGems(Array.isArray(parsedGems) ? parsedGems : []);
+        } else {
+          setGratitudeGems([]);
+        }
+      } catch (error) {
+        console.warn('Failed to restore gratitude gems:', error);
+      } finally {
+        if (isMounted) {
+          setIsGratitudeGemsHydrated(true);
+        }
+      }
+    };
+
+    setIsGratitudeGemsHydrated(false);
+    hydrateGratitudeGems();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [gratitudeGemsStorageKey, token]);
+
+  useEffect(() => {
+    if (!isGratitudeGemsHydrated || !gratitudeGemsStorageKey) {
+      return;
+    }
+
+    AsyncStorage.setItem(
+      gratitudeGemsStorageKey,
+      JSON.stringify(gratitudeGems),
+    ).catch(error => {
+      console.warn('Failed to persist gratitude gems:', error);
+    });
+  }, [gratitudeGems, gratitudeGemsStorageKey, isGratitudeGemsHydrated]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setGratitudeGems([]);
+      setGratitudeStorageDayKey(getLocalDayKey());
+    }, Math.max(0, getTimeUntilNextLocalDay()));
+
+    return () => clearTimeout(timeoutId);
+  }, [token, gratitudeStorageDayKey]);
+
   const handleOpenChat = useCallback((prompt = '') => {
     setChatInitialPrompt(prompt);
     setActiveTab('chat');
@@ -242,7 +402,7 @@ const App = () => {
         console.warn('Mood goal fetch failed:', error);
       }
     },
-    [BACKEND_URL, token],
+    [token],
   );
 
   const updateMoodGoal = useCallback(
@@ -284,7 +444,7 @@ const App = () => {
         console.error('Failed to update mood goal:', error);
       }
     },
-    [BACKEND_URL, token],
+    [token],
   );
 
   const fetchAnalyticsData = useCallback(
@@ -312,7 +472,7 @@ const App = () => {
         console.warn('Analytics fetch failed:', error.message || error);
       }
     },
-    [BACKEND_URL, token],
+    [token],
   );
 
   useEffect(() => {
@@ -365,11 +525,15 @@ const App = () => {
       feedback: item.feedback || '',
       poetic_summary: item.poetic_summary || '',
       confidence: item.confidence || '',
-      gemini_confidence: item.gemini_confidence || null,
+      gemini_confidence:
+        item.gemini_confidence !== undefined && item.gemini_confidence !== null
+          ? item.gemini_confidence
+          : null,
       environment_type: item.environment_type || '',
       color_palette: item.color_palette || [],
       secondary_moods: item.secondary_moods || [],
       all_scores: item.all_scores || [],
+      image_path: item.image_path || null,
       audio_path: item.audio_path || null,
       prosody_analysis: item.prosody_analysis || null,
       reflection: item.reflection || '',
@@ -413,7 +577,7 @@ const App = () => {
         console.warn('Mood history load failed:', error.message || error);
       }
     },
-    [BACKEND_URL, formatMoodHistoryItem, token],
+    [formatMoodHistoryItem, token],
   );
 
   const extractJournalPayload = useCallback((journalAnswers = {}) => {
@@ -474,13 +638,7 @@ const App = () => {
         console.warn('Journal save failed:', error.message || error);
       }
     },
-    [
-      BACKEND_URL,
-      extractJournalPayload,
-      formatMoodHistoryItem,
-      moodData?.id,
-      token,
-    ],
+    [extractJournalPayload, formatMoodHistoryItem, moodData?.id, token],
   );
 
   useEffect(() => {
@@ -503,7 +661,7 @@ const App = () => {
           const errorText = await response.text();
           throw new Error(`Delete failed: ${response.status} ${errorText}`);
         }
-        // Remove from local state immediately — no refetch needed
+        // Remove from local state immediately â€” no refetch needed
         setMoodHistory(prev =>
           prev.filter(
             item => item.id !== String(entryId) && item.id !== entryId,
@@ -514,7 +672,7 @@ const App = () => {
         Alert.alert('Error', 'Could not delete this entry. Please try again.');
       }
     },
-    [BACKEND_URL, token],
+    [token],
   );
 
   const saveMoodLog = useCallback(
@@ -610,13 +768,7 @@ const App = () => {
         console.warn('Mood log save failed:', error.message || error);
       }
     },
-    [
-      BACKEND_URL,
-      extractJournalPayload,
-      formatMoodHistoryItem,
-      token,
-      moodHistory,
-    ],
+    [extractJournalPayload, formatMoodHistoryItem, token, moodHistory],
   );
 
   const saveInteractiveMoodEntry = useCallback(
@@ -653,6 +805,11 @@ const App = () => {
         });
 
         if (!response.ok) {
+          if (response.status === 401) {
+            setIsAuthenticated(false);
+            setToken(null);
+            setAuthError('Your session expired. Please sign in again.');
+          }
           const errorText = await response.text();
           throw new Error(
             `Failed to save interactive entry: ${response.status} ${errorText}`,
@@ -675,7 +832,7 @@ const App = () => {
         );
       }
     },
-    [BACKEND_URL, fetchAnalyticsData, formatMoodHistoryItem, token],
+    [fetchAnalyticsData, formatMoodHistoryItem, token],
   );
 
   const onSpeechStart = useCallback(() => {
@@ -690,6 +847,7 @@ const App = () => {
   const onSpeechResults = useCallback(event => {
     const transcript =
       event && event.value && event.value[0] ? event.value[0] : '';
+    textRef.current = transcript;
     setText(transcript);
   }, []);
 
@@ -697,6 +855,7 @@ const App = () => {
     const partial =
       event && event.value && event.value[0] ? event.value[0] : '';
     if (partial) {
+      textRef.current = partial;
       setText(partial);
     }
   }, []);
@@ -861,14 +1020,15 @@ const App = () => {
       return true;
     }
 
+    // Android's system photo picker does not require broad media access.
+    if (Platform.Version >= 33) {
+      return true;
+    }
+
     try {
-      let permission;
-      // For Android 13 (API 33) and above, READ_MEDIA_IMAGES is used.
-      // For Android 12 (API 32) and below, READ_EXTERNAL_STORAGE is used.
-      if (Platform.Version >= 33) {
-        permission = PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES;
-      } else {
-        permission = PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+      const permission = PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+      if (!permission) {
+        return true;
       }
 
       const alreadyGranted = await PermissionsAndroid.check(permission);
@@ -884,41 +1044,6 @@ const App = () => {
         buttonPositive: 'OK',
       });
 
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    } catch (err) {
-      console.warn(err);
-      return false;
-    }
-  }, []);
-
-  /**
-   * Request WRITE_EXTERNAL_STORAGE for saving photos to the gallery.
-   * Only needed on Android < 10 (API level < 29). On API 29+ the system
-   * handles gallery writes via MediaStore without needing this permission.
-   */
-  const requestWriteStoragePermission = useCallback(async () => {
-    if (Platform.OS !== 'android') {
-      return true;
-    }
-    // API 29 (Android 10) and above do not need WRITE_EXTERNAL_STORAGE
-    if (Platform.Version >= 29) {
-      return true;
-    }
-    try {
-      const alreadyGranted = await PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-      );
-      if (alreadyGranted) {
-        return true;
-      }
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        {
-          title: 'Save Photo Permission',
-          message: 'This app needs permission to save photos to your gallery.',
-          buttonPositive: 'OK',
-        },
-      );
       return granted === PermissionsAndroid.RESULTS.GRANTED;
     } catch (err) {
       console.warn(err);
@@ -948,6 +1073,7 @@ const App = () => {
       }
 
       setIsVoiceAvailable(true);
+      textRef.current = '';
       setText('');
 
       const recognizing = await Voice.isRecognizing();
@@ -985,8 +1111,9 @@ const App = () => {
       // But we add a small check to ensure we don't analyze empty text.
 
       setTimeout(() => {
-        if (!isAnalyzing && text.trim()) {
-          analyzeMood(text);
+        const latestTranscript = textRef.current.trim();
+        if (!isAnalyzing && latestTranscript) {
+          analyzeMood(latestTranscript);
         }
       }, 500); // Wait for the final transcript to settle
     } catch (e) {
@@ -1000,7 +1127,7 @@ const App = () => {
       return;
     }
 
-    // Crisis check runs in parallel — non-blocking
+    // Crisis check runs in parallel â€” non-blocking
     fetch(`${BACKEND_URL}/crisis-check`, {
       method: 'POST',
       headers: {
@@ -1067,8 +1194,19 @@ const App = () => {
         console.warn('No asset or URI provided to analyzeImageDescription');
         return;
       }
+      if (!token) {
+        setErrorMessage('Please sign in before analyzing an image.');
+        return;
+      }
+
+      imageAnalysisRequestRef.current?.abort?.();
+      const controller = new AbortController();
+      const requestId = imageAnalysisRequestIdRef.current + 1;
+      imageAnalysisRequestIdRef.current = requestId;
+      imageAnalysisRequestRef.current = controller;
       setIsAnalyzing(true);
       setErrorMessage('');
+      setMoodData(null);
       try {
         const isRemoteUrl =
           asset.uri.startsWith('http://') || asset.uri.startsWith('https://');
@@ -1099,6 +1237,7 @@ const App = () => {
             Authorization: `Bearer ${token}`,
           },
           body: formData,
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -1109,17 +1248,38 @@ const App = () => {
         }
 
         const data = await response.json();
-        setText(data.short_description);
-        setMoodData(data); // Set the full Gemini results directly
+        if (requestId !== imageAnalysisRequestIdRef.current) {
+          return;
+        }
+        setText(
+          data.short_description ||
+            data.short_caption ||
+            data.description ||
+            '',
+        );
+        setMoodData(data);
+        setImages(currentImages =>
+          currentImages.map(image =>
+            image.uri === asset.uri ? {...image, ...data} : image,
+          ),
+        );
         await saveMoodLog(data, data.short_description);
       } catch (error) {
+        if (error?.name === 'AbortError') {
+          return;
+        }
         console.error('Image analysis error:', error);
-        setErrorMessage('Could not describe the image. Is the server running?');
+        setErrorMessage(
+          error?.message || 'Could not analyze the image. Please try again.',
+        );
       } finally {
-        setIsAnalyzing(false);
+        if (requestId === imageAnalysisRequestIdRef.current) {
+          imageAnalysisRequestRef.current = null;
+          setIsAnalyzing(false);
+        }
       }
     },
-    [BACKEND_URL, saveMoodLog, token],
+    [saveMoodLog, token],
   );
 
   const handleCaptureImage = useCallback(async () => {
@@ -1140,7 +1300,7 @@ const App = () => {
       setIsCapturingImage(true);
 
       timeoutId = setTimeout(() => {
-        console.warn('Camera timed out — resetting capture state.');
+        console.warn('Camera timed out â€” resetting capture state.');
         setIsCapturingImage(false);
       }, 30000);
 
@@ -1151,10 +1311,6 @@ const App = () => {
         return;
       }
 
-      // Request write-storage permission so the photo can be saved to the
-      // device gallery (required on Android < 10 / API < 29).
-      await requestWriteStoragePermission();
-
       const result = await launchCamera({
         mediaType: 'photo',
         cameraType: 'back',
@@ -1162,8 +1318,8 @@ const App = () => {
         maxHeight: 1024,
         quality: 0.7,
         // Save the captured photo directly to the device gallery.
-        saveToPhotos: true,
-        // Do NOT include base64 here — encoding a full-res photo on the JS
+        saveToPhotos: false,
+        // Do NOT include base64 here â€” encoding a full-res photo on the JS
         // thread freezes the UI and causes the camera to appear stuck.
         // analyzeImageDescription handles plain file URIs directly.
         includeBase64: false,
@@ -1205,12 +1361,7 @@ const App = () => {
     } finally {
       resetCapturing();
     }
-  }, [
-    isCapturingImage,
-    requestCameraPermission,
-    requestWriteStoragePermission,
-    analyzeImageDescription,
-  ]);
+  }, [isCapturingImage, requestCameraPermission, analyzeImageDescription]);
 
   const handleSelectImage = useCallback(async () => {
     if (isSelectingImage) {
@@ -1280,7 +1431,7 @@ const App = () => {
     content: {
       paddingVertical: 40,
       alignItems: 'center',
-      paddingBottom: 110,
+      paddingBottom: 150,
     },
     statusText: {
       marginTop: 10,
@@ -1335,6 +1486,11 @@ const App = () => {
       paddingHorizontal: 8,
       justifyContent: 'space-around',
       elevation: 20,
+      position: 'absolute',
+      bottom: 16,
+      left: 20,
+      right: 20,
+      borderRadius: 99,
       shadowColor: DESIGN_TOKENS.shadow,
       shadowOffset: {width: 0, height: -4},
       shadowOpacity: 0.08,
@@ -1347,14 +1503,14 @@ const App = () => {
       paddingVertical: 4,
     },
     tabIconWrap: {
-      width: 44,
+      width: 50,
       height: 32,
-      borderRadius: 12,
+      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
     },
     tabIconWrapActive: {
-      backgroundColor: `${DESIGN_TOKENS.primary}15`,
+      backgroundColor: DESIGN_TOKENS.primary,
     },
     tabText: {
       fontSize: 10,
@@ -1457,6 +1613,13 @@ const App = () => {
     setIsAuthLoading(true);
     setAuthError('');
     setIsLoginFlow(isLogin);
+    if (!isBackendConfigured) {
+      setAuthError(
+        'The app is not connected to a backend. Configure EXPO_PUBLIC_BACKEND_URL before building.',
+      );
+      setIsAuthLoading(false);
+      return;
+    }
     try {
       const endpoint = isLogin ? '/login' : '/signup';
       const body = isLogin
@@ -1477,7 +1640,13 @@ const App = () => {
         body: JSON.stringify(body),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        throw new Error('The server returned an invalid response.');
+      }
 
       if (!response.ok) {
         throw new Error(data.detail || 'Authentication failed');
@@ -1532,12 +1701,15 @@ const App = () => {
     setToken(null);
     setUserName('');
     setMoodData(null);
+    textRef.current = '';
     setText('');
     setImages([]);
     setMoodHistory([]);
     setSelectedHistoryItem(null);
     setHistoryTagFilter(null);
     setAppBgColor('#f5f5f5');
+    setGratitudeGems([]);
+    setIsGratitudeGemsHydrated(false);
   };
 
   const handleVibeSelect = useCallback(vibe => {
@@ -1586,7 +1758,9 @@ const App = () => {
             : 'reflective',
         emoji: '✍️',
         caption: entry.prompt,
-        description: `${entry.prompt}\n\n${entry.response}`,
+        description: `${entry.prompt}
+
+${entry.response}`,
         reflection: entry.response,
         sceneTags: ['mood-dice', entry.category],
         color: '#FFD93D',
@@ -1650,7 +1824,12 @@ const App = () => {
       <AuthScreen
         onAuth={handleAuth}
         isLoading={isAuthLoading}
-        errorMessage={authError}
+        errorMessage={
+          authError ||
+          (!isBackendConfigured
+            ? 'Configure the Azure backend URL before signing in.'
+            : '')
+        }
       />
     );
   }
@@ -1717,8 +1896,6 @@ const App = () => {
               isAnalyzing={false}
               isListening={false}
               hasText={!!selectedHistoryItem.description}
-              setAppBgColor={setAppBgColor}
-              appBgColor={appBgColor}
               onTagPress={handleTagPress}
             />
           </>
@@ -1742,6 +1919,8 @@ const App = () => {
               onTabChange={handleInteractiveTabChange}
               token={token}
               backendUrl={BACKEND_URL}
+              setAppBgColor={setAppBgColor}
+              setThemeColor={setThemeColor}
             />
           </View>
 
@@ -1749,6 +1928,7 @@ const App = () => {
             <MoodDice
               onJournalEntry={handleMoodDiceJournalEntry}
               onTabChange={handleInteractiveTabChange}
+              token={token}
             />
           </View>
 
@@ -1757,6 +1937,7 @@ const App = () => {
               gems={gratitudeGems}
               onGemAdded={handleGemAdded}
               onGemDeleted={handleGemDeleted}
+              token={token}
               onJarFull={() => {
                 fetchAnalyticsData(token);
                 setActiveTab('analytics');
@@ -1778,8 +1959,8 @@ const App = () => {
             appBgColor={appBgColor}
             onPressBadge={handleBadgePress}
           />
+          {/* Mood Companion â€” contextual question */}
 
-          {/* Mood Companion — contextual question */}
           <MoodCompanion
             moodHistory={moodHistory}
             userName={userName}
@@ -1860,8 +2041,6 @@ const App = () => {
             isAnalyzing={isAnalyzing}
             isListening={isListening}
             hasText={text.length > 0}
-            setAppBgColor={setAppBgColor}
-            appBgColor={appBgColor}
             onTagPress={handleTagPress}
           />
 
@@ -1901,114 +2080,114 @@ const App = () => {
   };
 
   return (
-    <Animated.View style={{flex: 1, backgroundColor: animatedAppBgColor}}>
-      {activeTab === 'chat' ? (
-        // TherapistChat contains a FlatList — must NOT be inside a ScrollView
-        <TherapistChat
-          token={token}
-          backendUrl={BACKEND_URL}
-          vibeContext={moodData?.vibe}
-          initialPrompt={chatInitialPrompt}
-          onClose={() => {
-            setActiveTab('home');
-            setChatInitialPrompt('');
-          }}
-        />
-      ) : (
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}>
-          <View style={styles.heroWrapper}>
-            <DashboardHero
-              appBgColor={appBgColor}
-              avatarAnim={avatarAnim}
-              avatarConfig={avatarConfig}
-              isLoginFlow={isLoginFlow}
-              onEditAvatar={() => setAvatarVisible(true)}
-              onLogout={handleLogout}
-              onOpenHistory={handleOpenHistory}
-              userName={userName}
-            />
-          </View>
-
-          {renderContent()}
-
-          <AvatarBuilder
-            visible={avatarVisible}
-            onClose={() => setAvatarVisible(false)}
-            onSave={async (config, svgString) => {
-              setAvatarConfig(config);
-              setAvatarVisible(false);
-              try {
-                await fetch(`${BACKEND_URL}/update-avatar`, {
-                  method: 'PUT',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                  },
-                  body: JSON.stringify(config),
-                }).then(response => {
-                  if (!response.ok) {
-                    throw new Error('Failed to save avatar.');
-                  }
-                  Alert.alert('Success', 'Avatar updated successfully!');
-                });
-              } catch (error) {
-                console.error('Failed to update avatar:', error);
-                Alert.alert(
-                  'Error',
-                  error.message || 'Failed to update avatar.',
-                );
-              }
+    <ThemeContext.Provider value={themeContextValue}>
+      <Animated.View style={{flex: 1, backgroundColor: animatedAppBgColor}}>
+        {activeTab === 'chat' ? (
+          <TherapistChat
+            token={token}
+            backendUrl={BACKEND_URL}
+            vibeContext={moodData?.vibe}
+            initialPrompt={chatInitialPrompt}
+            onClose={() => {
+              setActiveTab('home');
+              setChatInitialPrompt('');
             }}
           />
-        </ScrollView>
-      )}
+        ) : (
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}>
+            <View style={styles.heroWrapper}>
+              <DashboardHero
+                appBgColor={appBgColor}
+                avatarAnim={avatarAnim}
+                avatarConfig={avatarConfig}
+                isLoginFlow={isLoginFlow}
+                onEditAvatar={() => setAvatarVisible(true)}
+                onLogout={handleLogout}
+                onOpenHistory={handleOpenHistory}
+                userName={userName}
+              />
+            </View>
 
-      <View style={styles.tabBar}>
-        {[
-          {id: 'home', icon: 'home-variant', label: 'Home'},
-          {id: 'chat', icon: 'chat-processing-outline', label: 'Chat'},
-          {id: 'history', icon: 'book-open-page-variant', label: 'Journal'},
-          {id: 'analytics', icon: 'chart-areaspline', label: 'Insights'},
-        ].map(tab => {
-          const active = activeTab === tab.id;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={styles.tabItem}
-              onPress={() => handleTabPress(tab.id)}
-              activeOpacity={0.7}>
-              <View
-                style={[
-                  styles.tabIconWrap,
-                  active && styles.tabIconWrapActive,
-                ]}>
-                <Icon
-                  name={tab.icon}
-                  size={22}
-                  color={
-                    active ? DESIGN_TOKENS.primary : DESIGN_TOKENS.primaryLight
-                  }
-                />
-              </View>
-              <Text
-                style={[
-                  styles.tabText,
-                  {
-                    color: active
-                      ? DESIGN_TOKENS.primary
-                      : DESIGN_TOKENS.primaryLight,
-                  },
-                ]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </Animated.View>
+            {renderContent()}
+
+            <AvatarBuilder
+              visible={avatarVisible}
+              onClose={() => setAvatarVisible(false)}
+              onSave={async (config, svgString) => {
+                setAvatarConfig(config);
+                setAvatarVisible(false);
+                try {
+                  await fetch(`${BACKEND_URL}/update-avatar`, {
+                    method: 'PUT',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(config),
+                  }).then(response => {
+                    if (!response.ok) {
+                      throw new Error('Failed to save avatar.');
+                    }
+                    Alert.alert('Success', 'Avatar updated successfully!');
+                  });
+                } catch (error) {
+                  console.error('Failed to update avatar:', error);
+                  Alert.alert(
+                    'Error',
+                    error.message || 'Failed to update avatar.',
+                  );
+                }
+              }}
+            />
+          </ScrollView>
+        )}
+
+        <View style={styles.tabBar}>
+          {[
+            {id: 'home', icon: 'home-variant', label: 'Home'},
+            {id: 'chat', icon: 'chat-processing-outline', label: 'Chat'},
+            {id: 'history', icon: 'book-open-page-variant', label: 'Journal'},
+            {id: 'analytics', icon: 'chart-areaspline', label: 'Insights'},
+          ].map(tab => {
+            const active = activeTab === tab.id;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={styles.tabItem}
+                onPress={() => handleTabPress(tab.id)}
+                activeOpacity={0.7}>
+                <View
+                  style={[
+                    styles.tabIconWrap,
+                    active && styles.tabIconWrapActive,
+                  ]}>
+                  <Icon
+                    name={tab.icon}
+                    size={22}
+                    color={active ? '#FFFFFF' : DESIGN_TOKENS.primaryLight}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.tabText,
+                    {
+                      color: active
+                        ? DESIGN_TOKENS.primary
+                        : DESIGN_TOKENS.textSecondary,
+                      fontWeight: active ? '800' : '700',
+                    },
+                  ]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </Animated.View>
+    </ThemeContext.Provider>
   );
 };
 

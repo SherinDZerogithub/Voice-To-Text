@@ -33,6 +33,8 @@ Important `.env` values:
 - `SECRET_KEY` must be changed before deployment.
 - `DATABASE_URL=sqlite:///./app.db` is fine locally. Use Azure Database for PostgreSQL or another managed database for production.
 - `GEMINI_API_KEY` enables Gemini-backed AI features.
+- `GROQ_API_KEY` enables Groq-backed AI features. `AI_PROVIDER=auto` prefers Groq when this key is present; use `AI_PROVIDER=groq` or `AI_PROVIDER=gemini` to force a provider.
+- `GROQ_MODEL` and `GROQ_VISION_MODEL` override the Groq text and vision models.
 - `YOUTUBE_API_KEY` enables playlist suggestions.
 - `UPLOADS_DIR` should point to persistent storage in production.
 
@@ -58,7 +60,10 @@ By default, the app uses:
 - Android emulator: `http://10.0.2.2:8000`
 - iOS simulator: `http://localhost:8000`
 
-For a real phone or a release build, update the backend URL through `myapp/config.js` or provide `EXPO_PUBLIC_BACKEND_URL` during your build process if your React Native build pipeline injects environment variables.
+For a real phone, set `EXPO_PUBLIC_BACKEND_URL` to the reachable backend URL.
+For an Azure release, use an HTTPS URL and run `npm run android:release` from
+`myapp`; this writes the URL into the release bundle and refuses localhost or
+HTTP values.
 
 ## Azure Backend Deployment Notes
 
@@ -73,7 +78,7 @@ startup.sh
 Or use the underlying command:
 
 ```bash
-gunicorn -k uvicorn.workers.UvicornWorker -w 2 --timeout 600 -b 0.0.0.0:${PORT:-8000} main:app
+ENVIRONMENT=${ENVIRONMENT:-production} gunicorn -k uvicorn.workers.UvicornWorker --workers ${WEB_CONCURRENCY:-1} --timeout ${GUNICORN_TIMEOUT:-600} -b 0.0.0.0:${PORT:-8000} main:app
 ```
 
 Set these Azure App Service application settings:
@@ -84,6 +89,10 @@ SECRET_KEY=<strong-random-secret>
 DATABASE_URL=<production-database-url>
 GEMINI_API_KEY=<optional>
 GEMINI_MODEL=gemini-2.5-flash
+GROQ_API_KEY=<optional>
+GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_VISION_MODEL=qwen/qwen3.6-27b
+AI_PROVIDER=auto
 YOUTUBE_API_KEY=<optional>
 UPLOADS_DIR=<persistent-mounted-path-if-used>
 CORS_ALLOWED_ORIGINS=*
@@ -113,6 +122,7 @@ npx tsc --noEmit
 ## Troubleshooting
 
 - If the mobile app cannot reach Azure, make sure `myapp/config.js` points to the deployed `https://<app-name>.azurewebsites.net` URL before building the app.
+- Azure health probes can use `https://<app-name>.azurewebsites.net/health`.
 - If Azure starts but requests fail, check App Service logs for missing `SECRET_KEY`, missing Python packages, or database connection errors.
 - If uploaded images disappear after redeploys or restarts, configure persistent storage and set `UPLOADS_DIR`.
 - If AI features return fallback results, confirm `GEMINI_API_KEY` is set in Azure application settings.

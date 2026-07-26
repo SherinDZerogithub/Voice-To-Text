@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     shadowColor: '#6c5ce7',
     shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.07,
-    shadowRadius: 10,
+    shadowRadius: 12,
   },
   header: {
     flexDirection: 'row',
@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   affirmationBox: {
-    backgroundColor: '#fafafa',
+    backgroundColor: '#fcfcff',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   affirmationText: {
     fontSize: 15,
     color: '#444',
-    lineHeight: 22,
+    lineHeight: 24,
     fontStyle: 'italic',
     textAlign: 'center',
   },

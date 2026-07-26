@@ -4,6 +4,7 @@ import Tts from 'react-native-tts';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import PlaylistSuggestions from './PlaylistSuggestions';
+import { useTheme } from '../theme/ThemeContext';
 
 const DESIGN_TEXT_LINE_HEIGHT = 26;
 
@@ -190,6 +191,37 @@ const formatMetric = value => {
   return String(value);
 };
 
+const MOOD_EMOJI_FALLBACKS = {
+  happy: '😊',
+  sad: '💙',
+  calm: '🧘',
+  anxious: '🫂',
+  hopeful: '🌟',
+  tired: '😴',
+  angry: '💢',
+  neutral: '👋',
+};
+
+const getMoodEmoji = mood => {
+  if (!mood) {
+    return '🌈';
+  }
+
+  return MOOD_EMOJI_FALLBACKS[mood.toLowerCase()] || '🌈';
+};
+
+const normalizeEmoji = emoji => {
+  if (typeof emoji !== 'string' || !emoji.trim()) {
+    return null;
+  }
+
+  if (emoji.includes('ðŸ') || emoji.includes('â') || emoji.includes('�')) {
+    return null;
+  }
+
+  return emoji;
+};
+
 const MoodResult = ({
   moodData,
   token,
@@ -197,10 +229,9 @@ const MoodResult = ({
   isAnalyzing,
   isListening,
   hasText,
-  setAppBgColor,
-  appBgColor,
   onTagPress,
 }) => {
+  const { moodBackground, contrastText, setMoodBackground, setMoodColor } = useTheme();
   const [isSpeaking, setIsSpeaking] = React.useState(false);
   const [isCopied, setIsCopied] = React.useState(false);
   const [containerWidth, setContainerWidth] = React.useState(0);
@@ -212,7 +243,7 @@ const MoodResult = ({
   const lineMetadataRef = React.useRef([]);
   const activeLineIndexRef = React.useRef(-1);
   const copiedTimeoutRef = React.useRef(null);
-  const contrastColor = getContrastColor(appBgColor);
+  const contrastColor = getContrastColor(moodBackground || '#f5f5f5');
   const isDarkBg = contrastColor === '#ffffff';
 
   const handleCopyNarrative = React.useCallback(() => {
@@ -241,7 +272,7 @@ const MoodResult = ({
       'chaotic', 'intense', 'gritty', 'tense', 
       'melancholic', 'solitary', 'industrial'
     ];
-    return negativeVibes.includes(moodData.mood?.toLowerCase() || moodData.vibe?.toLowerCase());
+    return negativeVibes.includes((moodData.mood || moodData.vibe)?.toLowerCase());
   }, [moodData]);
 
   const empatheticReply = React.useMemo(() => {
@@ -398,7 +429,7 @@ const MoodResult = ({
 
   return (
     <>
-      <Text style={[styles.sectionTitle, textStyle]}>Mood Analysis (BERT)</Text>
+      <Text style={[styles.sectionTitle, textStyle]}>Mood Analysis</Text>
 
       {isAnalyzing && (
         <View style={styles.loadingState}>
@@ -411,10 +442,10 @@ const MoodResult = ({
         <View style={styles.resultsContainer}>
           <View style={[styles.moodCard, cardStyle, { borderLeftColor: moodData.color }]}>
             <View style={styles.moodHeader}>
-              <Text style={styles.moodEmoji}>{moodData.emoji}</Text>
+              <Text style={styles.moodEmoji}>{normalizeEmoji(moodData.emoji) || getMoodEmoji(moodData.mood || moodData.vibe)}</Text>
               <View style={styles.moodTextBlock}>
                 <Text style={[styles.moodLabel, { color: moodData.color }]}>
-                  {moodData.mood?.toUpperCase()}
+                  {(moodData.mood || moodData.vibe || 'unknown').toUpperCase()}
                 </Text>
                 <Text style={[styles.moodConfidence, secondaryTextStyle]}>
                   Confidence: {moodData.confidence}
@@ -559,7 +590,7 @@ const MoodResult = ({
                 <View style={styles.designCardHeader}>
                   <View style={styles.designCardHeaderMain}>
                     <Text style={styles.designCardIcon}>*</Text>
-                    <Text style={[styles.designCardTitle, textStyle]}>Cinematic Narrative</Text>
+                    <Text style={[styles.designCardTitle, textStyle]}>Description</Text>
                   </View>
                   <View style={styles.narrativeActionsRow}>
                     <TouchableOpacity
@@ -648,7 +679,7 @@ const MoodResult = ({
                   ]}
                 >
                   <Text style={[styles.designCardFooterText, secondaryTextStyle]}>
-                    AI Visual Analysis | Gemini 1.5
+                     Image analysis
                   </Text>
                 </View>
               </View>
@@ -663,7 +694,10 @@ const MoodResult = ({
                   <TouchableOpacity
                     key={index}
                     style={styles.swatchWrapper}
-                    onPress={() => setAppBgColor(hex)}
+                    onPress={() => {
+                      setMoodBackground(hex);
+                      setMoodColor(hex);
+                    }}
                     activeOpacity={0.7}
                   >
                     <View
@@ -703,65 +737,6 @@ const MoodResult = ({
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
-          )}
-
-          {moodData.secondary_moods && moodData.secondary_moods.length > 0 && (
-            <View style={[styles.breakdownCard, cardStyle]}>
-              <Text style={[styles.breakdownTitle, textStyle]}>Secondary Moods (Gemini)</Text>
-              {moodData.secondary_moods.map((item) => (
-                <View key={item.label} style={styles.emotionRow}>
-                  <View style={styles.emotionInfo}>
-                    <Text style={[styles.emotionLabel, secondaryTextStyle]}>{item.label}</Text>
-                    <Text style={[styles.emotionPercentage, secondaryTextStyle]}>
-                      {Math.round((item.score || 0) * 100)}%
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.progressBarContainer,
-                      { backgroundColor: isDarkBg ? 'rgba(255,255,255,0.1)' : '#f0f0f0' },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        { width: `${(item.score || 0) * 100}%`, backgroundColor: '#9b59b6' },
-                      ]}
-                    />
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {moodData.all_scores && moodData.all_scores.length > 0 && (
-            <View style={[styles.breakdownCard, cardStyle]}>
-              <Text style={[styles.breakdownTitle, textStyle]}>Vibe Breakdown - Top 5 (BERT)</Text>
-              {moodData.all_scores.slice(0, 5).map((item) => (
-                <View key={item.label} style={styles.emotionRow}>
-                  <View style={styles.emotionInfo}>
-                    <Text style={styles.emotionEmoji}>{item.emoji}</Text>
-                    <Text style={[styles.emotionLabel, secondaryTextStyle]}>{item.label}</Text>
-                    <Text style={[styles.emotionPercentage, secondaryTextStyle]}>
-                      {item.percentage}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.progressBarContainer,
-                      { backgroundColor: isDarkBg ? 'rgba(255,255,255,0.1)' : '#f0f0f0' },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        { width: `${item.score * 100}%`, backgroundColor: item.color },
-                      ]}
-                    />
-                  </View>
-                </View>
-              ))}
             </View>
           )}
 
@@ -870,7 +845,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowRadius: 16,
     marginVertical: 10,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.05)',
@@ -882,7 +857,7 @@ const styles = StyleSheet.create({
   designCardContent: {
     padding: 24,
   },
-  designCardHeader: {
+   designCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -898,14 +873,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   speakerButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#f8f9fa',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: '#f0f0f0',
   },
   speakerButtonActive: {
     backgroundColor: '#fff5f5',
@@ -913,12 +888,12 @@ const styles = StyleSheet.create({
   },
   designCardIcon: {
     fontSize: 20,
-    marginRight: 10,
+    marginRight: 12,
   },
   designCardTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#1a1a1a',
+    color: '#2d3436',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
@@ -932,7 +907,7 @@ const styles = StyleSheet.create({
   designCardFooter: {
     marginTop: 20,
     paddingTop: 16,
-    borderTopWidth: 1,
+    borderTopWidth: 1.5,
     borderTopColor: '#f0f0f0',
     alignItems: 'flex-end',
   },
@@ -940,7 +915,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#999',
     fontWeight: '600',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   textContainer: {
     position: 'relative',
@@ -1118,19 +1093,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'capitalize',
   },
-  breakdownCard: {
-    width: '100%',
-    padding: 18,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    backgroundColor: '#fff',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
   breakdownTitle: {
     fontSize: 15,
     fontWeight: 'bold',
@@ -1177,41 +1139,6 @@ const styles = StyleSheet.create({
   supportFooterText: {
     fontSize: 10,
     fontWeight: '700',
-  },
-  emotionRow: {
-    marginBottom: 12,
-  },
-  emotionInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  emotionEmoji: {
-    fontSize: 16,
-    marginRight: 8,
-  },
-  emotionLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#555',
-    textTransform: 'capitalize',
-  },
-  emotionPercentage: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#888',
-  },
-  progressBarContainer: {
-    height: 8,
-    width: '100%',
-    backgroundColor: '#f0f0f0',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 4,
   },
   emptyState: {
     width: '100%',

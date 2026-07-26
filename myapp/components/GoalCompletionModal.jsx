@@ -644,7 +644,7 @@ const IncompleteContent = ({
         body:
           'The 7-day focus wrapped before this vibe reached the target. That is useful feedback, not a dead end.',
         tip: 'Choose a fresh feel-good focus, or keep this vibe and make it easier to notice tomorrow.',
-        icon: 'creation-outline',
+        icon: 'lightbulb-outline',
       }
     : getIncompleteMessage(goalVibe);
   const percent = Math.round(goalProgress * 100);

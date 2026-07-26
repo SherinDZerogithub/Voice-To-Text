@@ -1,6 +1,7 @@
 import React from 'react';
 import {View, TextInput, Text, TouchableOpacity, StyleSheet} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import {useTheme} from '../theme/ThemeContext';
 
 const getContrastColor = (hexcolor) => {
   if (!hexcolor || hexcolor === 'transparent') return '#000000';
@@ -25,7 +26,9 @@ const VoiceInput = ({
   shortDescription,
   longDescription,
 }) => {
-  const contrastColor = getContrastColor(appBgColor);
+  const {moodBackground, moodColor} = useTheme();
+  const bg = appBgColor || moodBackground || '#f5f5f5';
+  const contrastColor = getContrastColor(bg);
   const isDarkBg = contrastColor === '#ffffff';
 
   return (
@@ -68,7 +71,7 @@ const VoiceInput = ({
         style={[
           styles.analyzeButton,
           (!text.trim() || isAnalyzing) && styles.disabledButton,
-          isDarkBg && { backgroundColor: '#6c5ce7', shadowColor: '#000' }
+          isDarkBg && { backgroundColor: moodColor || '#6c5ce7', shadowColor: '#000' }
         ]}
         onPress={onAnalyze}
         disabled={!text.trim() || isAnalyzing}

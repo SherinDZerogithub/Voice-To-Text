@@ -3,11 +3,11 @@ import {Animated, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {AvatarDisplay} from './AvatarBuilder';
 import {getContrastColor} from '../utils/colors';
+import {useTheme} from '../theme/ThemeContext';
 
 const ACCENT = '#7c6ff7';
 
 const DashboardHero = ({
-  appBgColor,
   avatarAnim,
   avatarConfig,
   isLoginFlow,
@@ -16,7 +16,8 @@ const DashboardHero = ({
   onOpenHistory,
   userName,
 }) => {
-  const isDark = getContrastColor(appBgColor) === '#ffffff';
+  const { moodBackground, contrastText, moodColor } = useTheme();
+  const isDark = contrastText === '#ffffff';
 
   const getTimeMetadata = () => {
     const h = new Date().getHours();
@@ -33,6 +34,7 @@ const DashboardHero = ({
   const borderColor = isDark ? 'rgba(255,255,255,0.12)' : '#ede9fe';
   const btnBg = isDark ? 'rgba(255,255,255,0.1)' : '#f5f3ff';
   const btnBorder = isDark ? 'rgba(255,255,255,0.15)' : '#ede9fe';
+  const accentColor = moodColor || ACCENT;
 
   return (
     <View style={[styles.card, {backgroundColor: cardBg, borderColor}]}>
@@ -44,7 +46,7 @@ const DashboardHero = ({
         </View>
         <View style={styles.actions}>
           <TouchableOpacity style={[styles.actionBtn, {backgroundColor: btnBg, borderColor: btnBorder}]} onPress={onOpenHistory} activeOpacity={0.7}>
-            <Icon name="book-open-page-variant" size={16} color={isDark ? 'rgba(255,255,255,0.7)' : ACCENT} />
+            <Icon name="book-open-page-variant" size={16} color={isDark ? 'rgba(255,255,255,0.7)' : accentColor} />
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, styles.logoutBtn, {backgroundColor: btnBg, borderColor: btnBorder}]} onPress={onLogout} activeOpacity={0.7}>
             <Icon name="logout-variant" size={14} color={isDark ? 'rgba(255,255,255,0.6)' : '#6b7280'} />
@@ -72,13 +74,13 @@ const DashboardHero = ({
 
           {/* Quick stats row */}
           <View style={styles.quickStats}>
-            <View style={[styles.quickStatPill, {backgroundColor: ACCENT + '15', borderColor: ACCENT + '25'}]}>
-              <Icon name="microphone-outline" size={11} color={ACCENT} />
-              <Text style={[styles.quickStatText, {color: ACCENT}]}>Voice Log</Text>
+            <View style={[styles.quickStatPill, {backgroundColor: accentColor + '15', borderColor: accentColor + '25'}]}>
+              <Icon name="microphone-outline" size={11} color={accentColor} />
+              <Text style={[styles.quickStatText, {color: accentColor}]}>Voice Log</Text>
             </View>
-            <View style={[styles.quickStatPill, {backgroundColor: '#10b98115', borderColor: '#10b98125'}]}>
-              <Icon name="emoticon-happy-outline" size={11} color="#10b981" />
-              <Text style={[styles.quickStatText, {color: '#10b981'}]}>Mood Track</Text>
+            <View style={[styles.quickStatPill, {backgroundColor: accentColor + '15', borderColor: accentColor + '25'}]}>
+              <Icon name="emoticon-happy-outline" size={11} color={accentColor} />
+              <Text style={[styles.quickStatText, {color: accentColor}]}>Mood Track</Text>
             </View>
           </View>
         </View>
@@ -88,8 +90,8 @@ const DashboardHero = ({
           style={[
             styles.avatarWrap,
             {
-              borderColor: isDark ? 'rgba(255,255,255,0.2)' : ACCENT + '30',
-              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : ACCENT + '08',
+              borderColor: isDark ? 'rgba(255,255,255,0.2)' : accentColor + '30',
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : accentColor + '08',
             },
             {
               opacity: avatarAnim,
@@ -100,7 +102,7 @@ const DashboardHero = ({
             },
           ]}>
           <AvatarDisplay config={avatarConfig} size={86} onPress={onEditAvatar} />
-          <TouchableOpacity style={[styles.editBadge, {borderColor: appBgColor}]} onPress={onEditAvatar} activeOpacity={0.8}>
+          <TouchableOpacity style={[styles.editBadge, {borderColor: moodColor || '#7c6ff7'}]} onPress={onEditAvatar} activeOpacity={0.8}>
             <Icon name="pencil" size={11} color="#fff" />
           </TouchableOpacity>
         </Animated.View>

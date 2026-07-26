@@ -681,7 +681,7 @@ const bookStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: Platform.OS === 'ios' ? 54 : 20,
     paddingBottom: 12,
-  },
+    backgroundColor: '#FBF6EC'  },
   headerBtn: {
     width: 38,
     height: 38,
@@ -696,7 +696,7 @@ const bookStyles = StyleSheet.create({
     gap: 6,
   },
   headerTitle: {fontSize: 15, fontWeight: '800', color: INK},
-  loadingWrap: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+  loadingWrap: {flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FBF6EC'},
 
   page: {
     flex: 1,
@@ -726,7 +726,7 @@ const bookStyles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 10,
   },
-  pageNumber: {fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5},
+  pageNumber: {fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5},
   pageDate: {fontSize: 11, fontWeight: '600'},
   pageScroll: {flex: 1},
   pageScrollContent: {flexGrow: 1, paddingBottom: 20},
@@ -734,7 +734,7 @@ const bookStyles = StyleSheet.create({
   pageTextEmpty: {fontSize: 14, lineHeight: 22, fontStyle: 'italic', opacity: 0.45},
   pageTextInput: {
     fontSize: 15,
-    lineHeight: 24,
+    lineHeight: 26,
     minHeight: 200,
     padding: 0,
   },
@@ -814,6 +814,7 @@ const bookStyles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: Platform.OS === 'ios' ? 24 : 16,
     gap: 10,
+    backgroundColor: '#FBF6EC'
   },
   paperColorScroll: {flexDirection: 'row'},
   paperDot: {
@@ -843,7 +844,8 @@ const bookStyles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 14,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 14,    
+    backgroundColor: '#FBF6EC'
   },
   writingHint: {fontSize: 12, color: INK, opacity: 0.6, flex: 1},
   doneBtn: {
@@ -858,4 +860,3 @@ const bookStyles = StyleSheet.create({
 });
 
 export default StoryJournalBook;
-

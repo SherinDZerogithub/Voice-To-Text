@@ -99,6 +99,16 @@ const FALLBACK_PROMPTS = {
   ],
 };
 
+const DOODLE_PROMPTS = [
+  "Draw how your breath feels right now",
+  "Doodle a symbol for your biggest hope",
+  "What does 'peace' look like in lines?",
+  "Sketch a small gift for your future self",
+  "Draw your mood as a weather pattern",
+  "Doodle a safe space for your thoughts",
+  "Trace a pattern that feels grounding",
+];
+
 const getStaticPrompts = vibe => {
   const key = vibe?.toLowerCase() ?? 'default';
   return FALLBACK_PROMPTS[key] ?? FALLBACK_PROMPTS.default;
@@ -232,7 +242,7 @@ const SavedAnswerCard = ({prompt, answer, index, color, onEdit, onDelete}) => {
     setExpanded(!expanded);
     Animated.parallel([
       Animated.spring(heightAnim, {toValue: toVal, tension: 60, friction: 10, useNativeDriver: false}),
-      Animated.timing(rotateAnim, {toValue: toVal, duration: 200, useNativeDriver: true}),
+      Animated.timing(rotateAnim, {toValue: toVal, duration: 200, useNativeDriver: false}),
     ]).start();
   };
 
@@ -371,6 +381,7 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
   const [answerModal, setAnswerModal] = useState({visible: false, index: null});
   const [showDoodleStandalone, setShowDoodleStandalone] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
+  const [doodlePrompt, setDoodlePrompt] = useState(DOODLE_PROMPTS[0]);
 
   const color = accentColor || '#6c5ce7';
 
@@ -420,6 +431,7 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
     // Reset answers when vibe changes
     setAnswers({});
     setShowAnswers(false);
+    setDoodlePrompt(DOODLE_PROMPTS[Math.floor(Math.random() * DOODLE_PROMPTS.length)]);
 
     if (!backendUrl || !token || !description) return;
 
@@ -560,14 +572,17 @@ const JournalPrompts = forwardRef(({vibe, description, token, backendUrl, accent
 
       {/* Doodle standalone button */}
       {!collapsed && (
-        <TouchableOpacity
-          style={[styles.doodleStandaloneBtn, {borderColor: color + '30', backgroundColor: color + '06'}]}
-          onPress={() => setShowDoodleStandalone(true)}
-          activeOpacity={0.8}>
-          <Icon name="draw" size={15} color={color} />
-          <Text style={[styles.doodleStandaloneTxt, {color}]}>Open doodle canvas</Text>
-          <Icon name="arrow-right" size={13} color={color + '88'} />
-        </TouchableOpacity>
+         <View style={styles.doodleCard}>
+           <Text style={styles.doodleCardTitle}>Doodle of the Day</Text>
+           <Text style={styles.doodleCardPrompt}>"{doodlePrompt}"</Text>
+           <TouchableOpacity
+             style={[styles.doodleCardButton, {backgroundColor: color}]}
+             onPress={() => setShowDoodleStandalone(true)}
+             activeOpacity={0.8}>
+             <Icon name="draw" size={16} color="#fff" />
+             <Text style={styles.doodleCardButtonText}>Start Doodling</Text>
+           </TouchableOpacity>
+         </View>
       )}
 
       {/* Saved answers section */}
@@ -650,7 +665,7 @@ const styles = StyleSheet.create({
     shadowColor: '#6c5ce7',
     shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.07,
-    shadowRadius: 10,
+    shadowRadius: 12,
   },
   header: {
     flexDirection: 'row',
@@ -671,7 +686,7 @@ const styles = StyleSheet.create({
   promptChip: {
     borderRadius: 14,
     padding: 12,
-    backgroundColor: '#fafafa',
+    backgroundColor: '#fcfcff',
     borderWidth: 1,
     borderColor: '#f0f0f0',
   },
@@ -692,17 +707,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  doodleStandaloneBtn: {
+  doodleCard: {
+    marginTop: 8,
+    backgroundColor: '#f8f7ff',
+    borderRadius: 16,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e8e6f5',
+    gap: 8,
+  },
+  doodleCardTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#aaa',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  doodleCardPrompt: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#444',
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  doodleCardButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    borderWidth: 1,
     borderRadius: 12,
-    borderStyle: 'dashed',
-    padding: 10,
-    marginTop: 2,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+    marginTop: 4,
   },
-  doodleStandaloneTxt: {flex: 1, fontSize: 13, fontWeight: '600'},
+  doodleCardButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   savedSection: {marginTop: 4, gap: 8},
   savedHeader: {
     flexDirection: 'row',

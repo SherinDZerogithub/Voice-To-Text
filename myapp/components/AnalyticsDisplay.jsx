@@ -25,6 +25,7 @@ import GoalCompletionModal, {COMPLETION_THRESHOLD} from './GoalCompletionModal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import VibeRadarChart from './VibeRadarChart';
 import StoryJournalBook from './StoryJournalBook';
+import {useTheme} from '../theme/ThemeContext';
 
 const ANALYTICS_HORIZONTAL_PADDING = 20;
 const CHART_HEIGHT = 180;
@@ -169,20 +170,21 @@ const AnimatedNumber = ({value, duration = 800, style, suffix = ''}) => {
   const [display, setDisplay] = useState(0);
   const isMounted = useRef(true);
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     isMounted.current = true;
     return () => {
       isMounted.current = false;
     };
   }, []);
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     anim.setValue(0);
     const animation = Animated.timing(anim, {
       toValue: value,
       duration,
       useNativeDriver: false,
     });
+
     animation.start();
     const id = anim.addListener(({value: v}) => {
       if (isMounted.current) setDisplay(Math.round(v));
@@ -190,7 +192,7 @@ const AnimatedNumber = ({value, duration = 800, style, suffix = ''}) => {
     return () => {
       animation.stop();
       anim.removeListener(id);
-    };
+    }; // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   return (
@@ -206,7 +208,7 @@ const AnimatedNumber = ({value, duration = 800, style, suffix = ''}) => {
 const AnimatedProgressBar = ({progress, color}) => {
   const animWidth = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     animWidth.setValue(0);
     Animated.spring(animWidth, {
       toValue: progress,
@@ -214,7 +216,7 @@ const AnimatedProgressBar = ({progress, color}) => {
       friction: 8,
       useNativeDriver: false,
     }).start();
-  }, [progress]);
+  }, [progress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <View style={styles.goalProgressTrack}>
@@ -241,7 +243,7 @@ const StatCard = ({title, value, icon, color, suffix = '', delay = 0, style}) =>
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     const anim = Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -259,7 +261,7 @@ const StatCard = ({title, value, icon, color, suffix = '', delay = 0, style}) =>
     ]);
     anim.start();
     return () => anim.stop();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const numericValue =
     typeof value === 'number' ? value : parseFloat(value) || 0;
@@ -293,8 +295,8 @@ const DonutChart = ({data, total}) => {
   const animProgress = useRef(new Animated.Value(0)).current;
   const isMounted = useRef(true);
 
-  useEffect(() => {
-    isMounted.current = true;
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+    isMounted.current = true;    
     return () => {
       isMounted.current = false;
     };
@@ -303,15 +305,17 @@ const DonutChart = ({data, total}) => {
   // FIX: Reset and re-animate whenever data changes (use JSON key to detect content changes)
   const dataKey = useMemo(() => JSON.stringify(data.map(d => d.count)), [data]);
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     setProgress(0);
     setActiveIndex(null);
     animProgress.setValue(0);
+
     const animation = Animated.timing(animProgress, {
       toValue: 1,
       duration: 1200,
       useNativeDriver: false,
     });
+
     animation.start();
     const id = animProgress.addListener(({value}) => {
       if (isMounted.current) setProgress(value);
@@ -319,7 +323,7 @@ const DonutChart = ({data, total}) => {
     return () => {
       animation.stop();
       animProgress.removeListener(id);
-    };
+    }; // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataKey]);
 
   const cx = DONUT_SIZE / 2;
@@ -430,8 +434,8 @@ const LineChart = ({dailyData, chartWidth}) => {
   const animProgress = useRef(new Animated.Value(0)).current;
   const isMounted = useRef(true);
 
-  useEffect(() => {
-    isMounted.current = true;
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+    isMounted.current = true;    
     return () => {
       isMounted.current = false;
     };
@@ -443,15 +447,17 @@ const LineChart = ({dailyData, chartWidth}) => {
     [dailyData],
   );
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     setProgress(0);
     setTooltip(null);
     animProgress.setValue(0);
+
     const animation = Animated.timing(animProgress, {
       toValue: 1,
       duration: 1400,
       useNativeDriver: false,
     });
+
     animation.start();
     const id = animProgress.addListener(({value}) => {
       if (isMounted.current) setProgress(value);
@@ -459,7 +465,7 @@ const LineChart = ({dailyData, chartWidth}) => {
     return () => {
       animation.stop();
       animProgress.removeListener(id);
-    };
+    }; // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataKey]);
 
   if (!dailyData || dailyData.length < 2) {
@@ -673,7 +679,7 @@ const BarChart = ({data, total, chartWidth}) => {
   }
   const animWidths = animWidthsRef.current.anims;
 
-  useEffect(() => {
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
     const animations = animWidths.map((anim, i) => {
       anim.setValue(0);
       const pct = total > 0 ? data[i].count / total : 0;
@@ -1006,7 +1012,8 @@ const AnalyticsDisplay = ({
   token,
   backendUrl,
 }) => {
-  const contrastColor = getContrastColor(appBgColor);
+  const { moodBackground } = useTheme();
+  const contrastColor = getContrastColor(appBgColor || moodBackground || '#f5f5f5');
   const headerAnim = useRef(new Animated.Value(0)).current;
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
@@ -1032,7 +1039,7 @@ const AnalyticsDisplay = ({
         Math.abs(current - nextWidth) > 1 ? nextWidth : current,
       );
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (analyticsData) {
       headerAnim.setValue(0);
@@ -1042,7 +1049,7 @@ const AnalyticsDisplay = ({
         friction: 8,
         useNativeDriver: true,
       }).start();
-    }
+    } // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analyticsData]);
 
   const handleSetGoal = useCallback(
@@ -1056,7 +1063,7 @@ const AnalyticsDisplay = ({
         : [...draftGoalVibes, vibe];
       if (!nextGoals || nextGoals.length === 0) return;
       setDraftGoalVibes(nextGoals);
-    },
+    }, // eslint-disable-next-line react-hooks/exhaustive-deps
     [draftGoalVibes],
   );
 
@@ -1064,13 +1071,13 @@ const AnalyticsDisplay = ({
     setDraftGoalVibes(selectedGoalVibes);
     setPreviewGoalVibe(selectedGoalVibes[0] || POSITIVE_GOAL_VIBES[0]);
     setShowGoalPicker(false);
-  }, [selectedGoalVibes]);
+  }, [selectedGoalVibes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveGoalPicker = useCallback(() => {
     if (!isDraftGoalValid) return;
     onUpdateGoal?.(draftGoalVibes);
     setShowGoalPicker(false);
-  }, [draftGoalVibes, isDraftGoalValid, onUpdateGoal]);
+  }, [draftGoalVibes, isDraftGoalValid, onUpdateGoal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading && !analyticsData) {
     return (
@@ -1205,7 +1212,7 @@ const AnalyticsDisplay = ({
         <StatCard
           title="Entries"
           value={totalLogs}
-          icon="calendar-check"
+          icon="notebook-check-outline"
           color="#6c5ce7"
           delay={0}
           style={{width: statCardWidth}}
@@ -1255,17 +1262,6 @@ const AnalyticsDisplay = ({
           </Text>
         </View>
       </View>
-
-      {/* Vibe Radar Chart */}
-      {Object.keys(vibe_scores).length > 0 && (
-        <SectionCard title="Vibe Breakdown" icon="radar" iconColor="#6c5ce7">
-          <VibeRadarChart
-            vibeScores={vibe_scores}
-            color="#6c5ce7"
-            size={Math.min(chartWidth, 320)}
-          />
-        </SectionCard>
-      )}
 
       {/* Weekly Goal Section */}
       <SectionCard
@@ -1525,7 +1521,7 @@ const AnalyticsDisplay = ({
         </TouchableOpacity>
       </Modal>
 
-{/* ── Fandom Character Match ── */}
+      {/* ── Fandom Character Match ── */}
       {distribution.length > 0 && (
         <FandomCharacterMatch topMood={topMood} distribution={distribution} totalLogs={totalLogs} />
       )}
@@ -1607,12 +1603,12 @@ const styles = StyleSheet.create({
   statCard: {
     backgroundColor: '#fff',
     borderRadius: 20,
-    padding: 16,
+    padding: 18,
     elevation: 3,
     shadowColor: '#6c5ce7',
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.07,
-    shadowRadius: 10,
+    shadowRadius: 12,
     gap: 6,
   },
   statIconWrap: {
@@ -1645,7 +1641,7 @@ const styles = StyleSheet.create({
     elevation: 3,
     shadowColor: '#fd79a8',
     shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.09,
+    shadowOpacity: 0.1,
     shadowRadius: 10,
   },
   topMoodEmoji: {fontSize: 38},
@@ -1667,7 +1663,7 @@ const styles = StyleSheet.create({
     elevation: 3,
     shadowColor: '#6c5ce7',
     shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
     overflow: 'hidden',
   },

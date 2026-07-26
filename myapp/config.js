@@ -15,23 +15,31 @@
  */
 
 import {Platform} from 'react-native';
+import generatedConfig from './generated/backendConfig';
 
-const ENV_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+const ENV_BACKEND_URL = (
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  process.env.BACKEND_URL ||
+  generatedConfig?.backendUrl ||
+  ''
+).trim();
 
 // For Android emulator, 10.0.2.2 maps to the host machine's localhost.
 // These are ONLY used when no env var is set, i.e. local development.
 const DEV_BACKEND_URL =
   Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
 
-const BACKEND_URL = ENV_BACKEND_URL || DEV_BACKEND_URL;
+// Never silently ship a release build pointed at localhost.
+const BACKEND_URL = ENV_BACKEND_URL || (__DEV__ ? DEV_BACKEND_URL : '');
 
-if (!ENV_BACKEND_URL && !__DEV__) {
+if (!BACKEND_URL) {
   console.warn(
-    '[config] EXPO_PUBLIC_BACKEND_URL is not set. Falling back to a ' +
-      'local development URL, which will NOT work in a production build. ' +
-      'Set EXPO_PUBLIC_BACKEND_URL to your deployed backend URL.',
+    '[config] No backend URL is configured. Set EXPO_PUBLIC_BACKEND_URL ' +
+      'or run the configure:backend script before creating a release build.',
   );
 }
+
+export const isBackendConfigured = Boolean(BACKEND_URL);
 
 export const API_ENDPOINTS = {
   SIGNUP: `${BACKEND_URL}/signup`,

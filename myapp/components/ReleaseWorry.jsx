@@ -211,7 +211,7 @@ const BurningPaper = ({text, colors, onComplete}) => {
           toValue: 1,
           duration: 1400,
           easing: Easing.in(Easing.quad),
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
         Animated.sequence([
           Animated.delay(600),

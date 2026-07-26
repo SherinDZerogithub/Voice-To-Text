@@ -11,6 +11,7 @@ import {
   Dimensions,
   ScrollView,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, {
   Circle,
   Ellipse,
@@ -24,6 +25,23 @@ import Svg, {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const {width} = Dimensions.get('window');
+const MOOD_TWIN_STORAGE_PREFIX = '@voice_to_text_mood_twin';
+
+const getLocalDayKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getTimeUntilNextLocalDay = () => {
+  const nextMidnight = new Date();
+  nextMidnight.setHours(24, 0, 0, 0);
+  return nextMidnight.getTime() - Date.now();
+};
+
+const getMoodTwinStorageKey = (token, dayKey) =>
+  `${MOOD_TWIN_STORAGE_PREFIX}:${token || 'guest'}:${dayKey}`;
 
 const MOOD_KEYWORDS = {
   happy:   ['happy', 'great', 'wonderful', 'amazing', 'excited', 'joyful', 'love', 'fantastic', 'blessed', 'grateful'],
@@ -208,7 +226,7 @@ const breathStyles = StyleSheet.create({
 });
 
 // ── Main Component ────────────────────────────────────────────────────────────
-const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl}) => {
+const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl, setAppBgColor, setThemeColor}) => {
   const [showModal, setShowModal] = useState(false);
   const [inputText, setInputText] = useState('');
   const [detectedMood, setDetectedMood] = useState('neutral');
@@ -217,6 +235,8 @@ const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl}) => {
   const [aiResponse, setAiResponse] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [recentCheckIns, setRecentCheckIns] = useState([]);
+  const [storageDayKey, setStorageDayKey] = useState(() => getLocalDayKey());
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -225,6 +245,73 @@ const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl}) => {
   // Card uses lastSavedMood; modal uses live detectedMood
   const cfg = MOOD_CONFIG[lastSavedMood] || MOOD_CONFIG.neutral;
   const modalCfg = MOOD_CONFIG[detectedMood] || MOOD_CONFIG.neutral;
+  const storageKey = getMoodTwinStorageKey(token, storageDayKey);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydrateState = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(storageKey);
+        if (!isMounted) {
+          return;
+        }
+
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const savedMood = parsed.lastSavedMood || 'neutral';
+          setLastSavedMood(savedMood);
+          setDetectedMood(savedMood);
+          setRecentCheckIns(Array.isArray(parsed.recentCheckIns) ? parsed.recentCheckIns : []);
+        } else {
+          setLastSavedMood('neutral');
+          setDetectedMood('neutral');
+          setRecentCheckIns([]);
+        }
+      } catch (error) {
+        console.warn('Failed to restore Mood Twin state:', error);
+      } finally {
+        if (isMounted) {
+          setIsHydrated(true);
+        }
+      }
+    };
+
+    setIsHydrated(false);
+    hydrateState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+
+    AsyncStorage.setItem(
+      storageKey,
+      JSON.stringify({lastSavedMood, recentCheckIns}),
+    ).catch(error => {
+      console.warn('Failed to persist Mood Twin state:', error);
+    });
+  }, [isHydrated, lastSavedMood, recentCheckIns, storageKey]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setStorageDayKey(getLocalDayKey());
+      setDetectedMood('neutral');
+      setLastSavedMood('neutral');
+      setInputText('');
+      setAiResponse('');
+      setStep('input');
+      setRecentCheckIns([]);
+      setShowModal(false);
+    }, Math.max(0, getTimeUntilNextLocalDay()));
+
+    return () => clearTimeout(timeoutId);
+  }, [storageDayKey]);
 
   // Idle pulse animation
   useEffect(() => {
@@ -249,6 +336,32 @@ const MoodTwin = ({onCheckIn, onTabChange, token, backendUrl}) => {
       Animated.spring(scaleAnim, {toValue: 1, friction: 5, tension: 80, useNativeDriver: true}),
     ]).start();
   }, [lastSavedMood]);
+
+  // Live: update app background + theme color smoothly while typing / detecting mood
+  useEffect(() => {
+    try {
+      const bg = modalCfg.bgColor || (MOOD_CONFIG[detectedMood] && MOOD_CONFIG[detectedMood].bgColor) || MOOD_CONFIG.neutral.bgColor;
+      const accent = modalCfg.color || MOOD_CONFIG[detectedMood]?.color || MOOD_CONFIG.neutral.color;
+      setAppBgColor?.(bg);
+      setThemeColor?.(accent);
+    } catch (e) {
+      // noop
+    }
+  }, [detectedMood, modalCfg, setAppBgColor, setThemeColor]);
+
+  // When user saves a mood (card bg), make the app follow the saved mood if modal is closed
+  useEffect(() => {
+    if (!showModal) {
+      try {
+        const bg = cfg.bgColor || MOOD_CONFIG.neutral.bgColor;
+        const accent = cfg.color || MOOD_CONFIG.neutral.color;
+        setAppBgColor?.(bg);
+        setThemeColor?.(accent);
+      } catch (e) {
+        // noop
+      }
+    }
+  }, [lastSavedMood, showModal, setAppBgColor, setThemeColor]);
 
   const handleTextChange = text => {
     setInputText(text);

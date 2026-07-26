@@ -9,6 +9,7 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Svg, {
   G,
   Rect,
@@ -52,12 +53,91 @@ const DICE_PROMPTS = [
   },
 ];
 
-const MoodDice = ({onJournalEntry, onTabChange}) => {
+const MOOD_DICE_STORAGE_PREFIX = '@voice_to_text_mood_dice';
+
+const getLocalDayKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getTimeUntilNextLocalDay = () => {
+  const nextMidnight = new Date();
+  nextMidnight.setHours(24, 0, 0, 0);
+  return nextMidnight.getTime() - Date.now();
+};
+
+const getMoodDiceStorageKey = (token, dayKey) =>
+  `${MOOD_DICE_STORAGE_PREFIX}:${token || 'guest'}:${dayKey}`;
+
+const MoodDice = ({onJournalEntry, onTabChange, token}) => {
   const [isRolling, setIsRolling] = useState(false);
   const [currentPrompt, setCurrentPrompt] = useState(null);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [journalText, setJournalText] = useState('');
   const [rollHistory, setRollHistory] = useState([]);
+  const [currentFace, setCurrentFace] = useState(() => Math.floor(Math.random() * 6) + 1);
+  const [storageDayKey, setStorageDayKey] = useState(() => getLocalDayKey());
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  const storageKey = getMoodDiceStorageKey(token, storageDayKey);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydrateState = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(storageKey);
+        if (!isMounted) {
+          return;
+        }
+
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setRollHistory(Array.isArray(parsed.rollHistory) ? parsed.rollHistory : []);
+        } else {
+          setRollHistory([]);
+        }
+      } catch (error) {
+        console.warn('Failed to restore Mood Dice history:', error);
+      } finally {
+        if (isMounted) {
+          setIsHydrated(true);
+        }
+      }
+    };
+
+    setIsHydrated(false);
+    hydrateState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!isHydrated) {
+      return;
+    }
+
+    AsyncStorage.setItem(storageKey, JSON.stringify({rollHistory})).catch(error => {
+      console.warn('Failed to persist Mood Dice history:', error);
+    });
+  }, [isHydrated, rollHistory, storageKey]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setStorageDayKey(getLocalDayKey());
+      setRollHistory([]);
+      setCurrentPrompt(null);
+      setShowPromptModal(false);
+      setJournalText('');
+      setIsRolling(false);
+    }, Math.max(0, getTimeUntilNextLocalDay()));
+
+    return () => clearTimeout(timeoutId);
+  }, [storageDayKey]);
 
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -69,6 +149,7 @@ const MoodDice = ({onJournalEntry, onTabChange}) => {
     }
 
     setIsRolling(true);
+    setCurrentFace(Math.floor(Math.random() * 6) + 1);
     setJournalText('');
 
     // Rotation animation
@@ -78,7 +159,7 @@ const MoodDice = ({onJournalEntry, onTabChange}) => {
         Animated.timing(rotateAnim, {
           toValue: 1,
           duration: 600,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
         Animated.sequence([
           Animated.spring(scaleAnim, {
@@ -218,7 +299,7 @@ const MoodDice = ({onJournalEntry, onTabChange}) => {
             disabled={isRolling}
             activeOpacity={0.8}
             style={styles.diceButton}>
-            <DiceFace number={Math.floor(Math.random() * 6) + 1} />
+            <DiceFace number={currentFace} />
           </TouchableOpacity>
         </Animated.View>
 
@@ -339,7 +420,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   diceButton: {
-    padding: 8,
+    width: 100,
+    height: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   diceHint: {
     fontSize: 14,

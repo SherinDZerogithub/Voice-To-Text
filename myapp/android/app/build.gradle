@@ -65,6 +65,14 @@ def enableSeparateBuildPerCPUArchitecture = false
  */
 def enableProguardInReleaseBuilds = false
 
+// Release builds must use a real upload key. Keep credentials out of source
+// control and provide these Gradle properties from CI or ~/.gradle/gradle.properties.
+def releaseStoreFile = project.findProperty("MYAPP_UPLOAD_STORE_FILE")
+def releaseStorePassword = project.findProperty("MYAPP_UPLOAD_STORE_PASSWORD")
+def releaseKeyAlias = project.findProperty("MYAPP_UPLOAD_KEY_ALIAS")
+def releaseKeyPassword = project.findProperty("MYAPP_UPLOAD_KEY_PASSWORD")
+def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
  *
@@ -117,15 +125,24 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Only sign releases when an explicit upload key is configured.
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
