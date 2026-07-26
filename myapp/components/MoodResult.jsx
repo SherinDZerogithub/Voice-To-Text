@@ -231,7 +231,7 @@ const MoodResult = ({
   hasText,
   onTagPress,
 }) => {
-  const { moodBackground, contrastText, setMoodBackground, setMoodColor } = useTheme();
+  const { moodBackground, contrastText } = useTheme();
   const [isSpeaking, setIsSpeaking] = React.useState(false);
   const [isCopied, setIsCopied] = React.useState(false);
   const [containerWidth, setContainerWidth] = React.useState(0);
@@ -691,14 +691,9 @@ const MoodResult = ({
               <Text style={[styles.cardLabel, secondaryTextStyle]}>Colors From This Moment</Text>
               <View style={styles.paletteRow}>
                 {moodData.color_palette.map((hex, index) => (
-                  <TouchableOpacity
+                  <View
                     key={index}
                     style={styles.swatchWrapper}
-                    onPress={() => {
-                      setMoodBackground(hex);
-                      setMoodColor(hex);
-                    }}
-                    activeOpacity={0.7}
                   >
                     <View
                       style={[
@@ -710,7 +705,7 @@ const MoodResult = ({
                       ]}
                     />
                     <Text style={[styles.swatchHex, secondaryTextStyle]}>{hex}</Text>
-                  </TouchableOpacity>
+                  </View>
                 ))}
               </View>
             </View>

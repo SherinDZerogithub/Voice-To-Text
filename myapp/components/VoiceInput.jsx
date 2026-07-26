@@ -44,7 +44,8 @@ const VoiceInput = ({
       <View style={styles.inputContainer}>
         <TextInput
           style={[
-            styles.textInput,
+          styles.textInput,
+            {borderColor: `${moodColor || '#6c5ce7'}45`},
             isDarkBg && {
               backgroundColor: 'rgba(255,255,255,0.1)',
               borderColor: 'rgba(255,255,255,0.2)',
@@ -92,7 +93,8 @@ const VoiceInput = ({
         style={[
           styles.analyzeButton,
           (!text.trim() || isAnalyzing) && styles.disabledButton,
-          isDarkBg && { backgroundColor: moodColor || '#6c5ce7', shadowColor: '#000' }
+            {backgroundColor: moodColor || '#6c5ce7'},
+            isDarkBg && { shadowColor: '#000' },
         ]}
         onPress={onAnalyze}
         disabled={!text.trim() || isAnalyzing}

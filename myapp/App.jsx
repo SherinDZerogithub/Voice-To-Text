@@ -25,7 +25,6 @@ import HistoryDisplay from './components/HistoryDisplay';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnalyticsDisplay from './components/AnalyticsDisplay'; // Import the new component
 import TherapistChat from './components/TherapistChat';
-import VibeSuggestions from './components/VibeSuggestions';
 import DashboardHero from './components/DashboardHero';
 import MoodBackdrop from './components/MoodBackdrop';
 import HomeQuickActions from './components/HomeQuickActions';
@@ -39,7 +38,7 @@ import WeeklySummaryCard from './components/WeeklySummaryCard';
 import MoodDice from './components/MoodDice';
 import MoodJar from './components/MoodJar';
 import ReleaseWorry from './components/ReleaseWorry';
-import MoodTwin from './components/MoodTwin';
+import MoodTwin, {getMoodTheme} from './components/MoodTwin';
 import MoodGarden from './components/MoodGarden';
 import GoalAlignmentRing from './components/GoalAlignmentRing';
 import CelebrationCorner from './components/CelebrationCorner';
@@ -118,8 +117,8 @@ const App = () => {
   const textRef = useRef('');
   const recordingTimerRef = useRef(null);
   const recordingStartedAtRef = useRef(null);
-  const [appBgColor, setAppBgColor] = useState('#f5f5f5');
-  const [themeColor, setThemeColor] = useState('#7c6ff7');
+  const [appBgColor, setAppBgColor] = useState('#F7F5FF');
+  const [themeColor, setThemeColor] = useState('#6C5CE7');
   const [isAuthHydrated, setIsAuthHydrated] = useState(false);
 
   useEffect(() => {
@@ -180,6 +179,26 @@ const App = () => {
     }),
     [themeColor, appBgColor],
   );
+
+  // The analyzed mood is the only source of the home-page theme. Keeping
+  // this tied to moodData means typing a new draft does not make the screen
+  // flicker; the theme stays stable until the next mood is analyzed.
+  const activeMoodTheme = useMemo(() => getMoodTheme(moodData), [moodData]);
+  const displayMoodData = useMemo(
+    () =>
+      moodData
+        ? {
+            ...moodData,
+            color: activeMoodTheme.accent,
+          }
+        : null,
+    [activeMoodTheme.accent, moodData],
+  );
+
+  useEffect(() => {
+    setAppBgColor(activeMoodTheme.background);
+    setThemeColor(activeMoodTheme.accent);
+  }, [activeMoodTheme.accent, activeMoodTheme.background]);
   // Smooth, cinematic background color transitions.
   // Plain `backgroundColor: appBgColor` snaps instantly on every mood change.
   // Instead we cross-fade between the previous and next color with a slow,
@@ -533,7 +552,7 @@ const App = () => {
           }),
       vibe: item.vibe,
       mood: item.vibe, // Ensure mood field is present for MoodResult
-      emoji: item.emoji || fallbackEmoji || '🌈',
+      emoji: item.emoji || fallbackEmoji || 'ðŸŒˆ',
       color: item.color || '#6c5ce7',
       caption: item.short_caption || item.caption || item.vibe || 'Mood entry',
       scene_tags: item.scene_tags || [],
@@ -677,7 +696,7 @@ const App = () => {
           const errorText = await response.text();
           throw new Error(`Delete failed: ${response.status} ${errorText}`);
         }
-        // Remove from local state immediately â€” no refetch needed
+        // Remove from local state immediately Ã¢â‚¬â€ no refetch needed
         setMoodHistory(prev =>
           prev.filter(
             item => item.id !== String(entryId) && item.id !== entryId,
@@ -1188,7 +1207,7 @@ const App = () => {
 
     const analysisContext = `avatar ${JSON.stringify(avatarConfig || {})}`;
 
-    // Crisis check runs in parallel â€” non-blocking
+    // Crisis check runs in parallel Ã¢â‚¬â€ non-blocking
     fetch(`${BACKEND_URL}/crisis-check`, {
       method: 'POST',
       headers: {
@@ -1284,7 +1303,6 @@ const App = () => {
       imageAnalysisRequestRef.current = controller;
       setIsAnalyzing(true);
       setErrorMessage('');
-      setMoodData(null);
       try {
         const isRemoteUrl =
           asset.uri.startsWith('http://') || asset.uri.startsWith('https://');
@@ -1378,7 +1396,7 @@ const App = () => {
       setIsCapturingImage(true);
 
       timeoutId = setTimeout(() => {
-        console.warn('Camera timed out â€” resetting capture state.');
+        console.warn('Camera timed out Ã¢â‚¬â€ resetting capture state.');
         setIsCapturingImage(false);
       }, 30000);
 
@@ -1397,7 +1415,7 @@ const App = () => {
         quality: 0.7,
         // Save the captured photo directly to the device gallery.
         saveToPhotos: false,
-        // Do NOT include base64 here â€” encoding a full-res photo on the JS
+        // Do NOT include base64 here Ã¢â‚¬â€ encoding a full-res photo on the JS
         // thread freezes the UI and causes the camera to appear stuck.
         // analyzeImageDescription handles plain file URIs directly.
         includeBase64: false,
@@ -1785,14 +1803,11 @@ const App = () => {
     setMoodHistory([]);
     setSelectedHistoryItem(null);
     setHistoryTagFilter(null);
-    setAppBgColor('#f5f5f5');
+    setAppBgColor('#F7F5FF');
+    setThemeColor('#6C5CE7');
     setGratitudeGems([]);
     setIsGratitudeGemsHydrated(false);
   };
-
-  const handleVibeSelect = useCallback(vibe => {
-    setText(`I'm feeling ${vibe} right now`);
-  }, []);
 
   const handleBadgePress = useCallback(() => {}, []);
 
@@ -1807,26 +1822,6 @@ const App = () => {
     [handleOpenHistory],
   );
 
-  const handleMoodTwinCheckIn = useCallback(
-    checkIn => {
-      saveInteractiveMoodEntry({
-        vibe: checkIn.mood || 'neutral',
-        emoji:
-          checkIn.mood === 'happy' ? '🙂' : checkIn.mood === 'sad' ? '💙' : '',
-        caption: checkIn.response,
-        description: checkIn.response,
-        reflection: checkIn.response,
-        sceneTags: ['mood-twin', 'quick-check-in'],
-      });
-      if (['sad', 'anxious'].includes(checkIn.mood)) {
-        handleOpenChat(
-          `I'm feeling ${checkIn.mood}. Can you help me breathe for a minute?`,
-        );
-      }
-    },
-    [handleOpenChat, saveInteractiveMoodEntry],
-  );
-
   const handleMoodDiceJournalEntry = useCallback(
     entry => {
       saveInteractiveMoodEntry({
@@ -1834,7 +1829,7 @@ const App = () => {
           entry.category === 'gratitude' || entry.category === 'positive'
             ? 'grateful'
             : 'reflective',
-        emoji: '✍️',
+        emoji: 'âœï¸',
         caption: entry.prompt,
         description: `${entry.prompt}
 
@@ -1853,7 +1848,7 @@ ${entry.response}`,
       setGratitudeGems(prev => [...prev, gem].slice(-10));
       saveInteractiveMoodEntry({
         vibe: 'grateful',
-        emoji: '💎',
+        emoji: 'ðŸ’Ž',
         caption: 'Gratitude gem',
         description: gem.text,
         reflection: gem.text,
@@ -1872,7 +1867,7 @@ ${entry.response}`,
     worry => {
       saveInteractiveMoodEntry({
         vibe: 'relieved',
-        emoji: '🕊️',
+        emoji: 'ðŸ•Šï¸',
         caption: 'Released worry',
         description: worry.text,
         reflection: worry.text,
@@ -1992,17 +1987,6 @@ ${entry.response}`,
       return (
         <>
           <View style={styles.featureBlock}>
-            <MoodTwin
-              onCheckIn={handleMoodTwinCheckIn}
-              onTabChange={handleInteractiveTabChange}
-              token={token}
-              backendUrl={BACKEND_URL}
-              setAppBgColor={setAppBgColor}
-              setThemeColor={setThemeColor}
-            />
-          </View>
-
-          <View style={styles.featureBlock}>
             <MoodDice
               onJournalEntry={handleMoodDiceJournalEntry}
               onTabChange={handleInteractiveTabChange}
@@ -2037,7 +2021,7 @@ ${entry.response}`,
             appBgColor={appBgColor}
             onPressBadge={handleBadgePress}
           />
-          {/* Mood Companion â€” contextual question */}
+          {/* Mood Companion Ã¢â‚¬â€ contextual question */}
 
           <MoodCompanion
             moodHistory={moodHistory}
@@ -2068,12 +2052,6 @@ ${entry.response}`,
               </View>
             </View>
           )}
-          <VibeSuggestions
-            moodGoal={moodGoal}
-            onSelectVibe={handleVibeSelect}
-            onUpdateGoal={updateMoodGoal}
-            appBgColor={appBgColor}
-          />
           <VoiceInput
             text={text}
             onChangeText={setText}
@@ -2103,7 +2081,7 @@ ${entry.response}`,
               <Text style={styles.crisisBannerText}>{crisisAlert.message}</Text>
               {crisisAlert.resources?.map((r, i) => (
                 <Text key={i} style={styles.crisisResource}>
-                  • {r.name}: {r.contact}
+                  â€¢ {r.name}: {r.contact}
                 </Text>
               ))}
               <TouchableOpacity
@@ -2115,7 +2093,7 @@ ${entry.response}`,
           )}
 
           <MoodResult
-            moodData={moodData}
+            moodData={displayMoodData}
             token={token}
             backendUrl={BACKEND_URL}
             isAnalyzing={isAnalyzing}
@@ -2124,23 +2102,25 @@ ${entry.response}`,
             onTagPress={handleTagPress}
           />
 
+          {displayMoodData ? <MoodTwin moodData={displayMoodData} /> : null}
+
           <AffirmationBanner
             ref={affirmationRef}
-            vibe={moodData?.vibe}
-            moodColor={moodData?.color}
+            vibe={displayMoodData?.vibe}
+            moodColor={activeMoodTheme.accent}
             token={token}
             backendUrl={BACKEND_URL}
-            savedAffirmation={moodData?.gentle_reminder}
+            savedAffirmation={displayMoodData?.gentle_reminder}
           />
 
           <JournalPrompts
             ref={journalPromptsRef}
-            vibe={moodData?.vibe}
-            description={moodData?.description}
+            vibe={displayMoodData?.vibe}
+            description={displayMoodData?.description}
             token={token}
             backendUrl={BACKEND_URL}
-            savedReflection={moodData?.reflection}
-            savedDoodles={moodData?.doodles}
+            savedReflection={displayMoodData?.reflection}
+            savedDoodles={displayMoodData?.doodles}
             onJournalChange={saveJournalForCurrentMood}
           />
 
