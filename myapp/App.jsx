@@ -27,6 +27,8 @@ import AnalyticsDisplay from './components/AnalyticsDisplay'; // Import the new 
 import TherapistChat from './components/TherapistChat';
 import VibeSuggestions from './components/VibeSuggestions';
 import DashboardHero from './components/DashboardHero';
+import MoodBackdrop from './components/MoodBackdrop';
+import HomeQuickActions from './components/HomeQuickActions';
 import JournalPrompts from './components/JournalPrompts';
 import AffirmationBanner from './components/AffirmationBanner';
 import {SAMPLE_IMAGES} from './constants/sampleImages';
@@ -2160,6 +2162,7 @@ ${entry.response}`,
   return (
     <ThemeContext.Provider value={themeContextValue}>
       <Animated.View style={{flex: 1, backgroundColor: animatedAppBgColor}}>
+        <MoodBackdrop backgroundColor={appBgColor} moodColor={themeColor} />
         {activeTab === 'chat' ? (
           <TherapistChat
             token={token}
@@ -2188,6 +2191,14 @@ ${entry.response}`,
                 userName={userName}
               />
             </View>
+
+            {activeTab === 'home' && (
+              <HomeQuickActions
+                onSpeak={startListening}
+                onOpenStory={handleOpenHistory}
+                onOpenChat={() => handleOpenChat()}
+              />
+            )}
 
             {renderContent()}
 
